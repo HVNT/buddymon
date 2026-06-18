@@ -129,7 +129,9 @@ def award_xp(state, base_xp, rng):
 
 
 def roll_encounter(state, rng):
-    """Maybe spawn and auto-catch a wild pokemon. Returns a result dict or None."""
+    """Maybe spawn a wild pokemon. Common/uncommon auto-resolve (caught/fled/
+    no_balls); rare/legendary become an interactive Safari encounter
+    ("appeared"). Returns a result dict or None."""
     from . import state as st
 
     buddy = st.active_pokemon(state)
@@ -162,17 +164,14 @@ def roll_encounter(state, rng):
 
     trainer = state["trainer"]
     if trainer.get("balls", 0) <= 0:
-        return {"name": name, "emoji": emoji, "rarity": rarity, "shiny": shiny,
-                "outcome": "no_balls"}
+        return {**spawn, "outcome": "no_balls"}
 
     trainer["balls"] -= 1
     if rng.random() <= data.CATCH_RATES[rarity]:
         already_owned = any(p["name"] == name for p in state["pokemon"])
         state["pokemon"].append(new_pokemon(name, ptype, emoji, rarity, shiny))
-        return {"name": name, "emoji": emoji, "rarity": rarity, "shiny": shiny,
-                "outcome": "caught", "new_species": not already_owned}
-    return {"name": name, "emoji": emoji, "rarity": rarity, "shiny": shiny,
-            "outcome": "fled"}
+        return {**spawn, "outcome": "caught", "new_species": not already_owned}
+    return {**spawn, "outcome": "fled"}
 
 
 def summarize_events(result, encounter):

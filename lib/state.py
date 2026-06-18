@@ -20,6 +20,24 @@ def lock():
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
 
+
+def _atomic_write_json(path, obj, indent=None):
+    """Write JSON to path via a temp file + rename, so readers never see a
+    partial write. Cleans up the temp file on any failure."""
+    paths.ensure_dirs()
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="." + path.stem + "-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=indent)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 STATE_VERSION = 2
 
 
@@ -61,18 +79,7 @@ def load():
 
 
 def save(state):
-    paths.ensure_dirs()
-    fd, tmp = tempfile.mkstemp(dir=paths.STATE_DIR, prefix=".state-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-        os.replace(tmp, paths.STATE_FILE)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    _atomic_write_json(paths.STATE_FILE, state, indent=2)
 
 
 def active_pokemon(state):
@@ -99,19 +106,8 @@ def record_event(session_id, event, detail=""):
     """Write the latest session event. Must stay cheap: called from every hook."""
     if not session_id:
         return
-    paths.ensure_dirs()
     payload = {"event": event, "detail": detail, "ts": time.time()}
-    fd, tmp = tempfile.mkstemp(dir=paths.SESSIONS_DIR, prefix=".evt-", suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(payload, f)
-        os.replace(tmp, paths.SESSIONS_DIR / f"{session_id}.json")
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    _atomic_write_json(paths.SESSIONS_DIR / f"{session_id}.json", payload)
 
 
 def read_event(session_id):

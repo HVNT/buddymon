@@ -10,17 +10,23 @@ Usage:
   buddymon.py export-chibi        archive the chibi pack to ~/Pictures/buddymon/
   buddymon.py collect             award XP from other agent CLIs' token logs
   buddymon.py tiny [--collect]    one-line plain-text status (tmux status bar)
-  buddymon.py frames [--scale N]  write current buddy frame PNGs + meta (hammerspoon)
   buddymon.py menubar             SwiftBar plugin output (sprite icon + dropdown)
   buddymon.py history [N]         the buddy's journey journal (default last 20)
   buddymon.py safari <action>     play a turn vs a pending wild (rock|bait|ball|run)
 """
+import base64
+import json
+import random
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lib import data, packs, pixels, render, sprites, state, engine  # noqa: E402
+from lib import (  # noqa: E402
+    collectors, data, engine, journal, notify, packs, paths, pixels, png,
+    render, safari as sf, scene, sprites, state,
+)
 
 
 def choose(args):
@@ -32,7 +38,6 @@ def choose(args):
     if buddy is None:
         return "Pick one of: " + ", ".join(data.STARTERS)
     state.save(s)
-    from lib import journal
     journal.append("starter", f"{buddy['emoji']} {buddy['name']} chose you",
                    {"name": buddy["name"]})
     grid, palette = sprites.sprite_for(buddy["name"], buddy["type"])
@@ -70,7 +75,6 @@ def preview(_args):
 
 def export_chibi(_args):
     """Archive the hand-drawn chibi pack outside the repo (Hunter's keepsake)."""
-    import json
     dest = Path.home() / "Pictures" / "buddymon"
     dest.mkdir(parents=True, exist_ok=True)
     payload = {name: {"grid": grid, "palette": palette}
@@ -109,8 +113,6 @@ def export_chibi(_args):
 
 
 def collect(_args, quiet=False):
-    import random
-    from lib import collectors, engine, journal, notify
     with state.lock():
         s = state.load()
         if not s["pokemon"]:
@@ -132,8 +134,6 @@ def collect(_args, quiet=False):
 
 
 def tiny(args):
-    from lib import render, paths
-    import time
     if "--collect" in args:
         try:
             collect([], quiet=True)
@@ -163,50 +163,20 @@ def tiny(args):
 
 
 def _buddy_frames(s):
-    from lib import packs
     buddy = state.active_pokemon(s)
     if buddy is None:
         return None, []
     return buddy, packs.sprite_frames(buddy["name"], buddy["type"], buddy.get("shiny"))
 
 
-def frames(args):
-    """Write frame PNGs + meta.json for external displays (Hammerspoon)."""
-    import json, time
-    from lib import paths, png
-    scale = int(args[args.index("--scale") + 1]) if "--scale" in args else 6
-    s = state.load()
-    buddy, frame_list = _buddy_frames(s)
-    if buddy is None:
-        return "no buddy yet"
-    out = paths.STATE_DIR / "frames"
-    out.mkdir(parents=True, exist_ok=True)
-    for i, (grid, palette) in enumerate(frame_list):
-        (out / f"frame{i}.png").write_bytes(png.grid_to_png(grid, palette, scale))
-    if len(frame_list) == 1:  # chibi: synthesize frame1 as blink
-        from lib import sprites
-        grid, palette = frame_list[0]
-        (out / "frame1.png").write_bytes(
-            png.grid_to_png(sprites.closed_eyes(grid), palette, scale))
-    event = state.read_event("cross") or {}
-    announce = event.get("detail", "") if time.time() - event.get("ts", 0) < 600 else ""
-    (out / "meta.json").write_text(json.dumps({
-        "name": buddy["name"], "level": buddy["level"],
-        "shiny": bool(buddy.get("shiny")), "announce": announce,
-        "balls": s["trainer"].get("balls", 0), "streak": s["trainer"].get("streak", 0),
-    }), encoding="utf-8")
-    return str(out)
-
-
 def _wild_frames(entry):
-    from lib import data, packs
+    """Compact gen2 frames for the bar cutscene replay (2-frame bounce)."""
     wtype = data.WILDS.get(entry["name"], ("Normal",))[0]
     return packs.sprite_frames(entry["name"], wtype, entry.get("shiny"))
 
 
-def _box_frame(name, ptype, shiny):
-    """First Gen 5 frame for menu-bar battle-screen stills (PNG surface)."""
-    from lib import packs
+def _battle_sprite(name, ptype, shiny):
+    """First unique Gen 5 frame, for the dropdown battle-screen stills."""
     return packs.gen5_frames(name, ptype, shiny)[0]
 
 
@@ -226,8 +196,6 @@ _CUTSCENE_TEXT = {
 
 
 def _evolution_line(entry, phase):
-    import base64
-    from lib import data, packs, png, scene
     new_name = entry["name"]
     old_name = data.PRE_EVOLUTION.get(new_name, new_name)
     # type only matters for the silhouette-tint fallback; walk to the chain root
@@ -256,8 +224,6 @@ def _evolution_line(entry, phase):
 
 
 def _cutscene_line(entry, phase, frame_list, frame_idx):
-    import base64
-    from lib import png, scene
     wild = _wild_frames(entry)
     grid, palette = scene.battle_bar(
         frame_list[frame_idx % len(frame_list)],
@@ -280,15 +246,14 @@ _RARITY_ORDER = {"starter": 0, "legendary": 1, "rare": 2, "uncommon": 3, "common
 
 
 def _dex_icon(p):
-    import base64
-    from lib import packs, png
-    grid, palette = packs.gen5_frames(p["name"], p["type"], p.get("shiny"))[0]
-    dpi = len(grid) * 2 * 72 / 16  # ~16pt submenu icons
+    # box (40x30) not gen5: tiny submenu icons don't need 96px detail, and
+    # gen5 here is 4x the pixels x every caught species — wasteful.
+    grid, palette = packs.box_frames(p["name"], p["type"], p.get("shiny"))[0]
+    dpi = len(grid) * 2 * 72 / 14  # ~14pt submenu icons
     return base64.b64encode(png.grid_to_png(grid, palette, 2, dpi=dpi)).decode()
 
 
 def _dex_submenu(s):
-    from lib import render
     total = len(render._dex_universe())
     species = {}
     for p in s["pokemon"]:
@@ -317,17 +282,14 @@ def _switch_submenu(s, active_name):
     return lines
 
 
-def _last_encounter_section(now, frame_list):
-    import base64
-    from lib import journal, png, scene
+def _last_encounter_section(s, now):
     entry = journal.latest_encounter(600, now)
     if entry is None:
         return []
-    from lib import data, state as st
-    buddy = st.active_pokemon(st.load())
-    buddy_box = _box_frame(buddy["name"], buddy["type"], buddy.get("shiny"))
+    buddy = state.active_pokemon(s)
+    buddy_box = _battle_sprite(buddy["name"], buddy["type"], buddy.get("shiny"))
     wtype = data.WILDS.get(entry["name"], ("Normal",))[0]
-    wild_box = _box_frame(entry["name"], wtype, entry.get("shiny"))
+    wild_box = _battle_sprite(entry["name"], wtype, entry.get("shiny"))
     grid, palette = scene.battle_screen(buddy_box, wild_box, entry["kind"])
     img = base64.b64encode(png.grid_to_png(grid, palette, 2)).decode()
     dialogue = {"caught": f"You caught {entry['name'].upper()}!",
@@ -338,15 +300,13 @@ def _last_encounter_section(now, frame_list):
 
 def _safari_section(s):
     """Dropdown battle UI for a pending encounter: scene image + action buttons."""
-    import base64
-    from lib import data, packs, png, safari as sf, scene
     pending = s.get("pending_encounter")
     if not pending:
         return []
     script = Path(__file__).resolve()
     buddy = state.active_pokemon(s)
-    buddy_box = _box_frame(buddy["name"], buddy["type"], buddy.get("shiny"))
-    wild_box = _box_frame(pending["name"], pending["type"], pending["shiny"])
+    buddy_box = _battle_sprite(buddy["name"], buddy["type"], buddy.get("shiny"))
+    wild_box = _battle_sprite(pending["name"], pending["type"], pending["shiny"])
     grid, palette = scene.battle_screen(buddy_box, wild_box, "fled")
     img = base64.b64encode(png.grid_to_png(grid, palette, 2)).decode()
     balls = s["trainer"].get("balls", 0)
@@ -368,47 +328,48 @@ def _safari_section(s):
     return lines
 
 
-def _menubar_lines(s, frame_idx):
-    import base64, time
-    from lib import journal, png, render, safari as sf, scene
-    buddy, frame_list = _buddy_frames(s)
-    if buddy is None:
-        return ["🥚 | dropdown=false"]
-    now = time.time()
+def _is_animating(s, now):
+    """Only the transient event windows animate (evolution ceremony, encounter
+    cutscene). Idle and waiting-encounter render a static frame — emitting a
+    fresh PNG every second otherwise makes SwiftBar's image cache balloon."""
+    return bool(journal.latest_evolution(scene.EVOLUTION_SECS, now)
+                or journal.latest_encounter(scene.CUTSCENE_SECS, now))
 
-    bar_line = None
+
+def _bar_line(s, buddy, frame_list, frame_idx):
+    """The menu-bar item. Animates only during evolution/cutscene windows;
+    idle + waiting-encounter are static (one repeated image)."""
+    now = time.time()
     pending = s.get("pending_encounter")
+
     evo = journal.latest_evolution(scene.EVOLUTION_SECS, now)
-    if evo is not None:  # evolution ceremony (transient) outranks everything
+    if evo is not None:
         phase = scene.evolution_phase_for(now - evo["ts"])
         if phase is not None:
-            bar_line = _evolution_line(evo, phase)
-    if bar_line is None and pending:
-        # a wild is waiting: show it in the bar with an alert
-        wild = packs.sprite_frames(pending["name"], pending["type"], pending["shiny"])
-        grid, palette = wild[frame_idx % len(wild)]
-        icon = base64.b64encode(
-            png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
-        bar_line = f"❗ | image={icon}"
-    if bar_line is None:
-        entry = journal.latest_encounter(scene.CUTSCENE_SECS, now)
-        if entry is not None:
-            phase = scene.phase_for(now - entry["ts"])
-            if phase is not None:
-                bar_line = _cutscene_line(entry, phase, frame_list, frame_idx)
+            return _evolution_line(evo, phase)
+    entry = journal.latest_encounter(scene.CUTSCENE_SECS, now)
+    if entry is not None:
+        phase = scene.phase_for(now - entry["ts"])
+        if phase is not None:
+            return _cutscene_line(entry, phase, frame_list, frame_idx)
+    if pending:  # a wild is waiting — static sprite + alert
+        grid, palette = packs.sprite_frames(
+            pending["name"], pending["type"], pending["shiny"])[0]
+        icon = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
+        return f"❗ | image={icon}"
 
-    if bar_line is None:
-        from lib import packs
-        frames = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))
-        grid, palette = frames[frame_idx % len(frames)]  # animate the BW idle
-        icon = base64.b64encode(
-            png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
-        shiny = "✨" if buddy.get("shiny") else ""
-        bar_line = f"{shiny} | image={icon}" if shiny else f"| image={icon}"
+    grid, palette = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
+    icon = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
+    shiny = "✨" if buddy.get("shiny") else ""
+    return f"{shiny} | image={icon}" if shiny else f"| image={icon}"
 
+
+def _dropdown_lines(s, buddy, frame_list):
+    """The dropdown body (heavy: many sprite PNGs). Only visible on click, so
+    the stream rebuilds it on a slow cadence, not every tick."""
+    now = time.time()
     trainer = s["trainer"]
     lines = [
-        bar_line,
         "---",
         f"{buddy['emoji']} {buddy['name']} — {buddy['type']} · Lv.{buddy['level']}",
         f"XP {render.xp_bar(buddy, 12)}",
@@ -416,10 +377,10 @@ def _menubar_lines(s, frame_idx):
         f"📖 {len({p['name'] for p in s['pokemon']})} species",
     ]
     event = state.read_event("cross") or {}
-    if event.get("detail") and time.time() - event.get("ts", 0) < 600:
+    if event.get("detail") and now - event.get("ts", 0) < 600:
         lines.append(event["detail"])
     lines.extend(_safari_section(s))
-    lines.extend(_last_encounter_section(now, frame_list))
+    lines.extend(_last_encounter_section(s, now))
     recent = journal.tail(3)
     if recent:
         lines.append("---")
@@ -435,9 +396,21 @@ def _menubar_lines(s, frame_idx):
     return lines
 
 
+def _menubar_lines(s, frame_idx):
+    buddy, frame_list = _buddy_frames(s)
+    if buddy is None:
+        return ["🥚 | dropdown=false"]
+    return [_bar_line(s, buddy, frame_list, frame_idx)] + _dropdown_lines(s, buddy, frame_list)
+
+
+IDLE_HEARTBEAT = 20  # when idle, re-emit at most this often (SwiftBar caches images)
+
+
 def menubar(args):
-    """SwiftBar output. --stream: long-running, 1s frame flips (streamable plugin)."""
-    import time
+    """SwiftBar output. --stream: long-running. Emits a fresh frame every ~1s
+    ONLY during the brief evolution/cutscene windows; when idle it re-emits at
+    most every IDLE_HEARTBEAT seconds (or immediately on a state change), since
+    feeding SwiftBar a new PNG every second balloons its image cache."""
     if "--stream" not in args:
         try:
             collect([], quiet=True)
@@ -445,22 +418,45 @@ def menubar(args):
             pass
         return "\n".join(_menubar_lines(state.load(), int(time.time() / 15)))
 
-    frame_idx = 0
+    # Cross-client XP collection is owned by the launchd agent (every 5 min);
+    # the stream re-reads state only when state.json changes.
+    frame_idx, dropdown, s, last_mtime, last_emit = 0, None, None, -1.0, 0.0
     while True:
-        if frame_idx % 60 == 0:  # collect cross-client XP once a minute
-            try:
-                collect([], quiet=True)
-            except Exception:
-                pass
-        print("~~~")
-        print("\n".join(_menubar_lines(state.load(), frame_idx)), flush=True)
-        frame_idx += 1
+        now = time.time()
+        try:
+            mtime = paths.STATE_FILE.stat().st_mtime
+        except OSError:
+            mtime = 0.0
+        changed = mtime != last_mtime
+        if s is None or changed:
+            s = state.load()
+            last_mtime = mtime
+            dropdown = None  # state changed → dropdown stale
+
+        buddy, frame_list = _buddy_frames(s)
+        animating = buddy is not None and _is_animating(s, now)
+        # emit only when it'll actually differ: animating, state changed, or the
+        # idle heartbeat elapsed. Otherwise the menu already shows the right thing.
+        if not (animating or changed or dropdown is None or now - last_emit >= IDLE_HEARTBEAT):
+            time.sleep(1)
+            continue
+
+        if buddy is None:
+            print("~~~\n🥚 | dropdown=false", flush=True)
+        else:
+            if dropdown is None or (animating and frame_idx % DROPDOWN_EVERY == 0):
+                dropdown = _dropdown_lines(s, buddy, frame_list)
+            bar = _bar_line(s, buddy, frame_list, frame_idx)
+            print("~~~")
+            print("\n".join([bar] + dropdown), flush=True)
+        last_emit = now
+        if animating:
+            frame_idx += 1
         time.sleep(1)
 
 
 def _resolve_safari(s, pending, outcome):
     """Translate a finished Safari encounter into collection + journal effects."""
-    from lib import engine, journal, notify
     enc = {"name": pending["name"], "emoji": pending["emoji"],
            "rarity": pending["rarity"], "shiny": pending["shiny"]}
     if outcome["caught"]:
@@ -481,8 +477,6 @@ def _resolve_safari(s, pending, outcome):
 
 
 def safari(args):
-    from lib import safari as sf
-    import random
     action = args[0] if args else ""
     if action not in sf.ACTIONS:
         return "Usage: safari rock|bait|ball|run"
@@ -500,8 +494,6 @@ def safari(args):
 
 
 def history(args):
-    import time
-    from lib import journal
     n = int(args[0]) if args and args[0].isdigit() else 20
     entries = journal.tail(n)
     if not entries:
@@ -526,7 +518,6 @@ def main():
         "export-chibi": export_chibi,
         "collect": collect,
         "tiny": tiny,
-        "frames": frames,
         "menubar": menubar,
         "history": history,
         "safari": safari,

@@ -142,3 +142,26 @@ def test_huge_award_crosses_multiple_evolutions():
     engine.create_starter(s, "Charmander")
     engine.award_xp(s, engine.xp_for_level(40), random.Random(1))
     assert state.active_pokemon(s)["name"] == "Charizard"
+
+
+def test_codex_scan_skipped_when_dir_unchanged(tmp_path, monkeypatch):
+    rollout = setup_codex(tmp_path, monkeypatch)
+    write_rollout(rollout, [codex_record(5000, 0, 0)])
+    s = state.default_state()
+    engine.create_starter(s, "Pikachu")
+    rng = random.Random(1)
+    collectors.collect(s, rng)  # bootstrap: sets _codex_seen marker
+
+    # mark _bootstrapped so a real change would award; but nothing changed ->
+    # the mtime gate must short-circuit (no new tokens)
+    summary = collectors.collect(s, rng)
+    assert sum(summary["tokens"].values()) == 0
+    assert "_codex_seen" in s["collectors"]
+
+    # a newer file advances the dir mtime -> scan runs again
+    import os
+    fresh = rollout.parent / "rollout-z.jsonl"
+    write_rollout(fresh, [codex_record(3000, 0, 0)])
+    os.utime(fresh, (rollout.stat().st_mtime + 100,) * 2)
+    summary = collectors.collect(s, rng)
+    assert summary["tokens"]["output"] == 3000

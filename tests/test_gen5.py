@@ -40,22 +40,48 @@ def test_frames_pack_subsamples_and_aligns(tmp_path):
         assert chars <= set(palette)
 
 
-def test_gen5_frames_loader_and_fallback(tmp_path, monkeypatch):
+def _entry(c="#111111"):
+    return {"frames": [[["ab", "ba"], {"a": c, "b": "#222222"}],
+                       [["ba", "ab"], {"a": c, "b": "#222222"}]]}
+
+
+def test_gen5_lazy_per_species(tmp_path, monkeypatch):
     from lib import paths
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
     packs._cache.clear()
-    # no gen5 pack -> falls back to box/gen2 (non-empty)
-    assert packs.gen5_frames("Pikachu", "Electric")
+    assert packs.gen5_frames("Pikachu", "Electric")  # no pack -> box/gen2 fallback
 
-    (tmp_path / "packs").mkdir()
-    entry = {"frames": [[["ab", "ba"], {"a": "#111111", "b": "#222222"}],
-                        [["ba", "ab"], {"a": "#111111", "b": "#222222"}]]}
-    (tmp_path / "packs" / "gen5.json").write_text(json.dumps({"Reshiram": entry}))
+    d = tmp_path / "packs" / "gen5"
+    d.mkdir(parents=True)
+    (d / "reshiram.json").write_text(json.dumps(_entry()))
     packs._cache.clear()
 
     frames = packs.gen5_frames("Reshiram", "Dragon")
-    assert len(frames) == 2
+    assert len(frames) == 2 and frames[0][0] != frames[1][0]
     assert frames[0][1]["a"] == "#111111"
-    assert frames[0][0] != frames[1][0]  # animation frames differ
     assert len(pixels.render(*frames[0])) == 1
+    packs._cache.clear()
+
+
+def test_gen5_monolithic_fallback(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    packs._cache.clear()
+    (tmp_path / "packs").mkdir()
+    (tmp_path / "packs" / "gen5.json").write_text(json.dumps({"Zekrom": _entry("#0a0a0a")}))
+    frames = packs.gen5_frames("Zekrom", "Dragon")
+    assert frames[0][1]["a"] == "#0a0a0a"  # legacy single-file path still works
+    packs._cache.clear()
+
+
+def test_gen5_cache_is_bounded(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    packs._cache.clear()
+    d = tmp_path / "packs" / "gen5"
+    d.mkdir(parents=True)
+    for i in range(packs._GEN5_CACHE_MAX + 5):
+        (d / f"mon{i}.json").write_text(json.dumps(_entry()))
+        packs.gen5_frames(f"Mon{i}", "Normal")
+    assert len(packs._cache["__gen5_species__"]) <= packs._GEN5_CACHE_MAX
     packs._cache.clear()

@@ -107,9 +107,16 @@ def frames_pack(gif_bytes):
     return [to_grid(f) for f in keys]
 
 
+def _slug(name):
+    import re
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
 def main():
     names = dex_names()
-    pack = {}
+    out = Path.home() / ".local" / "state" / "buddymon" / "packs" / "gen5"
+    out.mkdir(parents=True, exist_ok=True)
+    written = 0
     for sid in range(1, MAX_DEX + 1):
         name = names.get(sid)
         if not name:
@@ -124,15 +131,19 @@ def main():
             entry["shiny_frames"] = frames_pack(fetch(f"{SPRITES}/shiny/{sid}.gif"))
         except Exception:
             pass
-        pack[name] = entry
+        # one file per species so the runtime loads only what it shows
+        (out / f"{_slug(name)}.json").write_text(json.dumps(entry), encoding="utf-8")
+        written += 1
         print(f"  #{sid:<3} {name:14} {len(entry['frames'])} frames "
               f"{len(entry['frames'][0][0][0])}x{len(entry['frames'][0][0])}")
 
-    out = Path.home() / ".local" / "state" / "buddymon" / "packs"
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "gen5.json").write_text(json.dumps(pack), encoding="utf-8")
-    size_mb = (out / "gen5.json").stat().st_size / 1e6
-    print(f"\nwrote {out / 'gen5.json'} — {len(pack)} species, {size_mb:.1f} MB")
+    # retire the legacy monolithic pack so packs.py uses the split layout
+    mono = out.parent / "gen5.json"
+    if mono.exists():
+        mono.unlink()
+    total_mb = sum(f.stat().st_size for f in out.glob("*.json")) / 1e6
+    print(f"\nwrote {written} files to {out} — {total_mb:.1f} MB total "
+          f"(loaded per-species at runtime, not all at once)")
 
 
 if __name__ == "__main__":

@@ -66,7 +66,24 @@ def _codex_tiers(cum):
     }
 
 
+def _dir_unchanged(root, anchors, marker, glob):
+    """True (skip scan) when nothing under root is newer than last time.
+    One cheap pass over mtimes vs. opening every file. Updates the marker."""
+    newest = 0.0
+    for p in root.glob(glob):
+        try:
+            newest = max(newest, p.stat().st_mtime)
+        except OSError:
+            pass
+    if newest <= anchors.get(marker, 0.0):
+        return True
+    anchors[marker] = newest
+    return False
+
+
 def collect_codex(anchors, award, totals):
+    if _dir_unchanged(CODEX_ROOT, anchors, "_codex_seen", "*/*/*/rollout-*.jsonl"):
+        return
     for path in sorted(CODEX_ROOT.glob("*/*/*/rollout-*.jsonl")):
         key = f"codex:{path}"
         mtime = _recent(path, anchors, key)
@@ -116,6 +133,8 @@ def _augment_nodes(node):
 
 
 def collect_augment(anchors, award, totals):
+    if _dir_unchanged(AUGMENT_ROOT, anchors, "_augment_seen", "*.json"):
+        return
     for path in sorted(AUGMENT_ROOT.glob("*.json")):
         key = f"augment:{path}"
         mtime = _recent(path, anchors, key)

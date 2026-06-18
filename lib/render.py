@@ -4,7 +4,6 @@ import time
 from . import data, engine, packs, pixels, sprites
 from . import state as st
 
-DIM = "\x1b[2m"
 BOLD = "\x1b[1m"
 RED = "\x1b[31m"
 YELLOW = "\x1b[33m"
