@@ -1,4 +1,5 @@
 """Compositor and cutscene-timing tests."""
+import json
 import sys
 import time
 from pathlib import Path
@@ -26,6 +27,14 @@ def test_mirror_reverses_rows():
     assert scene.mirror(scene.mirror(["ab", "cd"])) == ["ab", "cd"]
 
 
+def test_scale_grid_keeps_pixel_art_shape():
+    grid = ["ABCD", "EFGH", "IJKL", "MNOP"]
+
+    scaled = scene.scale_grid(grid, 0.5)
+
+    assert scaled == ["AC", "IK"]
+
+
 def test_battle_scenes_render_for_all_outcomes():
     buddy = (["BB" * 8] * 14, {"B": "#f08030"})
     wild = (["WW" * 8] * 14, {"W": "#58a8e8"})
@@ -44,6 +53,26 @@ def test_battle_scenes_render_for_all_outcomes():
         big_w = (["W" * 60] * 56, {"W": "#58a8e8"})
         bg, bp = scene.battle_screen(big_b, big_w, outcome)
         assert all(len(r) == len(bg[0]) for r in bg) and png.grid_to_png(bg, bp)
+
+
+def test_battle_screen_command_box_renders():
+    buddy = (["B" * 40] * 40, {"B": "#f08030"})
+    wild = (["W" * 40] * 40, {"W": "#58a8e8"})
+    for opts in (["ROCK", "BAIT", "BALL", "RUN"], ["FIGHT", "BALL", "RUN"]):
+        grid, palette = scene.battle_screen(buddy, wild, "fled", options=opts)
+        assert all(len(r) == len(grid[0]) for r in grid)            # uniform rows
+        assert png.grid_to_png(grid, palette, 2)[:4] == b"\x89PNG"[:4]
+        ink_chars = {ch for ch, hx in palette.items() if hx == scene._TEXT}
+        assert ink_chars, "command-box lettering should paint ink pixels"
+
+
+def test_battle_screen_plain_band_has_no_command_ink():
+    buddy = (["B" * 40] * 40, {"B": "#f08030"})
+    wild = (["W" * 40] * 40, {"W": "#58a8e8"})
+    grid, palette = scene.battle_screen(buddy, wild, "fled")
+    assert all(len(r) == len(grid[0]) for r in grid)
+    assert png.grid_to_png(grid, palette, 2)[:4] == b"\x89PNG"[:4]
+    assert scene._TEXT not in palette.values()
 
 
 def test_phase_for_window():
@@ -118,4 +147,69 @@ def test_evolution_line_survives_single_frame_fallback(tmp_path, monkeypatch):
     entry = {"name": "Charizard", "ts": 0}
     for phase in range(scene.EVOLUTION_SECS):
         assert "image=" in buddymon._evolution_line(entry, phase)
+    packs._cache.clear()
+
+
+def test_caught_cutscene_result_names_caught_species(tmp_path, monkeypatch):
+    from lib import paths, packs
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    packs._cache.clear()
+    import buddymon
+
+    buddy = (["B" * 16] * 16, {"B": "#f08030"})
+    entry = {"kind": "caught", "name": "Pidgey", "rarity": "common", "shiny": False}
+
+    line = buddymon._cutscene_line(entry, scene.PHASE_RESULT.start, [buddy], 0)
+
+    assert "Caught Pidgey!" in line
+    assert "GOTCHA!" not in line
+    assert "image=" in line
+    packs._cache.clear()
+
+
+def test_cutscene_uses_box_fallback_for_non_gen2_species(tmp_path, monkeypatch):
+    from lib import paths, packs
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    pack_dir = tmp_path / "packs"
+    pack_dir.mkdir()
+    (pack_dir / "box.json").write_text(json.dumps({
+        "Swellow": {
+            "grid": ["X" * 24] * 20,
+            "palette": {"X": "#112233"},
+        },
+    }))
+    packs._cache.clear()
+    import buddymon
+
+    (grid, palette), = buddymon._wild_frames(
+        {"kind": "fled", "name": "Swellow", "rarity": "rare", "shiny": False})
+
+    assert len(grid) <= 16
+    assert all(len(row) <= 16 for row in grid)
+    assert palette["X"] == "#112233"
+    packs._cache.clear()
+
+
+def test_battle_throw_result_names_caught_species(tmp_path, monkeypatch):
+    from lib import paths, packs
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    packs._cache.clear()
+    import buddymon
+
+    buddy = (["B" * 16] * 16, {"B": "#f08030"})
+    pending = {
+        "name": "Doduo",
+        "type": "Normal",
+        "shiny": False,
+        "last_throw": {"caught": True, "ts": 0},
+    }
+
+    line = buddymon._throw_line(pending, scene.THROW_SECS - 1, [buddy])
+
+    assert "Caught Doduo!" in line
+    assert "GOTCHA!" not in line
+    assert "image=" in line
     packs._cache.clear()

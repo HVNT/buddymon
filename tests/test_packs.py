@@ -90,6 +90,27 @@ def test_pack_loader_and_fallback(tmp_path, monkeypatch):
     packs._cache.clear()
 
 
+def test_sprite_frames_falls_back_to_scaled_box_art(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    pack_dir = tmp_path / "packs"
+    pack_dir.mkdir()
+    (pack_dir / "box.json").write_text(json.dumps({
+        "Swellow": {
+            "grid": ["X" * 24] * 20,
+            "palette": {"X": "#112233"},
+        },
+    }))
+    packs._cache.clear()
+
+    (grid, palette), = packs.sprite_frames("Swellow", "Normal")
+
+    assert len(grid) <= 16
+    assert all(len(row) <= 16 for row in grid)
+    assert palette["X"] == "#112233"
+    packs._cache.clear()
+
+
 def test_extract_ramp_orders_by_luminance():
     class FakeImg:
         width = 2

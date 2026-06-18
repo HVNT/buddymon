@@ -10,6 +10,8 @@ _cache = {}  # also holds gen5 lazy state under "__gen5_species__"/"__gen5_mono_
 # gen5 is large (~17MB/649 species); load it per-species on demand instead of
 # holding the whole pack resident in the long-lived menu-bar stream.
 _GEN5_CACHE_MAX = 8
+_COMPACT_MAX_W = 16
+_COMPACT_MAX_H = 16
 
 
 def load(name="gen2"):
@@ -52,13 +54,48 @@ def _gen5_entry(name):
     return _cache["__gen5_mono__"].get(name)
 
 
+def _uniform_grid(grid):
+    rows = list(grid) or ["."]
+    width = max(len(row) for row in rows) or 1
+    return [row.ljust(width, ".") for row in rows]
+
+
+def _scale_grid(grid, factor):
+    if factor == 1:
+        return list(grid)
+    src_h, src_w = len(grid), len(grid[0])
+    dst_w = max(1, round(src_w * factor))
+    dst_h = max(1, round(src_h * factor))
+    out = []
+    for y in range(dst_h):
+        sy = min(src_h - 1, int(y / factor))
+        row = []
+        for x in range(dst_w):
+            sx = min(src_w - 1, int(x / factor))
+            row.append(grid[sy][sx])
+        out.append("".join(row))
+    return out
+
+
+def _fit_compact(grid):
+    grid = _uniform_grid(grid)
+    scale = min(1.0, _COMPACT_MAX_W / len(grid[0]), _COMPACT_MAX_H / len(grid))
+    return _scale_grid(grid, scale) if scale < 1.0 else grid
+
+
 def sprite_frames(name, ptype="Normal", shiny=False):
-    """Compact art for the statusline/cutscenes: gen2 (2 frames) > chibi > silhouette."""
+    """Compact art for statusline/cutscenes:
+    Gen 2 animation > scaled official box sprite > chibi > silhouette."""
     entry = load().get(name)
     if entry:
         palette = entry.get("palette_shiny") if shiny else None
         palette = palette or entry.get("palette", {})
         return [(grid, palette) for grid in entry["frames"]]
+    box = load("box").get(name)
+    if box:
+        if shiny and box.get("shiny_grid"):
+            return [(_fit_compact(box["shiny_grid"]), box["palette_shiny"])]
+        return [(_fit_compact(box["grid"]), box["palette"])]
     return [sprites.sprite_for(name, ptype)]
 
 

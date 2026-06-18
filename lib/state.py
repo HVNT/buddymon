@@ -49,6 +49,7 @@ def default_state():
             "last_day": None,
             "balls": 10,
             "total_xp": 0,
+            "total_tokens": 0,
         },
         "active": None,  # pokemon id
         "pokemon": [],  # {id, name, emoji, type, rarity, level, xp, shiny, caught_at}
@@ -58,6 +59,12 @@ def default_state():
 
 
 def _migrate(state):
+    trainer = state.setdefault("trainer", {})
+    trainer.setdefault("streak", 0)
+    trainer.setdefault("last_day", None)
+    trainer.setdefault("balls", 10)
+    trainer.setdefault("total_xp", 0)
+    trainer.setdefault("total_tokens", 0)
     if state.get("version") == 1:
         # v2 moved to a cubic XP curve. Keep every pokemon's level and name;
         # snap xp up to the new curve's floor so nothing de-levels.

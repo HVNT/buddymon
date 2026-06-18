@@ -1,16 +1,16 @@
 # buddymon
 
 A pixel-art pokémon buddy that lives in your Claude Code statusline. It earns
-XP from the real tokens you burn, levels up, evolves, catches wild pokémon
-while you work — and visibly reacts to your session: thinks when you think,
-works when tools run, asks for you on permission prompts, and curls up asleep
-when you go idle.
+progress from the real tokens you burn, levels up, evolves, catches wild
+pokémon while you work — and visibly reacts to your session: thinks when you
+think, works when tools run, asks for you on permission prompts, and curls up
+asleep when you go idle.
 
 ```
   ▄▀▀▀▀▀▀▄        ⚡ Pikachu Lv.12
  ▀▀█▀▀█▀▀▀▀      ▰▰▰▰▰▱▱▱▱▱ 312/660
  ▀▀▀▀▀▀▀▀▀ ▄     💤 zzz
-   ▀▀▀▀▀  ▄▀     🔥4  ⚾9  📖7
+   ▀▀▀▀▀  ▄▀     🔥4  ⚾9  📖7  🪙1.2M
   ▄▀▀▀▀▀▄        🎉 caught ✨🦊 Eevee (new!)
 ```
 
@@ -21,6 +21,12 @@ when you go idle.
 /plugin install buddymon@buddymon
 ```
 
+For a new checkout:
+
+```
+git clone https://github.com/HVNT/buddymon.git /Users/hunt/buddymon
+```
+
 Restart the session, then pick a starter:
 
 ```
@@ -29,16 +35,16 @@ Restart the session, then pick a starter:
 
 ## How it plays
 
-- **XP from tokens** — a Stop hook reads the turn's transcript usage:
-  1 XP / 100 output · 1 / 1,000 input · 1 / 500 cache-write · 1 / 5,000 cache-read.
+- **Tokens feed progress** — a Stop hook reads the turn's transcript usage and
+  the UI shows raw tracked tokens. The hidden level score uses weights:
+  1 point / 75 output · 1 / 500 input · 1 / 250 cache-write · 1 / 1,000 cache-read.
   A per-session anchor uuid guarantees turns are never double-counted, even
   across resume/compaction.
-- **Levels & evolution** — quadratic curve to Lv.60. Starters evolve on the
-  canonical levels (16/36, Pikachu 30, Eevee branches at 25). Evolution
-  changes the sprite.
-- **Wild encounters** — each XP-earning turn has an 18% spawn chance
+- **Levels & evolution** — cubic curve to Lv.60. Evolution is table-driven
+  across the dex; if a pokemon has multiple eligible evolutions, one is picked.
+- **Wild encounters** — each progress-earning turn has a 35% spawn chance
   (70/20/8/2 rarity split, legendaries gated behind Lv.20, shinies 1/128).
-  Commons/uncommons auto-resolve (one ball, caught or fled).
+  In Auto Mode, commons/uncommons auto-resolve (one ball, caught or fled).
 - **Safari Zone** — rare and legendary spawns *wait* for you and become an
   interactive Gen 1 Safari minigame in the menu bar dropdown: **🪨 Rock**
   (doubles catch rate but angers it → 2× flee), **🍖 Bait** (halves catch rate
@@ -46,7 +52,9 @@ Restart the session, then pick a starter:
   exclusive and tick down each turn; when anger wears off the catch boost
   resets — so it's a race. The wild waits indefinitely until you act and never
   flees on your first move — you always get to start the fight.
-- **Streaks** — consecutive coding days multiply XP, +2%/day up to ×1.6.
+- **Battle Mode** — optional weaken-then-catch battles for every wild spawn.
+  Toggle it from the menu bar or with `/buddymon:mode battle`.
+- **Streaks** — consecutive coding days multiply progress, +2%/day up to ×1.6.
 - **Journal** — every catch, evolution, and level-up is appended permanently
   to `~/.local/state/buddymon/journal.jsonl`; browse with `/buddymon:history`
   (also the last few entries in the menu bar dropdown). Rare moments —
@@ -79,9 +87,9 @@ pack, buddymon falls back to its built-in hand-drawn chibi sprites
 ## Cross-client: same pokédex everywhere
 
 State lives in `~/.local/state/buddymon/state.json`, so every surface shares
-one buddy and one dex. XP sources by client:
+one buddy and one dex. Token sources by client:
 
-| Client | XP | How |
+| Client | Tokens | How |
 |---|---|---|
 | Claude Code | ✅ live | Stop hook (per turn) |
 | Codex | ✅ | `collect` parses `~/.codex/sessions` rollouts (cumulative-delta anchors) |
@@ -89,8 +97,8 @@ one buddy and one dex. XP sources by client:
 | Gemini / Cursor | ➖ | no local token counters; commands still work |
 
 `python3 buddymon.py collect` is incremental and idempotent — the first run
-anchors existing logs without awarding (no history dump), after that only new
-tokens count. A file lock serializes it with the Claude hook.
+anchors existing logs without counting them (no history dump), after that only
+new tokens count. A file lock serializes it with the Claude hook.
 (Collector parsing approach adapted from agent-platform's token-usage workflow.)
 
 ### Keep the menu bar always alive (optional)
@@ -106,6 +114,21 @@ launchctl load ~/Library/LaunchAgents/com.hunt.buddymon-swiftbar.plist
 Remove with `launchctl unload …` + `rm`. (Or just add SwiftBar to System
 Settings → General → Login Items for start-at-login without auto-revive.)
 
+### Hide SwiftBar's own menu bar icon
+
+By default SwiftBar shows its own "SwiftBar" item next to your buddy. Enable
+Stealth Mode so it stays hidden whenever a plugin is active (it only reappears
+if you disable all plugins, so you're never locked out — SwiftBar's Preferences
+also remain reachable from the buddy's dropdown footer):
+
+```
+defaults write com.ameba.SwiftBar StealthMode -bool YES
+osascript -e 'quit app "SwiftBar"' && open -a SwiftBar
+```
+
+Now only the buddy shows. (Fallback: hold ⌘ and drag the SwiftBar icon out of
+the menu bar.)
+
 ### After upgrading buddymon
 
 Most surfaces spawn fresh processes per render and pick up code/state changes
@@ -117,9 +140,9 @@ stale logic in memory (symptom: 🥚 in the menu bar despite a live buddy).
 ### tmux status bar
 
 `~/.tmux.conf` runs `buddymon.py tiny --collect` in `status-right` every 15s:
-a plain-text buddy (`🦎 Charmander Lv.15 ▰▱▱▱▱▱ ⚙ ⚾51`) that also harvests
-Codex/Auggie XP as a side effect. `prefix+B` opens the full pixel status card
-in a popup. For collection without tmux, a launchd agent can run
+a plain-text buddy (`🦎 Charmander Lv.15 ▰▱▱▱▱▱ ⚙ ⚾51 🪙1.2M`) that also harvests
+Codex/Auggie tokens as a side effect. `prefix+B` opens the full pixel status
+card in a popup. For collection without tmux, a launchd agent can run
 `buddymon.py collect` every 5 min (see `extras/com.hunt.buddymon-collect.plist`;
 load with `launchctl load ~/Library/LaunchAgents/...`, remove with
 `launchctl unload` + `rm`).
@@ -129,16 +152,29 @@ load with `launchctl load ~/Library/LaunchAgents/...`, remove with
 | Command | What |
 |---|---|
 | `/buddymon:choose <starter>` | pick your starter (once) |
-| `/buddymon:status` | status card |
+| `/buddymon:status` | compact status summary |
 | `/buddymon:dex` | collection by rarity |
 | `/buddymon:switch <name>` | make a caught pokémon active |
 | `/buddymon:history [n]` | the buddy's journey journal |
+| `/buddymon:safari <action>` | play a Safari turn |
+| `/buddymon:battle <action>` | play a Battle Mode turn |
+| `/buddymon:mode [auto\|battle]` | toggle encounter mode |
 | `/buddymon:official` | fetch the official Gen 2 icon pack (asks first) |
 | `/buddymon:uninstall` | clean removal instructions |
 
+## More docs
+
+- [DECISIONS.md](DECISIONS.md) — why it works this way
+- [ARCHITECTURE.md](ARCHITECTURE.md) — simple system map
+- [DEVELOPMENT.md](DEVELOPMENT.md) — local dev commands
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — common fixes
+- [ASSETS.md](ASSETS.md) — sprite asset rules
+- [CHANGELOG.md](CHANGELOG.md) — human release notes
+
 ## Design guarantees
 
-- **Local-only.** No network calls of any kind.
+- **Runtime local-only.** Normal play reads local files only. Optional asset
+  fetch tools use the network only when you run them.
 - **Never touches `~/.claude/settings.json`.** The statusline is declared in
   the plugin manifest; uninstalling the plugin removes everything.
 - **One state file**, atomic writes: `~/.local/state/buddymon/state.json`
@@ -146,13 +182,13 @@ load with `launchctl load ~/Library/LaunchAgents/...`, remove with
 - **Deterministic engine** — all RNG is injected; `tests/` covers the curve,
   evolution chains, encounter accounting, and the transcript anchor.
 
-Run tests: `uv run --with pytest --no-project python3 -m pytest tests/ -q`
+Run tests: `uv run --with pytest --with pillow --no-project python3 -m pytest tests/ -q`
 
 Art QA: `python3 buddymon.py preview` renders every sprite.
 
 ## Credits
 
-Game design ideas (token-XP, anchor pattern, statusline buddy) inspired by
+Game design ideas (token progress, anchor pattern, statusline buddy) inspired by
 [andriar/pokemon-buddy-claude](https://github.com/andriar/pokemon-buddy-claude);
 state-reactive mascot concept inspired by
 [TeXmeijin/claude-code-mascot-statusline](https://github.com/TeXmeijin/claude-code-mascot-statusline).

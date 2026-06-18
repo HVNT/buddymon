@@ -9,8 +9,8 @@ from datetime import date
 
 from . import data
 
-# Tokens per 1 XP, by usage tier.
-XP_TIERS = {"output": 100, "input": 1000, "cache_write": 500, "cache_read": 5000}
+# Tokens per 1 progress point, by usage tier.
+XP_TIERS = {"output": 75, "input": 500, "cache_write": 250, "cache_read": 1000}
 
 LEVEL_CAP = 60
 BALLS_PER_LEVEL = 3
@@ -34,6 +34,10 @@ def level_from_xp(xp):
 
 def xp_from_tokens(totals):
     return sum(totals.get(tier, 0) // divisor for tier, divisor in XP_TIERS.items())
+
+
+def token_total(totals):
+    return sum(max(0, int(totals.get(tier, 0))) for tier in XP_TIERS)
 
 
 def streak_multiplier(streak):
@@ -188,7 +192,7 @@ def summarize_events(result, encounter):
         elif result["leveled"]:
             parts.append(f"⬆️ Lv.{result['new_level']}!")
         else:
-            parts.append(f"+{result['xp']} XP")
+            parts.append(f"+{result['xp']} progress")
     if encounter:
         shiny = "✨" if encounter["shiny"] else ""
         wild = f"{shiny}{encounter['emoji']} {encounter['name']}"

@@ -7,7 +7,7 @@ randomness is injected so turns are deterministic in tests.
 """
 import time
 
-from . import data
+from . import data, engine, journal, notify
 
 
 def start(encounter):
@@ -35,6 +35,10 @@ def _flee_probability(pending):
 
 def _catch_probability(pending):
     return min(0.9, pending["c"] / data.CATCH_DIVISOR)
+
+
+def _pct(probability):
+    return int(probability * 100 + 0.5)
 
 
 def _end_turn(pending, rng):
@@ -106,7 +110,45 @@ def status_text(pending):
 
 
 def odds_hint(pending):
+    catch = _pct(_catch_probability(pending))
+    flee = _pct(_flee_probability(pending))
     if pending["moves"] == 0:
-        return f"catch ~{round(_catch_probability(pending) * 100)}%  ·  won't flee yet"
-    return (f"catch ~{round(_catch_probability(pending) * 100)}%  ·  "
-            f"flee ~{round(_flee_probability(pending) * 100)}%")
+        return f"catch ~{catch}%  ·  flee next turn ~{flee}%  ·  first move safe"
+    return f"catch ~{catch}%  ·  flee ~{flee}%"
+
+
+def _resolve(s, pending, outcome):
+    """Apply a finished Safari encounter to state: collect + journal + notify."""
+    enc = {"name": pending["name"], "emoji": pending["emoji"],
+           "rarity": pending["rarity"], "shiny": pending["shiny"]}
+    if outcome["caught"]:
+        already = any(p["name"] == pending["name"] for p in s["pokemon"])
+        s["pokemon"].append(engine.new_pokemon(
+            pending["name"], pending["type"], pending["emoji"],
+            pending["rarity"], pending["shiny"]))
+        enc.update(outcome="caught", new_species=not already)
+    elif outcome.get("ran"):
+        enc = None  # running away isn't worth a journal line
+    else:  # fled (or expired)
+        enc.update(outcome="fled")
+    if enc:
+        for entry in journal.log_outcomes(None, enc, "safari"):
+            if journal.is_rare(entry):
+                notify.notify("buddymon", entry["text"])
+    s.pop("pending_encounter", None)
+
+
+def take_turn(s, action, rng):
+    """Run one Safari action against the pending encounter, resolving when the
+    turn ends it. Mutates `s` in place; the caller owns load/lock/save. Returns
+    (outcome, msg) — (None, msg) if nothing is pending or the action is unknown."""
+    pending = s.get("pending_encounter")
+    if not pending:
+        return None, "No wild pokémon right now."
+    if action not in ACTIONS:
+        return None, "Usage: rock|bait|ball|run"
+    outcome = ACTIONS[action](pending, s["trainer"], rng)
+    msg = pending["last_msg"]
+    if outcome["done"]:
+        _resolve(s, pending, outcome)
+    return outcome, msg

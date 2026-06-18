@@ -64,6 +64,27 @@ def test_eating_lowers_flee_angry_raises_it():
     assert neutral == rare
 
 
+def test_opening_odds_hint_shows_first_move_protection_and_future_flee():
+    p = safari.start(spawn())
+    hint = safari.odds_hint(p)
+
+    assert "catch ~30%" in hint
+    assert "flee next turn ~10%" in hint
+    assert "first move safe" in hint
+    assert "won't flee yet" not in hint
+
+
+def test_bait_hint_shows_lower_flee_than_neutral():
+    p = safari.start(spawn())
+    opening_hint = safari.odds_hint(p)
+    safari.throw_bait(p, {"balls": 5}, SeqRandom([0.99], [3]))
+    bait_hint = safari.odds_hint(p)
+
+    assert "flee next turn ~10%" in opening_hint
+    assert "catch ~15%" in bait_hint
+    assert "flee ~3%" in bait_hint
+
+
 def test_ball_consumes_inventory_and_guards_zero():
     p = safari.start(spawn())
     trainer = {"balls": 1}

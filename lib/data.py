@@ -67,7 +67,7 @@ CATCH_DIVISOR = 300.0   # ball catch prob = min(0.9, C / CATCH_DIVISOR)
 CATCH_RATES = {"common": 0.90, "uncommon": 0.70, "rare": 0.45, "legendary": 0.20}
 
 SHINY_ODDS = 128  # 1 in N
-ENCOUNTER_CHANCE = 0.18  # per XP-earning turn
+ENCOUNTER_CHANCE = 0.35  # per progress-earning turn
 LEGENDARY_MIN_LEVEL = 20  # buddy level required for legendary spawns
 
 # Battle Mode (opt-in via state["mode"] == "battle"): wild encounters become a

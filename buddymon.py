@@ -3,14 +3,15 @@
 
 Usage:
   buddymon.py choose <starter>    pick your starter (one-time)
-  buddymon.py status              status card
-  buddymon.py dex                 collection by rarity
+  buddymon.py status              compact status summary
+  buddymon.py dex [--grid]        collection by rarity
   buddymon.py switch <name>       make a caught pokemon your active buddy
   buddymon.py preview             render every sprite (art QA; both frames for packs)
   buddymon.py export-chibi        archive the chibi pack to ~/Pictures/buddymon/
-  buddymon.py collect             award XP from other agent CLIs' token logs
+  buddymon.py collect             count tokens from other agent CLIs
   buddymon.py tiny [--collect]    one-line plain-text status (tmux status bar)
   buddymon.py menubar             SwiftBar plugin output (sprite icon + dropdown)
+  buddymon.py menu                interactive terminal UI (party/dex/journal/status)
   buddymon.py history [N]         the buddy's journey journal (default last 20)
   buddymon.py safari <action>     play a turn vs a pending wild (rock|bait|ball|run)
   buddymon.py battle <action>     battle-mode turn (attack|ball|run)
@@ -27,8 +28,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import (  # noqa: E402
     battle as bt, collectors, data, engine, journal, notify, packs, paths,
-    pixels, png, render, safari as sf, scene, sprites, state,
+    pixels, png, render, safari as sf, scene, sprites, state, tui,
 )
+
+EVOLUTION_NOTICE_COLOR = "#4c1d95"
+EVENT_NOTICE_COLOR = "#1e3a8a"
 
 
 def choose(args):
@@ -44,7 +48,7 @@ def choose(args):
                    {"name": buddy["name"]})
     grid, palette = sprites.sprite_for(buddy["name"], buddy["type"])
     art = "\n".join(pixels.render(grid, palette))
-    return f"{art}\n\n{buddy['emoji']} {buddy['name']} chose YOU! XP flows from every Claude Code turn."
+    return f"{art}\n\n{buddy['emoji']} {buddy['name']} chose YOU! Tokens from every Claude Code turn feed your buddy."
 
 
 def switch(args):
@@ -130,9 +134,10 @@ def collect(_args, quiet=False):
     if quiet:
         return detail
     if summary["bootstrapped_now"]:
-        return "anchored existing client logs — XP starts counting from now"
+        return "anchored existing client logs — tokens start counting from now"
     tok = summary["tokens"]
-    return detail or f"no new tokens ({sum(tok.values())} counted)"
+    raw = summary.get("raw_tokens", sum(tok.values()))
+    return detail or (f"{raw} tokens counted" if raw else "no new tokens")
 
 
 def tiny(args):
@@ -158,6 +163,7 @@ def tiny(args):
     if trainer.get("streak", 0) >= 2:
         bits.append(f"🔥{trainer['streak']}")
     bits.append(f"⚾{trainer.get('balls', 0)}")
+    bits.append(f"🪙{render.compact_number(trainer.get('total_tokens', 0))}")
     event = state.read_event("cross")
     if event and event.get("detail") and time.time() - event.get("ts", 0) < 600:
         bits.append(event["detail"])
@@ -183,6 +189,8 @@ def _battle_sprite(name, ptype, shiny):
 
 
 BAR_POINT_HEIGHT = 20  # how tall the bar sprite displays, in points
+BATTLE_IMAGE_SCALE = 2
+BATTLE_POINT_WIDTH = 240  # how wide the dropdown battle scene displays, in points
 
 
 def _bar_dpi(grid, scale=4):
@@ -190,8 +198,28 @@ def _bar_dpi(grid, scale=4):
     return len(grid) * scale * 72 / BAR_POINT_HEIGHT
 
 
+def _scene_dpi(grid, scale=2):
+    """DPI that makes the battle scene render at BATTLE_POINT_WIDTH points wide,
+    so it fills the dropdown's width instead of leaving a gap beside it."""
+    return len(grid[0]) * scale * 72 / BATTLE_POINT_WIDTH
+
+
+def _battle_scene_image(grid, palette):
+    """Base64 PNG for SwiftBar battle rows.
+
+    SwiftBar only exposes an image parameter, not a width parameter. Keep the
+    pixel scale modest so the battle view stays readable without feeling huge.
+    """
+    return base64.b64encode(
+        png.grid_to_png(
+            grid, palette, BATTLE_IMAGE_SCALE,
+            dpi=_scene_dpi(grid, BATTLE_IMAGE_SCALE),
+        )
+    ).decode()
+
+
 _CUTSCENE_TEXT = {
-    "caught": {"alert": "❗", "vs": "a wild {name}!", "wobble": "…", "result": "GOTCHA!"},
+    "caught": {"alert": "❗", "vs": "a wild {name}!", "wobble": "…", "result": "Caught {name}!"},
     "fled": {"alert": "❗", "vs": "a wild {name}!", "wobble": "wait—", "result": "it fled…"},
     "no_balls": {"alert": "❗", "vs": "a wild {name}!", "wobble": "😱", "result": "no balls!"},
 }
@@ -228,15 +256,31 @@ def _evolution_line(entry, phase):
 def _throw_line(pb, phase, frame_list):
     """Bar animation of a pokéball throw during a battle (arc → jiggle → result)."""
     wild = packs.sprite_frames(pb["name"], pb["type"], pb["shiny"])
+    caught = pb["last_throw"].get("caught")
+    if caught and (phase or 0) >= scene.THROW_SECS - 1:
+        return _caught_line(pb["name"], pb["type"], pb["shiny"])
     grid, palette = scene.throw_jiggle_bar(frame_list[0], wild[0], phase or 0, pb["last_throw"])
     img = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
-    caught = pb["last_throw"].get("caught")
-    text = "GOTCHA!" if (caught and (phase or 0) >= scene.THROW_SECS - 1) else "⚾"
-    return f"{text} | image={img}"
+    return f"⚾ | image={img}"
+
+
+def _caught_line(name, ptype, shiny=False):
+    grid, palette = packs.gen5_frames(name, ptype, shiny)[0]
+    img = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
+    shiny_mark = "✨" if shiny else ""
+    return f"🎉 Caught {shiny_mark}{name}! | image={img}"
 
 
 def _cutscene_line(entry, phase, frame_list, frame_idx):
     wild = _wild_frames(entry)
+    is_result_phase = not (
+        phase in scene.PHASE_ALERT
+        or phase in scene.PHASE_VS
+        or phase in scene.PHASE_WOBBLE
+    )
+    if entry["kind"] == "caught" and is_result_phase:
+        wtype = data.WILDS.get(entry["name"], ("Normal",))[0]
+        return _caught_line(entry["name"], wtype, entry.get("shiny"))
     grid, palette = scene.battle_bar(
         frame_list[frame_idx % len(frame_list)],
         wild[frame_idx % len(wild)], phase, entry["kind"])
@@ -250,19 +294,11 @@ def _cutscene_line(entry, phase, frame_list, frame_idx):
     elif phase in scene.PHASE_WOBBLE:
         text = texts["wobble"]
     else:
-        text = texts["result"]
+        text = texts["result"].format(name=entry["name"])
     return f"{text} | image={img}"
 
 
 _RARITY_ORDER = {"starter": 0, "legendary": 1, "rare": 2, "uncommon": 3, "common": 4}
-
-
-def _dex_icon(p):
-    # box (40x30) not gen5: tiny submenu icons don't need 96px detail, and
-    # gen5 here is 4x the pixels x every caught species — wasteful.
-    grid, palette = packs.box_frames(p["name"], p["type"], p.get("shiny"))[0]
-    dpi = len(grid) * 2 * 72 / 14  # ~14pt submenu icons
-    return base64.b64encode(png.grid_to_png(grid, palette, 2, dpi=dpi)).decode()
 
 
 def _dex_submenu(s):
@@ -274,44 +310,55 @@ def _dex_submenu(s):
             species[p["name"]] = p
     mons = sorted(species.values(),
                   key=lambda p: (_RARITY_ORDER.get(p["rarity"], 9), -p["level"], p["name"]))
-    lines = [f"📖 Pokédex  {len(species)}/{total}"]
+    lines = [f"Pokédex  {len(species)}/{total} | sfimage=book.closed"]
     for p in mons:
         shiny = "✨" if p.get("shiny") else ""
-        lines.append(f"--{shiny}{p['name']}  Lv.{p['level']}  ·  {p['rarity']}"
-                     f" | image={_dex_icon(p)}")
+        lines.append(f"--{shiny}{p['name']}  Lv.{p['level']}  ·  {p['rarity']}")
     return lines
 
 
 def _switch_submenu(s, active_name):
     script = Path(__file__).resolve()
-    names = sorted({p["name"] for p in s["pokemon"]} - {active_name})
-    if not names:
+    species = {}
+    for p in s["pokemon"]:
+        if p["name"] == active_name:
+            continue
+        best = species.get(p["name"])
+        if best is None or p["level"] > best["level"]:
+            species[p["name"]] = p
+    mons = sorted(species.values(),
+                  key=lambda p: (_RARITY_ORDER.get(p["rarity"], 9), -p["level"], p["name"]))
+    if not mons:
         return []
-    lines = ["🔄 Switch buddy"]
-    for name in names:
-        lines.append(f"--{name} | bash=/usr/bin/python3 param1={script} "
-                     f"param2=switch param3={name} terminal=false")
+    lines = ["Switch buddy | sfimage=arrow.triangle.2.circlepath"]
+    for p in mons:
+        shiny = "✨" if p.get("shiny") else ""
+        lines.append(f"--{shiny}{p['name']}  Lv.{p['level']} | bash=/usr/bin/python3 "
+                     f"param1={script} param2=switch param3={p['name']} terminal=false")
     return lines
 
 
-def _last_encounter_section(s, now):
-    entry = journal.latest_encounter(600, now)
-    if entry is None:
-        return []
-    buddy = state.active_pokemon(s)
-    buddy_box = _battle_sprite(buddy["name"], buddy["type"], buddy.get("shiny"))
-    wtype = data.WILDS.get(entry["name"], ("Normal",))[0]
-    wild_box = _battle_sprite(entry["name"], wtype, entry.get("shiny"))
-    grid, palette = scene.battle_screen(buddy_box, wild_box, entry["kind"])
-    img = base64.b64encode(png.grid_to_png(grid, palette, 2)).decode()
-    dialogue = {"caught": f"You caught {entry['name'].upper()}!",
-                "fled": f"Wild {entry['name'].upper()} fled!",
-                "no_balls": f"Wild {entry['name'].upper()} appeared — no balls!"}[entry["kind"]]
-    return ["---", f"{dialogue} | image={img}"]
+def _last_encounter_section(_s, _now):
+    """Do not keep catch/flee recap art in the SwiftBar dropdown.
+
+    The top bar already runs the short encounter cutscene. A longer image-backed
+    dropdown recap can leave SwiftBar doing expensive CoreAnimation work after
+    the moment has passed.
+    """
+    return []
+
+
+def _fight_launcher(script, name):
+    """Open the TUI to fight — the dropdown is a native menu (closes on click),
+    so turn-by-turn play lives in the TUI (arrow-keys + enter, stays open)."""
+    return (f"⌨️ Fight {name} in buddymon | bash=/usr/bin/python3 "
+            f"param1={script} param2=menu terminal=true")
 
 
 def _safari_section(s):
-    """Dropdown battle UI for a pending encounter: scene image + action buttons."""
+    """Dropdown Safari glance: the GB battle scene + status, then a launcher into
+    the TUI. No per-action rows (they'd duplicate the command box and the menu
+    closes on every click anyway)."""
     pending = s.get("pending_encounter")
     if not pending:
         return []
@@ -320,28 +367,20 @@ def _safari_section(s):
     buddy_box = _battle_sprite(buddy["name"], buddy["type"], buddy.get("shiny"))
     wild_box = _battle_sprite(pending["name"], pending["type"], pending["shiny"])
     grid, palette = scene.battle_screen(buddy_box, wild_box, "fled")
-    img = base64.b64encode(png.grid_to_png(grid, palette, 2)).decode()
-    balls = s["trainer"].get("balls", 0)
-
-    def action(label, name):
-        return (f"--{label} | bash=/usr/bin/python3 param1={script} "
-                f"param2=safari param3={name} terminal=false refresh=true")
-
-    lines = [
+    img = _battle_scene_image(grid, palette)
+    return [
         "---",
-        f"🌿 SAFARI — {sf.status_text(pending)} | image={img}",
-        f"--{pending['last_msg']}",
-        f"--{sf.odds_hint(pending)}",
-        action("🪨 Throw Rock", "rock"),
-        action("🍖 Throw Bait", "bait"),
-        action(f"⚾ Throw Ball ({balls})" if balls else "⚾ Out of balls", "ball"),
-        action("🏃 Run away", "run"),
+        f"| image={img}",
+        f"🌿 {sf.status_text(pending)}",
+        pending["last_msg"],
+        sf.odds_hint(pending),
+        _fight_launcher(script, pending["name"]),
     ]
-    return lines
 
 
 def _battle_section(s):
-    """Dropdown battle UI for a pending Battle-Mode encounter."""
+    """Dropdown Battle-Mode glance: the GB battle scene + status, then a launcher
+    into the TUI (same reasoning as Safari)."""
     pending = s.get("pending_battle")
     if not pending:
         return []
@@ -352,20 +391,14 @@ def _battle_section(s):
     grid, palette = scene.battle_screen(
         buddy_box, wild_box, "active",
         wild_hp_frac=bt.wild_hp_frac(pending), buddy_hp_frac=bt.buddy_hp_frac(pending))
-    img = base64.b64encode(png.grid_to_png(grid, palette, 2)).decode()
-
-    def action(label, name):
-        return (f"--{label} | bash=/usr/bin/python3 param1={script} "
-                f"param2=battle param3={name} terminal=false refresh=true")
-
+    img = _battle_scene_image(grid, palette)
     return [
         "---",
-        f"⚔️ BATTLE — {bt.status_text(pending)} | image={img}",
-        f"--{pending['last_msg']}",
-        f"--catch ~{round(bt.catch_probability(pending) * 100)}%  ·  ⚾ ∞",
-        action("⚔️ Attack", "attack"),
-        action("⚾ Throw Ball", "ball"),
-        action("🏃 Run", "run"),
+        f"| image={img}",
+        f"⚔️ {bt.status_text(pending)}",
+        pending["last_msg"],
+        f"catch ~{round(bt.catch_probability(pending) * 100)}%  ·  ⚾ ∞",
+        _fight_launcher(script, pending["name"]),
     ]
 
 
@@ -399,11 +432,15 @@ def _bar_line(s, buddy, frame_list, frame_idx):
         phase = scene.phase_for(now - entry["ts"])
         if phase is not None:
             return _cutscene_line(entry, phase, frame_list, frame_idx)
-    if pending or pb:  # a wild is waiting — static sprite + alert
-        w = pending or pb
-        grid, palette = packs.sprite_frames(w["name"], w["type"], w["shiny"])[0]
+    if pending or pb:  # a wild is waiting — keep the buddy, flag it with ❗
+        grid, palette = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
         icon = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
         return f"❗ | image={icon}"
+    evo_notice = journal.latest_evolution(EVOLUTION_BAR_NOTICE_SECS, now)
+    if evo_notice is not None:
+        grid, palette = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
+        icon = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
+        return f"🎊 {evo_notice['name'].upper()}! | image={icon}"
 
     grid, palette = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
     icon = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
@@ -416,36 +453,36 @@ def _dropdown_lines(s, buddy, frame_list):
     the stream rebuilds it on a slow cadence, not every tick."""
     now = time.time()
     trainer = s["trainer"]
+    g = render.gender_symbol(buddy)
+    species_n = len({p["name"] for p in s["pokemon"]})
     lines = [
         "---",
-        f"{buddy['emoji']} {buddy['name']} — {buddy['type']} · Lv.{buddy['level']}",
-        f"XP {render.xp_bar(buddy, 12)}",
-        f"🔥 streak {trainer.get('streak', 0)}d   ⚾ {trainer.get('balls', 0)}   "
-        f"📖 {len({p['name'] for p in s['pokemon']})} species",
+        f"{buddy['emoji']} {buddy['name']}  Lv.{buddy['level']}" + (f"  {g}" if g else ""),
+        f"🔥 streak {trainer.get('streak', 0)}d   ◓ {trainer.get('balls', 0)}   "
+        f"📖 {species_n} species",
     ]
+    evo = journal.latest_evolution(EVOLUTION_DROPDOWN_NOTICE_SECS, now)
+    if evo is not None:
+        lvl = f" Lv.{evo['level']}" if evo.get("level") else ""
+        lines.append(
+            f"🎊 evolved into {evo['name']}{lvl} | color={EVOLUTION_NOTICE_COLOR}"
+        )
     event = state.read_event("cross") or {}
     if event.get("detail") and now - event.get("ts", 0) < 600:
-        lines.append(event["detail"])
+        lines.append(f"{event['detail']} | color={EVENT_NOTICE_COLOR}")
+    lines.append(f"Tokens used {trainer.get('total_tokens', 0):,}")
+    lines.append(f"Level {render.xp_bar(buddy, 12)}")
     lines.extend(_safari_section(s))      # auto mode, rare/legendary
     lines.extend(_battle_section(s))      # battle mode, any wild
     lines.extend(_last_encounter_section(s, now))
-    recent = journal.tail(3)
-    if recent:
-        lines.append("---")
-        lines.extend(e.get("text", "?") for e in reversed(recent))
+    # The menu bar is the ambient glance; full browsing (dex/journal/status/
+    # switch/settings) lives in the launchable TUI to keep this uncluttered.
     script = Path(__file__).resolve()
     lines.append("---")
     lines.extend(_dex_submenu(s))
     lines.extend(_switch_submenu(s, buddy["name"]))
-    mode_on = s.get("mode", "auto") == "battle"
-    lines.append(
-        f"⚔️ Battle mode: {'ON' if mode_on else 'OFF'} | bash=/usr/bin/python3 "
-        f"param1={script} param2=mode param3={'auto' if mode_on else 'battle'} "
-        "terminal=false refresh=true")
-    lines.append(f"📜 Open journal | bash=/usr/bin/python3 param1={script} "
-                 "param2=history param3=100 terminal=true")
-    lines.append(f"Open status card | bash=/usr/bin/python3 param1={script} "
-                 "param2=status terminal=true")
+    lines.append(f"Open buddymon | sfimage=keyboard bash=/usr/bin/python3 "
+                 f"param1={script} param2=menu terminal=true")
     return lines
 
 
@@ -457,6 +494,9 @@ def _menubar_lines(s, frame_idx):
 
 
 IDLE_HEARTBEAT = 20  # when idle, re-emit at most this often (SwiftBar caches images)
+DROPDOWN_EVERY = 10  # during animation, rebuild the heavy dropdown only every Nth frame
+EVOLUTION_BAR_NOTICE_SECS = 2 * 60 * 60
+EVOLUTION_DROPDOWN_NOTICE_SECS = 6 * 60 * 60
 
 
 def menubar(args):
@@ -471,7 +511,7 @@ def menubar(args):
             pass
         return "\n".join(_menubar_lines(state.load(), int(time.time() / 15)))
 
-    # Cross-client XP collection is owned by the launchd agent (every 5 min);
+    # Cross-client token collection is owned by the launchd agent (every 5 min);
     # the stream re-reads state only when state.json changes.
     frame_idx, dropdown, s, last_mtime, last_emit = 0, None, None, -1.0, 0.0
     while True:
@@ -508,79 +548,18 @@ def menubar(args):
         time.sleep(1)
 
 
-def _resolve_safari(s, pending, outcome):
-    """Translate a finished Safari encounter into collection + journal effects."""
-    enc = {"name": pending["name"], "emoji": pending["emoji"],
-           "rarity": pending["rarity"], "shiny": pending["shiny"]}
-    if outcome["caught"]:
-        already = any(p["name"] == pending["name"] for p in s["pokemon"])
-        s["pokemon"].append(engine.new_pokemon(
-            pending["name"], pending["type"], pending["emoji"],
-            pending["rarity"], pending["shiny"]))
-        enc.update(outcome="caught", new_species=not already)
-    elif outcome.get("ran"):
-        enc = None  # running away isn't worth a journal line
-    else:  # fled (or expired)
-        enc.update(outcome="fled")
-    if enc:
-        for entry in journal.log_outcomes(None, enc, "safari"):
-            if journal.is_rare(entry):
-                notify.notify("buddymon", entry["text"])
-    s.pop("pending_encounter", None)
-
-
 def safari(args):
-    action = args[0] if args else ""
-    if action not in sf.ACTIONS:
-        return "Usage: safari rock|bait|ball|run"
     with state.lock():
         s = state.load()
-        pending = s.get("pending_encounter")
-        if not pending:
-            return "No wild pokémon right now."
-        outcome = sf.ACTIONS[action](pending, s["trainer"], random.Random())
-        msg = pending["last_msg"]
-        if outcome["done"]:
-            _resolve_safari(s, pending, outcome)
+        _, msg = sf.take_turn(s, args[0] if args else "", random.Random())
         state.save(s)
     return msg
 
 
-def _resolve_battle(s, pending, outcome):
-    """Translate a finished Battle-Mode encounter into collection + journal."""
-    enc = {"name": pending["name"], "emoji": pending["emoji"],
-           "rarity": pending["rarity"], "shiny": pending["shiny"]}
-    if outcome["caught"]:
-        already = any(p["name"] == pending["name"] for p in s["pokemon"])
-        s["pokemon"].append(engine.new_pokemon(
-            pending["name"], pending["type"], pending["emoji"],
-            pending["rarity"], pending["shiny"], level=pending["wild_level"]))
-        enc.update(outcome="caught", new_species=not already)
-    elif outcome["outcome"] == "ran":
-        enc = None
-    else:  # ko / buddy_faint
-        enc.update(outcome=outcome["outcome"])
-    if enc:
-        for entry in journal.log_outcomes(None, enc, "battle"):
-            if journal.is_rare(entry):
-                notify.notify("buddymon", entry["text"])
-    s.pop("pending_battle", None)
-
-
 def battle(args):
-    action = args[0] if args else ""
-    if action not in bt.ACTIONS:
-        return "Usage: battle attack|ball|run"
     with state.lock():
         s = state.load()
-        pending = s.get("pending_battle")
-        if not pending:
-            return "No battle right now."
-        buddy = state.active_pokemon(s)
-        outcome = bt.ACTIONS[action](pending, buddy, s["trainer"], random.Random())
-        msg = pending["last_msg"]
-        if outcome["done"]:
-            _resolve_battle(s, pending, outcome)
+        _, msg = bt.take_turn(s, args[0] if args else "", random.Random())
         state.save(s)
     return msg
 
@@ -598,6 +577,12 @@ def mode(args):
     return f"encounter mode: {target}" + (
         "  — wild spawns are now weaken-then-catch battles" if target == "battle"
         else "  — commons auto-catch, rare/legendary use Safari")
+
+
+def menu(_args):
+    """Launch the interactive terminal UI (party / dex / journal / status / settings)."""
+    tui.run()
+    return ""
 
 
 def history(args):
@@ -626,13 +611,14 @@ def main():
         "collect": collect,
         "tiny": tiny,
         "menubar": menubar,
+        "menu": menu,
         "history": history,
         "safari": safari,
         "battle": battle,
         "mode": mode,
-        "status": lambda a: render.status_card(state.load()),
+        "status": lambda a: render.status_summary(state.load()),
         "dex": lambda a: (render.dex_grid(state.load())
-                          if (sys.stdout.isatty() or "--grid" in a) and "--list" not in a
+                          if "--grid" in a and "--list" not in a
                           else render.dex(state.load())),
     }
     handler = handlers.get(cmd)

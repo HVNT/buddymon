@@ -7,7 +7,8 @@ catch). Catch odds rise as the wild's HP drops. All randomness injected.
 """
 import time
 
-from . import data
+from . import data, engine, journal, notify
+from . import state as st
 
 ANIM_SECS = 4  # how long the throw/jiggle animation plays in the bar
 
@@ -112,3 +113,41 @@ def throwing(p, now=None):
     """True while a thrown ball is still animating (recent last_throw)."""
     lt = p.get("last_throw")
     return bool(lt and (now or time.time()) - lt["ts"] < ANIM_SECS)
+
+
+def _resolve(s, pending, outcome):
+    """Apply a finished Battle-Mode encounter to state: collect + journal + notify."""
+    enc = {"name": pending["name"], "emoji": pending["emoji"],
+           "rarity": pending["rarity"], "shiny": pending["shiny"]}
+    if outcome["caught"]:
+        already = any(p["name"] == pending["name"] for p in s["pokemon"])
+        s["pokemon"].append(engine.new_pokemon(
+            pending["name"], pending["type"], pending["emoji"],
+            pending["rarity"], pending["shiny"], level=pending["wild_level"]))
+        enc.update(outcome="caught", new_species=not already)
+    elif outcome["outcome"] == "ran":
+        enc = None
+    else:  # ko / buddy_faint
+        enc.update(outcome=outcome["outcome"])
+    if enc:
+        for entry in journal.log_outcomes(None, enc, "battle"):
+            if journal.is_rare(entry):
+                notify.notify("buddymon", entry["text"])
+    s.pop("pending_battle", None)
+
+
+def take_turn(s, action, rng):
+    """Run one Battle-Mode action against the pending battle, resolving when the
+    turn ends it. Mutates `s` in place; the caller owns load/lock/save. Returns
+    (outcome, msg) — (None, msg) if nothing is pending or the action is unknown."""
+    pending = s.get("pending_battle")
+    if not pending:
+        return None, "No battle right now."
+    if action not in ACTIONS:
+        return None, "Usage: attack|ball|run"
+    buddy = st.active_pokemon(s)
+    outcome = ACTIONS[action](pending, buddy, s["trainer"], rng)
+    msg = pending["last_msg"]
+    if outcome["done"]:
+        _resolve(s, pending, outcome)
+    return outcome, msg

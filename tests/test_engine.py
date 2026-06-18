@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import data, engine, pixels, sprites, state, transcript
+from lib import data, engine, pixels, render, sprites, state, transcript
 
 
 def fresh_state(starter="Charmander"):
@@ -31,7 +31,12 @@ def test_level_from_xp_inverts_curve():
 
 def test_xp_from_tokens_tiers():
     totals = {"output": 250, "input": 3000, "cache_write": 1000, "cache_read": 10000}
-    assert engine.xp_from_tokens(totals) == 2 + 3 + 2 + 2
+    assert engine.xp_from_tokens(totals) == 3 + 6 + 4 + 10
+
+
+def test_token_total_sums_raw_usage_tiers():
+    totals = {"output": 250, "input": 3000, "cache_write": 1000, "cache_read": 10000}
+    assert engine.token_total(totals) == 14_250
 
 
 # ── streaks ──────────────────────────────────────────────────────────────────
@@ -108,6 +113,10 @@ def test_no_legendary_below_min_level():
             s["trainer"]["balls"] = 10  # keep attempts flowing
 
 
+def test_encounter_chance_is_tuned_for_visible_cadence():
+    assert data.ENCOUNTER_CHANCE == 0.35
+
+
 # ── transcript anchor pattern ────────────────────────────────────────────────
 
 def _write_transcript(path, entries):
@@ -169,6 +178,55 @@ def test_state_roundtrip(tmp_path, monkeypatch):
     assert state.read_event("sess1")["detail"] == "Bash"
 
 
+def test_status_card_shows_tokens_and_level_progress():
+    s = fresh_state()
+    s["trainer"]["total_tokens"] = 1234567
+
+    card = render.status_card(s)
+
+    assert "Tokens used 1,234,567" in card
+    assert "Level " in card
+    assert "XP   " not in card
+
+
+def test_statusline_uses_box_fallback_for_non_gen2_species(tmp_path, monkeypatch):
+    from lib import paths, packs
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    pack_dir = tmp_path / "packs"
+    pack_dir.mkdir()
+    (pack_dir / "box.json").write_text(json.dumps({
+        "Swellow": {
+            "grid": ["X" * 24] * 20,
+            "palette": {"X": "#112233"},
+        },
+    }))
+    packs._cache.clear()
+    s = state.default_state()
+    p = engine.new_pokemon("Swellow", "Normal", "🐾", "rare", level=22)
+    s["pokemon"].append(p)
+    s["active"] = p["id"]
+    monkeypatch.setattr(state, "load", lambda: s)
+
+    text = render.statusline({"session_id": "test"})
+
+    assert "Swellow" in text
+    assert "38;2;17;34;51" in text
+    packs._cache.clear()
+
+
+def test_status_summary_uses_compact_art_for_non_gen2_species():
+    s = state.default_state()
+    p = engine.new_pokemon("Swellow", "Normal", "🐾", "rare", level=22)
+    s["pokemon"].append(p)
+    s["active"] = p["id"]
+
+    summary = render.status_summary(s)
+
+    assert "Swellow" in summary
+    assert "Tokens used" in summary
+    assert "▀" in summary
+
+
 def test_v1_state_migrates_without_level_loss(tmp_path, monkeypatch):
     from lib import paths
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
@@ -188,6 +246,7 @@ def test_v1_state_migrates_without_level_loss(tmp_path, monkeypatch):
     assert buddy["level"] == 21
     assert buddy["xp"] == engine.xp_for_level(21)  # snapped to new floor
     assert engine.level_from_xp(buddy["xp"]) == 21
+    assert migrated["trainer"]["total_tokens"] == 0
 
 
 def test_milestone_balls_accrue_with_lifetime_xp():

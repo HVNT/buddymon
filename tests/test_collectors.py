@@ -53,10 +53,13 @@ def test_codex_bootstrap_then_incremental(tmp_path, monkeypatch):
     assert summary["result"] is not None
     assert summary["tokens"]["output"] == 10_000
     assert summary["tokens"]["cache_read"] == 40_000
+    assert summary["raw_tokens"] == 50_000
+    assert s["trainer"]["total_tokens"] == 50_000
 
     # immediate re-run: nothing new
     summary = collectors.collect(s, rng)
     assert summary["result"] is None
+    assert s["trainer"]["total_tokens"] == 50_000
 
 
 def test_codex_new_file_after_bootstrap_counts_fully(tmp_path, monkeypatch):
@@ -71,6 +74,7 @@ def test_codex_new_file_after_bootstrap_counts_fully(tmp_path, monkeypatch):
     write_rollout(fresh, [codex_record(5000, 0, 0)])
     summary = collectors.collect(s, rng)
     assert summary["tokens"]["output"] == 5000
+    assert s["trainer"]["total_tokens"] == 5000
 
 
 def test_augment_timestamp_anchor(tmp_path, monkeypatch):
@@ -96,6 +100,7 @@ def test_augment_timestamp_anchor(tmp_path, monkeypatch):
     os.utime(session, (session.stat().st_mtime + 5,) * 2)
     summary = collectors.collect(s, rng)
     assert summary["tokens"]["output"] == 3000  # only the new node
+    assert s["trainer"]["total_tokens"] == 3000
 
     summary = collectors.collect(s, rng)
     assert summary["result"] is None

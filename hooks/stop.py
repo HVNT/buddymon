@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stop hook: convert the turn's token usage into XP, maybe roll an encounter.
+"""Stop hook: convert the turn's token usage into progress, maybe roll an encounter.
 
 Announcements (level ups, evolutions, catches) go into the session event file
 so the statusline shows them — nothing is printed into the conversation.
@@ -38,6 +38,10 @@ def main():
 
                 if totals:
                     rng = random.Random()
+                    raw_tokens = engine.token_total(totals)
+                    if raw_tokens:
+                        trainer = s.setdefault("trainer", {})
+                        trainer["total_tokens"] = trainer.get("total_tokens", 0) + raw_tokens
                     result = engine.award_xp(s, engine.xp_from_tokens(totals), rng)
                     encounter = engine.roll_encounter(s, rng) if result else None
                     detail = engine.summarize_events(result, encounter)

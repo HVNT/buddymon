@@ -68,7 +68,7 @@ def log_outcomes(result, encounter, source):
 def latest(kinds, within_secs, now=None):
     """Newest entry of the given kinds younger than the window, else None."""
     now = now or time.time()
-    for entry in reversed(tail(20)):
+    for entry in reversed(tail(100)):
         if entry.get("kind") in kinds:
             return entry if now - entry.get("ts", 0) <= within_secs else None
     return None

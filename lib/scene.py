@@ -33,10 +33,26 @@ POKEBALL = (
 _SPARKLE = "#ffd700"
 _DUST = "#9aa0a6"
 _ALERT = "#ff3b30"
-_BOX = "#3c3c44"
-_HP = "#30d158"
-_HP_EMPTY = "#5a5a62"
-_PLATFORM = "#55555e"
+_BOX = "#2a2a32"               # HP-box interior (opaque GBC chrome)
+_FRAME = "#12121a"             # near-black outer border of boxes
+_FRAME_LIGHT = "#6a6a76"       # inner bevel highlight / double-border line
+_MSG_BG = "#23232b"            # dialogue band interior
+_HP_GREEN = "#58d058"          # >50% HP
+_HP_YELLOW = "#f8d030"         # 20–50% HP
+_HP_RED = "#f85038"            # ≤20% HP
+_HP_EMPTY = "#444450"          # empty HP track
+# Battle backdrop (GBA-style: sky over ground, with elliptical platform bases)
+_SKY = "#bcd8f0"               # upper field
+_SKY_HI = "#d6ebfb"            # light band just under the top border
+_GROUND = "#a8cc82"            # lower field (grass)
+_HORIZON = "#7d9e62"           # sky/ground divider
+_PLAT_FILL = "#c2da98"         # platform disc
+_PLAT_RIM = "#84a662"          # platform rim/shadow
+_PLAT_HI = "#dceebc"           # platform lit top edge
+_BORDER = "#20202a"            # screen edge (outer)
+_BORDER_HI = "#707684"         # screen edge (inner bevel)
+SCENE_ASPECT = 1.5             # battle screen min width:height (GBA-ish landscape)
+WILD_SPRITE_SCALE = 0.875      # median Gen 3 front/back width ratio
 
 
 class Canvas:
@@ -100,6 +116,24 @@ class Canvas:
 
 def mirror(grid):
     return [row[::-1] for row in grid]
+
+
+def scale_grid(grid, factor):
+    """Nearest-neighbor scale for pixel-art char grids."""
+    if factor == 1:
+        return list(grid)
+    src_h, src_w = len(grid), len(grid[0])
+    dst_w = max(1, round(src_w * factor))
+    dst_h = max(1, round(src_h * factor))
+    out = []
+    for y in range(dst_h):
+        sy = min(src_h - 1, int(y / factor))
+        row = []
+        for x in range(dst_w):
+            sx = min(src_w - 1, int(x / factor))
+            row.append(grid[sy][sx])
+        out.append("".join(row))
+    return out
 
 
 def pad_vertical(grid, top=2, bottom=2):
@@ -174,50 +208,179 @@ def battle_bar(buddy_frame, wild_frame, phase, outcome):
     return c.result()
 
 
+def _hp_color(frac):
+    """Green above 50%, yellow down to 20%, red below — the Gen-1 HP grade."""
+    if frac > 0.5:
+        return _HP_GREEN
+    if frac > 0.2:
+        return _HP_YELLOW
+    return _HP_RED
+
+
 def _hp_fill(c, x1, y1, x2, y2, frac):
-    """Draw an HP bar: full empty track, then a green fill proportional to frac."""
+    """Draw an HP bar: empty track, then a color-graded fill proportional to frac."""
     c.rect(x1, y1, x2, y2, _HP_EMPTY, fill=True)
+    frac = max(0.0, min(1.0, frac))
     if frac > 0:
-        end = x1 + max(1, round((x2 - x1) * max(0.0, min(1.0, frac))))
-        c.rect(x1, y1, end, y2, _HP, fill=True)
+        end = x1 + max(1, round((x2 - x1) * frac))
+        c.rect(x1, y1, end, y2, _hp_color(frac), fill=True)
 
 
-def battle_screen(buddy_frame, wild_frame, outcome, wild_hp_frac=None, buddy_hp_frac=None):
+def _backdrop(c, w, top, ground_y, bottom):
+    """Sky over ground with a horizon line — the battle field behind the mons."""
+    c.rect(0, top, w - 1, ground_y - 1, _SKY, fill=True)
+    c.hline(0, w - 1, top, _SKY_HI)
+    c.hline(0, w - 1, top + 1, _SKY_HI)
+    c.rect(0, ground_y, w - 1, bottom, _GROUND, fill=True)
+    c.hline(0, w - 1, ground_y, _HORIZON)
+
+
+def _oval(c, cx, cy, rx, ry):
+    """A flat elliptical platform base: filled disc, darker rim, lit top edge."""
+    rx, ry = max(1, rx), max(1, ry)
+    for dy in range(-ry, ry + 1):
+        for dx in range(-rx, rx + 1):
+            v = dx * dx / (rx * rx) + dy * dy / (ry * ry)
+            if v <= 1.0:
+                if v > 0.6:
+                    c.put(cx + dx, cy + dy, _PLAT_HI if dy < 0 else _PLAT_RIM)
+                else:
+                    c.put(cx + dx, cy + dy, _PLAT_FILL)
+
+
+def _hp_box(c, x1, y1, x2, y2, frac):
+    """Framed, opaque Gen-style HP box: dark border, top bevel, graded bar."""
+    c.rect(x1, y1, x2, y2, _BOX, fill=True)
+    c.rect(x1, y1, x2, y2, _FRAME)
+    c.hline(x1 + 1, x2 - 1, y1 + 1, _FRAME_LIGHT)
+    _hp_fill(c, x1 + 3, y1 + 4, x2 - 3, y2 - 3, frac)
+
+
+def _message_box(c, x1, y1, x2, y2):
+    """The dialogue band: filled box with the classic double border."""
+    c.rect(x1, y1, x2, y2, _MSG_BG, fill=True)
+    c.rect(x1, y1, x2, y2, _FRAME)
+    c.rect(x1 + 2, y1 + 2, x2 - 2, y2 - 2, _FRAME_LIGHT)
+
+
+# ── tiny 5x7 bitmap font (uppercase letters used by the GB command box) ───────
+# Our menu-bar runtime renders grids with the stdlib PNG encoder (no font lib),
+# so the command-box lettering is hand-drawn. Only the glyphs the action labels
+# use are defined; unknown chars render as blank cells.
+_GLYPH_W = 5  # glyph cell width; height (7) is implicit in the row data below
+_FONT = {
+    " ": ("     ",) * 7,
+    "A": (".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "B": ("####.", "#...#", "#...#", "####.", "#...#", "#...#", "####."),
+    "C": (".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."),
+    "F": ("#####", "#....", "#....", "####.", "#....", "#....", "#...."),
+    "G": (".###.", "#...#", "#....", "#.###", "#...#", "#...#", ".###."),
+    "H": ("#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"),
+    "I": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"),
+    "K": ("#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"),
+    "L": ("#....", "#....", "#....", "#....", "#....", "#....", "#####"),
+    "N": ("#...#", "##..#", "#.#.#", "#.#.#", "#..##", "#...#", "#...#"),
+    "O": (".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "R": ("####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"),
+    "T": ("#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."),
+    "U": ("#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+    "\x10": ("#....", "##...", "###..", "####.", "###..", "##...", "#...."),  # ► cursor
+}
+_TEXT = "#1c1c24"        # GB command-box ink
+_CMD_BG = "#f8f8f8"      # white command-box interior
+
+
+def _text(c, x, y, s, color, scale=1, gap=1):
+    """Blit an uppercase string with the bitmap font. Returns the next x."""
+    cx = x
+    for ch in s.upper():
+        glyph = _FONT.get(ch)
+        if glyph:
+            for gy, row in enumerate(glyph):
+                for gx, px in enumerate(row):
+                    if px == "#":
+                        for dy in range(scale):
+                            for dx in range(scale):
+                                c.put(cx + gx * scale + dx, y + gy * scale + dy, color)
+        cx += (_GLYPH_W + gap) * scale
+    return cx
+
+
+def _command_box(c, x1, y1, x2, y2, options):
+    """The classic Game Boy 2×2 command box: white panel, dark double border,
+    a ► cursor on the first option, labels in the bitmap font. Display-only —
+    the actual clickable actions live as menu rows beside this image."""
+    c.rect(x1, y1, x2, y2, _CMD_BG, fill=True)
+    c.rect(x1, y1, x2, y2, _FRAME)
+    c.rect(x1 + 2, y1 + 2, x2 - 2, y2 - 2, _FRAME_LIGHT)
+    midx = (x1 + x2) // 2
+    col_x = (x1 + 7, midx + 5)
+    row_y = (y1 + 5, y1 + 23)          # two text rows, 5x7 glyphs at scale 2
+    cur = 12                            # cursor gutter (scale-2 ► + gap)
+    for i, label in enumerate(options[:4]):
+        r, cc = divmod(i, 2)            # 0=TL 1=TR 2=BL 3=BR (FIGHT/BAG/… order)
+        ox, oy = col_x[cc], row_y[r]
+        if i == 0:
+            _text(c, ox, oy, "\x10", _TEXT, scale=2)   # selection cursor
+        _text(c, ox + cur, oy, label, _TEXT, scale=2)
+
+
+def battle_screen(buddy_frame, wild_frame, outcome, wild_hp_frac=None,
+                  buddy_hp_frac=None, options=None):
     """Game Boy-style battle screen for the dropdown. Canvas sizes itself to the
-    two sprites. HP fractions, when given (Battle Mode), fill the bars
-    proportionally; otherwise the bars are cosmetic (Safari/last-encounter)."""
+    two sprites: wild top-right and buddy bottom-left on rounded platforms,
+    framed HP boxes, and a band across the bottom. HP fractions, when given
+    (Battle Mode), grade the bars green→yellow→red; otherwise full
+    (Safari/last-encounter). When `options` is given, the bottom band is the
+    classic 2×2 command box with those labels; otherwise a plain dialogue band."""
     buddy_grid, buddy_pal = buddy_frame
     wild_grid, wild_pal = wild_frame
+    wild_grid = scale_grid(wild_grid, WILD_SPRITE_SCALE)
     sw = max(len(buddy_grid[0]), len(wild_grid[0]))
     sh = max(len(buddy_grid), len(wild_grid))
     box_w = max(34, sw + 6)
-    W = sw + box_w + 16          # sprite column + HP-box column + margins
-    H = sh * 2 + 18              # stacked wild (top) + buddy (bottom) + bands
+    bottom_h = 42 if options else 10
+    H = sh * 2 + 22 + bottom_h   # stacked wild (top) + buddy (bottom) + band
+    # widen to a landscape field (like the games' ~3:2 screen) so the mons sit
+    # in opposite corners and the image fills the dropdown width
+    W = max(sw + box_w + 16, round(H * SCENE_ASPECT))
     c = Canvas(W, H)
+    field_bottom = H - bottom_h - 3
+    plat_y = sh + 5
+    bw, ww = len(buddy_grid[0]), len(wild_grid[0])
 
-    # wild: top-right on a platform, HP box top-left
-    plat_y = sh + 4
-    c.hline(W - sw - 8, W - 2, plat_y, _PLATFORM)
+    # field backdrop: sky over ground, horizon at the wild's feet
+    _backdrop(c, W, 0, plat_y, H - bottom_h - 1)
+    # platform bases the mons stand on (wild near horizon, buddy in foreground)
+    _oval(c, W - 6 - ww // 2, plat_y, ww // 2 + 3, max(3, (ww // 2 + 3) // 4))
+    _oval(c, 6 + bw // 2, field_bottom, bw // 2 + 3, max(3, (bw // 2 + 3) // 4))
+
+    # wild: top-right, HP box top-left
     if outcome == "caught":
         ball_grid, ball_pal = POKEBALL
         c.sprite(ball_grid, ball_pal, W - sw // 2 - 12, plat_y - 12)
         c.sparkles(W - sw // 2 - 8, plat_y - 14)
     else:
-        c.sprite(wild_grid, wild_pal, W - len(wild_grid[0]) - 6, plat_y - len(wild_grid))
+        c.sprite(wild_grid, wild_pal, W - ww - 6, plat_y - len(wild_grid))
         if outcome == "fled":
             c.dust(W - sw - 14, plat_y - 6)
-    c.rect(2, 3, box_w, 14, _BOX)
     wf = 0.0 if outcome == "caught" else (1.0 if wild_hp_frac is None else wild_hp_frac)
-    _hp_fill(c, 6, 7, box_w - 4, 10, wf)
+    _hp_box(c, 2, 3, box_w, 15, wf)
 
-    # buddy: bottom-left (mirrored, facing the wild), HP box bottom-right
-    buddy_plat = H - 4
-    c.hline(2, sw + 8, buddy_plat, _PLATFORM)
-    c.sprite(mirror(buddy_grid), buddy_pal, 6, buddy_plat - len(buddy_grid))
-    c.rect(W - box_w, H - 18, W - 2, H - 7, _BOX)
-    _hp_fill(c, W - box_w + 4, H - 14, W - 6, H - 11,
-             1.0 if buddy_hp_frac is None else buddy_hp_frac)
+    # buddy: bottom-left (mirrored, facing the wild), HP box right
+    c.sprite(mirror(buddy_grid), buddy_pal, 6, field_bottom - len(buddy_grid))
+    _hp_box(c, W - box_w, field_bottom - 14, W - 2, field_bottom - 2,
+            1.0 if buddy_hp_frac is None else buddy_hp_frac)
 
+    # bottom band: GB command box (with options) or a plain dialogue band
+    if options:
+        _command_box(c, 1, H - bottom_h, W - 2, H - 2, options)
+    else:
+        _message_box(c, 1, H - bottom_h, W - 2, H - 2)
+
+    # screen edge: dark border with an inner bevel line
+    c.rect(0, 0, W - 1, H - 1, _BORDER)
+    c.rect(1, 1, W - 2, H - 2, _BORDER_HI)
     return c.result()
 
 

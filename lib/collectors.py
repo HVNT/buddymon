@@ -177,8 +177,13 @@ def collect(state, rng):
     prune_anchors(anchors)
     anchors["_bootstrapped"] = True
 
+    raw_tokens = engine.token_total(totals)
+    if raw_tokens:
+        trainer = state.setdefault("trainer", {})
+        trainer["total_tokens"] = trainer.get("total_tokens", 0) + raw_tokens
+
     xp = engine.xp_from_tokens(totals)
     result = engine.award_xp(state, xp, rng) if xp > 0 else None
     encounter = engine.roll_encounter(state, rng) if result else None
     return {"bootstrapped_now": not bootstrapped, "tokens": totals,
-            "result": result, "encounter": encounter}
+            "raw_tokens": raw_tokens, "result": result, "encounter": encounter}

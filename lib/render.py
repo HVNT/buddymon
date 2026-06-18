@@ -1,7 +1,7 @@
 """Compose the statusline (sprite left, live info right) and CLI views."""
 import time
 
-from . import data, engine, packs, pixels, sprites
+from . import data, engine, packs, pixels, scene, sprites
 from . import state as st
 
 BOLD = "\x1b[1m"
@@ -15,6 +15,32 @@ IDLE_AFTER_SECS = 90
 ANNOUNCE_SECS = 300
 
 RARITY_BADGE = {"rare": "💎", "legendary": "🌟"}
+DEX_CELL_W = 28
+DEX_CELL_H = 22
+DEX_CELL_GAP = 3
+DEX_UNKNOWN_COLOR = "#6b7a8c"
+
+
+def compact_number(n):
+    n = int(n or 0)
+    for suffix, size in (("B", 1_000_000_000), ("M", 1_000_000), ("K", 1_000)):
+        if abs(n) >= size:
+            value = n / size
+            text = f"{value:.1f}".rstrip("0").rstrip(".")
+            return f"{text}{suffix}"
+    return str(n)
+
+
+def gender_symbol(pokemon):
+    """Stable ♂/♀ derived from the individual's id — cosmetic, no stored field
+    and no migration. NOTE: genderless species (Beldum, most legendaries, …)
+    aren't special-cased yet; correct handling needs PokéAPI gender_rate."""
+    raw = str(pokemon.get("id") or "")
+    try:
+        parity = int(raw[:8] or "0", 16)
+    except ValueError:
+        parity = sum(map(ord, pokemon.get("name", "")))
+    return "♂" if parity % 2 == 0 else "♀"
 
 
 def xp_bar(buddy, width=10):
@@ -77,12 +103,14 @@ def statusline(payload):
     frames = packs.sprite_frames(buddy["name"], buddy["type"], buddy.get("shiny"))
     if len(frames) > 1:  # official 2-frame icon: authentic party bounce
         grid, palette = frames[0] if asleep else frames[int(now) % len(frames)]
-    else:  # chibi fallback: blink + bob
+    elif buddy["name"] in sprites.SPRITES:  # chibi fallback: blink + bob
         grid, palette = frames[0]
         if asleep or int(now) % 5 == 0:
             grid = sprites.closed_eyes(grid)
         if not asleep and int(now) % 2:
             grid = pixels.bob(grid)
+    else:
+        grid, palette = frames[0]
     art = pixels.render(grid, palette, dim=0.55 if asleep else 1.0)
 
     shiny = "✨" if buddy.get("shiny") else ""
@@ -96,6 +124,7 @@ def statusline(payload):
         tags.append(f"🔥{streak}")
     tags.append(f"⚾{trainer.get('balls', 0)}")
     tags.append(f"📖{len(species)}")
+    tags.append(f"🪙{compact_number(trainer.get('total_tokens', 0))}")
 
     announce = ""
     if event and event.get("event") == "stop" and event.get("detail"):
@@ -135,10 +164,10 @@ def status_card(state):
 
     info = [
         f"{BOLD}{buddy['emoji']} {buddy['name']}{RESET} — {shiny}{buddy['type']} · Lv.{buddy['level']}",
-        f"XP   {xp_bar(buddy, 16)}",
+        f"Tokens used {trainer.get('total_tokens', 0):,}",
+        f"Level {xp_bar(buddy, 16)}",
         f"🔥 streak {trainer.get('streak', 0)}d   ⚾ balls {trainer.get('balls', 0)}",
         f"📖 dex {len(species)} species · {len(state['pokemon'])} caught",
-        f"Σ trainer XP {trainer.get('total_xp', 0):,}",
     ]
     lines = [f"{a}  {b}" for a, b in zip(art, info + [""] * len(art))]
     recent = sorted(state["pokemon"], key=lambda p: p.get("caught_at", 0), reverse=True)[:5]
@@ -149,8 +178,34 @@ def status_card(state):
     return "\n".join(lines)
 
 
+def status_summary(state):
+    buddy = st.active_pokemon(state)
+    if buddy is None:
+        return "No buddy yet. Run /buddymon:choose <starter> — options: " + ", ".join(data.STARTERS)
+
+    trainer = state["trainer"]
+    shiny = "✨ shiny " if buddy.get("shiny") else ""
+    species = {p["name"] for p in state["pokemon"]}
+    grid, palette = packs.sprite_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
+    art = pixels.render(grid, palette)
+    lines = [
+        *art,
+        f"{BOLD}{buddy['emoji']} {buddy['name']}{RESET} — {shiny}{buddy['type']} · Lv.{buddy['level']}",
+        f"Tokens used {trainer.get('total_tokens', 0):,}",
+        f"Level {xp_bar(buddy, 16)}",
+        f"🔥 streak {trainer.get('streak', 0)}d   ⚾ balls {trainer.get('balls', 0)}",
+        f"📖 dex {len(species)} species · {len(state['pokemon'])} caught",
+    ]
+    recent = sorted(state["pokemon"], key=lambda p: p.get("caught_at", 0), reverse=True)[:5]
+    if recent:
+        lines.append("")
+        lines.append("recent: " + "  ".join(
+            f"{'✨' if p.get('shiny') else ''}{p['emoji']} {p['name']}" for p in recent))
+    return "\n".join(lines)
+
+
 def _dex_universe():
-    """All 251 species in display order: full starter lines, then wilds by rarity."""
+    """All display species: full starter lines, then wilds by rarity."""
     order = {"legendary": 1, "rare": 2, "uncommon": 3, "common": 4}
     entries = []
     for name, info in data.STARTERS.items():  # base + every evolution form
@@ -163,8 +218,23 @@ def _dex_universe():
     return entries
 
 
+def _uniform_grid(grid):
+    rows = list(grid) or ["."]
+    width = max(len(row) for row in rows) or 1
+    return [row.ljust(width, ".") for row in rows]
+
+
+def _fit_grid(grid, max_w, max_h):
+    grid = _uniform_grid(grid)
+    scale = min(1.0, max_w / len(grid[0]), max_h / len(grid))
+    if scale < 1.0:
+        grid = scene.scale_grid(grid, scale)
+    return grid
+
+
 def _pad_grid(grid, w, h):
     """Center a sprite grid in a w×h transparent box for uniform cells."""
+    grid = _uniform_grid(grid)
     grid = grid[:h]
     left = max(0, (w - len(grid[0])) // 2)
     padded = [("." * left + row)[:w].ljust(w, ".") for row in grid]
@@ -173,14 +243,20 @@ def _pad_grid(grid, w, h):
     return [blank] * top + padded + [blank] * (h - top - len(padded))
 
 
+def _dex_cell_art(name, ptype, shiny=False, revealed=True):
+    grid, palette = packs.box_frames(name, ptype, shiny)[0]
+    if not revealed:
+        grid, palette = scene.silhouette((grid, palette), DEX_UNKNOWN_COLOR)
+    grid = _fit_grid(grid, DEX_CELL_W, DEX_CELL_H)
+    return _pad_grid(grid, DEX_CELL_W, DEX_CELL_H), palette
+
+
 def dex_grid(state, columns=None):
     """Terminal pokédex: unique sprites, caught in color, uncaught as ??? shadows."""
     import shutil
-    from . import packs
 
     width = columns or shutil.get_terminal_size((80, 24)).columns
-    cell_px, gap = 30, 3              # fixed pixel cell so columns align
-    cell_w = cell_px                  # render width == pixels (1 char/pixel)
+    cell_w, gap = DEX_CELL_W, DEX_CELL_GAP
     per_row = max(1, (width + gap) // (cell_w + gap))
 
     best = {}
@@ -199,9 +275,8 @@ def dex_grid(state, columns=None):
 
     def cell(name, ptype, rarity):
         p = best.get(name)
-        grid, palette = packs.box_frames(name, ptype, p.get("shiny") if p else False)[0]
-        grid = _pad_grid(grid, cell_px, 30)
-        art = pixels.render(grid, palette, dim=1.0 if p else 0.22)
+        grid, palette = _dex_cell_art(name, ptype, p.get("shiny") if p else False, bool(p))
+        art = pixels.render(grid, palette)
         if p:
             label1 = f"{'✨' if p.get('shiny') else ''}{name}"
             plain2, label2 = f"Lv.{p['level']}", f"Lv.{p['level']}"
