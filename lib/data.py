@@ -69,6 +69,19 @@ WILDS = {
     "Jirachi": ("Steel", "🌠", "legendary"),
 }
 
+def _pre_evolution():
+    pre = {}
+    for starter, info in STARTERS.items():
+        chain = [starter] + [name for name, _, _ in info["evolutions"]]
+        for older, newer in zip(chain, chain[1:]):
+            pre[newer] = older
+    for name, _ in EEVEE_BRANCHES:
+        pre[name] = "Eevee"
+    return pre
+
+
+PRE_EVOLUTION = _pre_evolution()  # evolved form -> what it evolved from
+
 RARITY_WEIGHTS = [("common", 70), ("uncommon", 20), ("rare", 8), ("legendary", 2)]
 
 # Auto-catch probability per rarity (one ball per attempt).

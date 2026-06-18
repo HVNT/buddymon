@@ -116,14 +116,14 @@ def frame_to_grid(rows):
 
 
 def crop_frames(frames):
-    """Drop rows blank in every frame (top/bottom only, keep frames aligned)."""
+    """Drop rows blank in every frame (top/bottom only, keep frames aligned).
+    Prefer an even height for half-block pairing; pixels.render pads odd
+    grids anyway, so this is cosmetic, not load-bearing."""
     blank = [all(set(f[y]) == {"."} for f in frames) for y in range(len(frames[0]))]
     top = next((i for i, b in enumerate(blank) if not b), 0)
-    bot = next((i for i, b in enumerate(reversed(blank)) if not b), 0)
-    end = len(blank) - bot
-    if (end - top) % 2:  # keep even height for half-block pairing
-        top = max(0, top - 1) if top > 0 else top
-        end = min(len(blank), end + 1) if (end - top) % 2 else end
+    end = len(blank) - next((i for i, b in enumerate(reversed(blank)) if not b), 0)
+    if (end - top) % 2 and top > 0:
+        top -= 1
     return [f[top:end] for f in frames]
 
 

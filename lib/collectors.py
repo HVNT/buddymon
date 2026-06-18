@@ -136,7 +136,15 @@ def collect_augment(anchors, award, totals):
 
 
 def prune_anchors(anchors):
-    for key in [k for k in anchors if ":" in k and not Path(k.split(":", 1)[1]).exists()]:
+    """Drop anchors that can never be scanned again: deleted files, or files
+    aged past the recency window. Keeps state.json from growing forever."""
+    cutoff = time.time() - RECENT_WINDOW_DAYS * 86400
+    for key in [k for k in anchors if ":" in k]:
+        try:
+            if Path(key.split(":", 1)[1]).stat().st_mtime >= cutoff:
+                continue
+        except OSError:
+            pass
         del anchors[key]
 
 

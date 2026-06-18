@@ -20,7 +20,7 @@ def lock():
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
 
-STATE_VERSION = 1
+STATE_VERSION = 2
 
 
 def default_state():
@@ -38,12 +38,23 @@ def default_state():
     }
 
 
+def _migrate(state):
+    if state.get("version") == 1:
+        # v2 moved to a cubic XP curve. Keep every pokemon's level and name;
+        # snap xp up to the new curve's floor so nothing de-levels.
+        from . import engine
+        for p in state["pokemon"]:
+            p["xp"] = max(p["xp"], engine.xp_for_level(p["level"]))
+        state["version"] = 2
+    return state
+
+
 def load():
     if paths.STATE_FILE.exists():
         try:
             state = json.loads(paths.STATE_FILE.read_text(encoding="utf-8"))
-            if isinstance(state, dict) and state.get("version") == STATE_VERSION:
-                return state
+            if isinstance(state, dict) and state.get("version") in (1, STATE_VERSION):
+                return _migrate(state)
         except (json.JSONDecodeError, OSError):
             pass
     return default_state()

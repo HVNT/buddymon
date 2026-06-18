@@ -40,6 +40,11 @@ Restart the session, then pick a starter:
   (70/20/8/2 rarity split, legendaries gated behind Lv.20, shinies 1/128).
   Catching consumes a ball; you earn 3 per level-up.
 - **Streaks** — consecutive coding days multiply XP, +2%/day up to ×1.6.
+- **Journal** — every catch, evolution, and level-up is appended permanently
+  to `~/.local/state/buddymon/journal.jsonl`; browse with `/buddymon:history`
+  (also the last few entries in the menu bar dropdown). Rare moments —
+  evolutions, shinies, legendaries — fire a macOS notification so you never
+  miss one.
 - **Moods** — hooks record the latest session event; the statusline maps it:
   prompt → thinking · PreToolUse → ⚙️ tool name · Notification → ❗ needs you ·
   stop → resting, then 💤 asleep (dimmed sprite, closed eyes) after 90s.
@@ -81,6 +86,27 @@ anchors existing logs without awarding (no history dump), after that only new
 tokens count. A file lock serializes it with the Claude hook.
 (Collector parsing approach adapted from agent-platform's token-usage workflow.)
 
+### Keep the menu bar always alive (optional)
+
+If SwiftBar quits (or you reboot), the buddy disappears until it's relaunched.
+A KeepAlive LaunchAgent starts it at login and relaunches it if it ever exits:
+
+```
+cp extras/com.hunt.buddymon-swiftbar.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.hunt.buddymon-swiftbar.plist
+```
+
+Remove with `launchctl unload …` + `rm`. (Or just add SwiftBar to System
+Settings → General → Login Items for start-at-login without auto-revive.)
+
+### After upgrading buddymon
+
+Most surfaces spawn fresh processes per render and pick up code/state changes
+instantly. The exception is the SwiftBar menu bar plugin (long-running stream):
+after pulling new buddymon code or a state-format migration, restart it —
+`osascript -e 'quit app "SwiftBar"' && open -a SwiftBar` — or it may keep
+stale logic in memory (symptom: 🥚 in the menu bar despite a live buddy).
+
 ### tmux status bar
 
 `~/.tmux.conf` runs `buddymon.py tiny --collect` in `status-right` every 15s:
@@ -99,6 +125,7 @@ load with `launchctl load ~/Library/LaunchAgents/...`, remove with
 | `/buddymon:status` | status card |
 | `/buddymon:dex` | collection by rarity |
 | `/buddymon:switch <name>` | make a caught pokémon active |
+| `/buddymon:history [n]` | the buddy's journey journal |
 | `/buddymon:official` | fetch the official Gen 2 icon pack (asks first) |
 | `/buddymon:uninstall` | clean removal instructions |
 

@@ -121,3 +121,24 @@ def test_tiny_is_one_plain_line(tmp_path, monkeypatch):
     out = buddymon.tiny([])
     assert "\n" not in out and "\x1b" not in out
     assert "Charmander" in out and "Lv.1" in out
+
+
+def test_prune_anchors_drops_aged_out_files(tmp_path):
+    import os, time
+    old = tmp_path / "old.jsonl"
+    fresh = tmp_path / "fresh.jsonl"
+    old.write_text("x")
+    fresh.write_text("x")
+    stale = time.time() - (collectors.RECENT_WINDOW_DAYS + 1) * 86400
+    os.utime(old, (stale, stale))
+    anchors = {f"codex:{old}": {"offset": 1}, f"codex:{fresh}": {"offset": 1},
+               "_bootstrapped": True}
+    collectors.prune_anchors(anchors)
+    assert f"codex:{fresh}" in anchors and f"codex:{old}" not in anchors
+
+
+def test_huge_award_crosses_multiple_evolutions():
+    s = state.default_state()
+    engine.create_starter(s, "Charmander")
+    engine.award_xp(s, engine.xp_for_level(40), random.Random(1))
+    assert state.active_pokemon(s)["name"] == "Charizard"

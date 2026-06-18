@@ -166,3 +166,33 @@ def test_state_roundtrip(tmp_path, monkeypatch):
     assert state.load() == s
     state.record_event("sess1", "tool", "Bash")
     assert state.read_event("sess1")["detail"] == "Bash"
+
+
+def test_v1_state_migrates_without_level_loss(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    v1 = state.default_state()
+    v1["version"] = 1
+    v1["pokemon"] = [{"id": "x", "name": "Charmeleon", "type": "Fire",
+                      "emoji": "🔥", "rarity": "starter", "level": 21,
+                      "xp": 24000, "shiny": False, "caught_at": 0}]
+    v1["active"] = "x"
+    state.save(v1)
+
+    migrated = state.load()
+    buddy = state.active_pokemon(migrated)
+    assert migrated["version"] == 2
+    assert buddy["level"] == 21
+    assert buddy["xp"] == engine.xp_for_level(21)  # snapped to new floor
+    assert engine.level_from_xp(buddy["xp"]) == 21
+
+
+def test_milestone_balls_accrue_with_lifetime_xp():
+    s = fresh_state()
+    balls = s["trainer"]["balls"]
+    result = engine.award_xp(s, engine.BALL_MILESTONE_XP * 2, random.Random(1))
+    from_levels = engine.BALLS_PER_LEVEL * (result["new_level"] - 1)
+    expected_milestones = s["trainer"]["total_xp"] // engine.BALL_MILESTONE_XP
+    assert s["trainer"]["balls"] == balls + from_levels + expected_milestones

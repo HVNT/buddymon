@@ -101,3 +101,26 @@ def test_extract_ramp_orders_by_luminance():
     ramp = fo.extract_ramp(FakeImg())
     assert ramp["c"] == "#14141e"
     assert ramp["b"] == "#b42828"
+
+
+def test_png_encoder_produces_valid_png(tmp_path):
+    from lib import png
+    blob = png.grid_to_png(["cw", "wc"], {"c": "#102030", "w": "#ffffff"}, scale=3)
+    assert blob[:8] == b"\x89PNG\r\n\x1a\n"
+    p = tmp_path / "t.png"
+    p.write_bytes(blob)
+    import subprocess
+    out = subprocess.run(["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(p)],
+                         capture_output=True, text=True).stdout
+    assert "pixelWidth: 6" in out and "pixelHeight: 6" in out
+
+
+def test_png_phys_chunk_written_for_dpi():
+    from lib import png
+    blob = png.grid_to_png(["c"], {"c": "#000000"}, scale=2, dpi=144)
+    assert b"pHYs" in blob
+    import struct
+    idx = blob.index(b"pHYs") + 4
+    ppm_x, ppm_y, unit = struct.unpack(">IIB", blob[idx:idx + 9])
+    assert unit == 1 and ppm_x == ppm_y == round(144 / 0.0254)
+    assert b"pHYs" not in png.grid_to_png(["c"], {"c": "#000000"})

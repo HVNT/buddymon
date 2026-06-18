@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import engine, state, transcript  # noqa: E402
+from lib import engine, journal, notify, state, transcript  # noqa: E402
 
 
 def main():
@@ -27,24 +27,24 @@ def main():
     if transcript_path and Path(transcript_path).exists():
         with state.lock():
             s = state.load()
-            if not s["pokemon"]:
-                return
-            sessions = s.setdefault("xp_sessions", {})
-            sess = sessions.setdefault(session_id, {})
-            totals, anchor = transcript.collect_since(transcript_path, sess.get("last_uuid"))
-            if anchor:
-                sess["last_uuid"] = anchor
-            sess["updated"] = time.time()
-            state.prune_sessions(s)
+            if s["pokemon"]:
+                sessions = s.setdefault("xp_sessions", {})
+                sess = sessions.setdefault(session_id, {})
+                totals, anchor = transcript.collect_since(transcript_path, sess.get("last_uuid"))
+                if anchor:
+                    sess["last_uuid"] = anchor
+                sess["updated"] = time.time()
+                state.prune_sessions(s)
 
-            if totals:
-                rng = random.Random()
-                result = engine.award_xp(s, engine.xp_from_tokens(totals), rng)
-                encounter = engine.roll_encounter(s, rng) if result else None
-                detail = engine.summarize_events(result, encounter)
-            state.save(s)
-    elif not state.load()["pokemon"]:
-        return
+                if totals:
+                    rng = random.Random()
+                    result = engine.award_xp(s, engine.xp_from_tokens(totals), rng)
+                    encounter = engine.roll_encounter(s, rng) if result else None
+                    detail = engine.summarize_events(result, encounter)
+                    for entry in journal.log_outcomes(result, encounter, "claude"):
+                        if journal.is_rare(entry):
+                            notify.notify("buddymon", entry["text"])
+                state.save(s)
 
     state.record_event(session_id, "stop", detail)
 

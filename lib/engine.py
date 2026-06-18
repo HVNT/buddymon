@@ -14,12 +14,15 @@ XP_TIERS = {"output": 100, "input": 1000, "cache_write": 500, "cache_read": 5000
 
 LEVEL_CAP = 60
 BALLS_PER_LEVEL = 3
+BALL_MILESTONE_XP = 5000  # +1 ball per this much lifetime XP
 STREAK_STEP = 0.02  # +2% XP per consecutive day, capped at 30 days
 
 
 def xp_for_level(level):
-    """Total XP required to reach a level (quadratic curve, Lv.1 = 0)."""
-    return 60 * (level - 1) ** 2
+    """Total XP required to reach a level. Cubic, like the real games'
+    growth curves: at heavy daily use (~20k XP/day), first evolution lands
+    after ~a week, Lv.36 after ~3 months, the cap after a year-plus."""
+    return 40 * (level - 1) ** 3
 
 
 def level_from_xp(xp):
@@ -96,15 +99,22 @@ def award_xp(state, base_xp, rng):
     old_level = buddy["level"]
     buddy["xp"] = min(buddy["xp"] + xp, xp_for_level(LEVEL_CAP))
     buddy["level"] = level_from_xp(buddy["xp"])
-    trainer["total_xp"] = trainer.get("total_xp", 0) + xp
+    old_total = trainer.get("total_xp", 0)
+    trainer["total_xp"] = old_total + xp
 
     leveled = buddy["level"] - old_level
     if leveled > 0:
         trainer["balls"] = trainer.get("balls", 0) + BALLS_PER_LEVEL * leveled
+    # milestone balls keep catching viable on the slow cubic curve
+    milestones = trainer["total_xp"] // BALL_MILESTONE_XP - old_total // BALL_MILESTONE_XP
+    if milestones > 0:
+        trainer["balls"] = trainer.get("balls", 0) + milestones
 
     evolved = None
-    evo = check_evolution(buddy, rng)
-    if evo:
+    while True:  # a huge award can cross multiple evolution thresholds
+        evo = check_evolution(buddy, rng)
+        if not evo:
+            break
         evolved = evo[0]
         buddy["name"], buddy["emoji"] = evo
 

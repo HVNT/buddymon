@@ -18,7 +18,7 @@ ANNOUNCE_SECS = 300
 RARITY_BADGE = {"rare": "💎", "legendary": "🌟"}
 
 
-def _xp_bar(buddy, width=10):
+def xp_bar(buddy, width=10):
     floor = engine.xp_for_level(buddy["level"])
     if buddy["level"] >= engine.LEVEL_CAP:
         return "▰" * width + " MAX"
@@ -112,7 +112,7 @@ def statusline(payload):
 
     info = [
         f"{BOLD}{shiny}{buddy['emoji']} {buddy['name']}{RESET} Lv.{buddy['level']} {badge}".rstrip(),
-        f"{CYAN}{_xp_bar(buddy)}{RESET}",
+        f"{CYAN}{xp_bar(buddy)}{RESET}",
         mood,
         "  ".join(tags),
         announce or warn,
@@ -136,7 +136,7 @@ def status_card(state):
 
     info = [
         f"{BOLD}{buddy['emoji']} {buddy['name']}{RESET} — {shiny}{buddy['type']} · Lv.{buddy['level']}",
-        f"XP   {_xp_bar(buddy, 16)}",
+        f"XP   {xp_bar(buddy, 16)}",
         f"🔥 streak {trainer.get('streak', 0)}d   ⚾ balls {trainer.get('balls', 0)}",
         f"📖 dex {len(species)} species · {len(state['pokemon'])} caught",
         f"Σ trainer XP {trainer.get('total_xp', 0):,}",
@@ -146,8 +146,80 @@ def status_card(state):
     if recent:
         lines.append("")
         lines.append("recent: " + "  ".join(
-            f"{'✨' if p.get('shiny') else ''}{p['emoji']}{p['name']}" for p in recent))
+            f"{'✨' if p.get('shiny') else ''}{p['emoji']} {p['name']}" for p in recent))
     return "\n".join(lines)
+
+
+def _dex_universe():
+    """Every catchable species in display order: starters, then wilds by rarity."""
+    order = {"legendary": 1, "rare": 2, "uncommon": 3, "common": 4}
+    entries = [(name, info["type"], "starter") for name, info in data.STARTERS.items()]
+    wilds = sorted(data.WILDS.items(), key=lambda kv: (order.get(kv[1][2], 9), kv[0]))
+    entries += [(name, ptype, rarity) for name, (ptype, _, rarity) in wilds]
+    return entries
+
+
+def dex_grid(state, columns=None):
+    """Terminal pokédex: sprite grid, caught in color, uncaught as ??? shadows."""
+    import shutil
+    from . import packs
+
+    width = columns or shutil.get_terminal_size((80, 24)).columns
+    cell_w, gap = 16, 3
+    per_row = max(1, (width + gap) // (cell_w + gap))
+
+    best = {}
+    for p in state["pokemon"]:
+        if p["name"] not in best or p["level"] > best[p["name"]]["level"]:
+            best[p["name"]] = p
+
+    universe = _dex_universe()
+    caught_n = len([n for n, _, _ in universe if n in best])
+    bar_w = 24
+    filled = round(caught_n * bar_w / len(universe))
+    out = [
+        f"{BOLD}━━━ POKÉDEX ━━━{RESET}",
+        f"{CYAN}{'▰' * filled}{'▱' * (bar_w - filled)}{RESET} {caught_n}/{len(universe)} species",
+    ]
+
+    def cell(name, ptype, rarity):
+        p = best.get(name)
+        if p:
+            frames = packs.sprite_frames(name, ptype, p.get("shiny"))
+            art = pixels.render(*frames[0])
+            shiny = "✨" if p.get("shiny") else ""
+            label1, plain2 = f"{shiny}{name}", f"Lv.{p['level']}"
+            label2 = plain2
+        else:
+            frames = packs.sprite_frames(name, ptype)
+            art = pixels.render(frames[0][0], frames[0][1], dim=0.22)
+            label1, plain2 = "???", rarity
+            label2 = f"{GRAY}{rarity}{RESET}"
+        lines = list(art)
+        lines.append(label1[:cell_w].center(cell_w))
+        pad = max(0, (cell_w - len(plain2)) // 2)
+        lines.append(" " * pad + label2 + " " * (cell_w - pad - len(plain2)))
+        return lines
+
+    by_rarity = {}
+    for name, ptype, rarity in universe:
+        by_rarity.setdefault(rarity, []).append((name, ptype, rarity))
+
+    for rarity in ("starter", "legendary", "rare", "uncommon", "common"):
+        group = by_rarity.get(rarity)
+        if not group:
+            continue
+        out.append(f"\n{BOLD}{rarity.upper()}{RESET}")
+        for i in range(0, len(group), per_row):
+            cells = [cell(*entry) for entry in group[i:i + per_row]]
+            height = max(len(c) for c in cells)
+            for c in cells:
+                while len(c) < height:
+                    c.insert(0, " " * cell_w)
+            for row_parts in zip(*cells):
+                out.append((" " * gap).join(row_parts))
+            out.append("")
+    return "\n".join(out)
 
 
 def dex(state):

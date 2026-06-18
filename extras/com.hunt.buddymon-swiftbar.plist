@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Optional: keep the buddymon menu bar always alive.
+     Starts SwiftBar at login AND relaunches it if it ever quits.
+     Install (your call — this is a persistent agent):
+       cp extras/com.hunt.buddymon-swiftbar.plist ~/Library/LaunchAgents/
+       launchctl load ~/Library/LaunchAgents/com.hunt.buddymon-swiftbar.plist
+     Remove:
+       launchctl unload ~/Library/LaunchAgents/com.hunt.buddymon-swiftbar.plist
+       rm ~/Library/LaunchAgents/com.hunt.buddymon-swiftbar.plist -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hunt.buddymon-swiftbar</string>
+    <!-- Exec the binary directly (not `open`): KeepAlive watches THIS process,
+         so it must be the real long-lived app, not a launcher that exits. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/SwiftBar.app/Contents/MacOS/SwiftBar</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+</dict>
+</plist>

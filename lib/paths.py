@@ -5,6 +5,7 @@ from pathlib import Path
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "buddymon"
 STATE_FILE = STATE_DIR / "state.json"
 SESSIONS_DIR = STATE_DIR / "sessions"
+JOURNAL_FILE = STATE_DIR / "journal.jsonl"
 
 
 def ensure_dirs():
