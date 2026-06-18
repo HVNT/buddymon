@@ -156,6 +156,29 @@ def roll_encounter(state, rng):
             "outcome": "fled"}
 
 
+def summarize_events(result, encounter):
+    """One-line announcement for displays (statusline, tmux, hooks)."""
+    parts = []
+    if result:
+        if result["evolved"]:
+            parts.append(f"🎊 evolved into {result['evolved']}!")
+        elif result["leveled"]:
+            parts.append(f"⬆️ Lv.{result['new_level']}!")
+        else:
+            parts.append(f"+{result['xp']} XP")
+    if encounter:
+        shiny = "✨" if encounter["shiny"] else ""
+        wild = f"{shiny}{encounter['emoji']} {encounter['name']}"
+        if encounter["outcome"] == "caught":
+            tag = " (new!)" if encounter.get("new_species") else ""
+            parts.append(f"🎉 caught {wild}{tag}")
+        elif encounter["outcome"] == "fled":
+            parts.append(f"💨 {wild} fled")
+        else:
+            parts.append(f"😱 {wild} appeared — no balls left!")
+    return "  ".join(parts)
+
+
 def create_starter(state, starter_name):
     """Initialize state with a chosen starter. Returns the new buddy or None."""
     info = data.STARTERS.get(starter_name)

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Optional: background XP collection without tmux.
+     Install (your call — this is a persistent agent):
+       cp extras/com.hunt.buddymon-collect.plist ~/Library/LaunchAgents/
+       launchctl load ~/Library/LaunchAgents/com.hunt.buddymon-collect.plist
+     Remove:
+       launchctl unload ~/Library/LaunchAgents/com.hunt.buddymon-collect.plist
+       rm ~/Library/LaunchAgents/com.hunt.buddymon-collect.plist -->
+<dict>
+    <key>Label</key>
+    <string>com.hunt.buddymon-collect</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/hunt/buddymon/buddymon.py</string>
+        <string>collect</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>

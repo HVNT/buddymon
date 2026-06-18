@@ -45,6 +45,52 @@ Restart the session, then pick a starter:
   stop → resting, then 💤 asleep (dimmed sprite, closed eyes) after 90s.
   Context pressure shows 🥵/🆘 when the payload exposes usage.
 
+## Official Gen 2 icons (optional, recommended)
+
+One-time setup — downloads the authentic 16×16 two-frame party menu icons
+(the smallest official Pokémon sprites ever made) from the
+[pret/pokecrystal](https://github.com/pret/pokecrystal) disassembly and
+colorizes them per species using palettes extracted from
+[PokéSprite](https://github.com/msikma/pokesprite) box icons:
+
+```
+uv run --with pillow --no-project python3 tools/fetch_official.py
+```
+
+The statusline then plays the classic party-screen bounce (2-frame flip);
+shiny buddies get shiny palettes. Assets land in
+`~/.local/state/buddymon/packs/gen2.json` — **local only, never committed**
+(they are Nintendo's sprites, preserved by the pret project). Without the
+pack, buddymon falls back to its built-in hand-drawn chibi sprites
+(archivable via `buddymon.py export-chibi` → `~/Pictures/buddymon/`).
+
+## Cross-client: same pokédex everywhere
+
+State lives in `~/.local/state/buddymon/state.json`, so every surface shares
+one buddy and one dex. XP sources by client:
+
+| Client | XP | How |
+|---|---|---|
+| Claude Code | ✅ live | Stop hook (per turn) |
+| Codex | ✅ | `collect` parses `~/.codex/sessions` rollouts (cumulative-delta anchors) |
+| Auggie | ✅ | `collect` parses `~/.augment/sessions` (timestamp anchors) |
+| Gemini / Cursor | ➖ | no local token counters; commands still work |
+
+`python3 buddymon.py collect` is incremental and idempotent — the first run
+anchors existing logs without awarding (no history dump), after that only new
+tokens count. A file lock serializes it with the Claude hook.
+(Collector parsing approach adapted from agent-platform's token-usage workflow.)
+
+### tmux status bar
+
+`~/.tmux.conf` runs `buddymon.py tiny --collect` in `status-right` every 15s:
+a plain-text buddy (`🦎 Charmander Lv.15 ▰▱▱▱▱▱ ⚙ ⚾51`) that also harvests
+Codex/Auggie XP as a side effect. `prefix+B` opens the full pixel status card
+in a popup. For collection without tmux, a launchd agent can run
+`buddymon.py collect` every 5 min (see `extras/com.hunt.buddymon-collect.plist`;
+load with `launchctl load ~/Library/LaunchAgents/...`, remove with
+`launchctl unload` + `rm`).
+
 ## Commands
 
 | Command | What |
@@ -53,6 +99,7 @@ Restart the session, then pick a starter:
 | `/buddymon:status` | status card |
 | `/buddymon:dex` | collection by rarity |
 | `/buddymon:switch <name>` | make a caught pokémon active |
+| `/buddymon:official` | fetch the official Gen 2 icon pack (asks first) |
 | `/buddymon:uninstall` | clean removal instructions |
 
 ## Design guarantees

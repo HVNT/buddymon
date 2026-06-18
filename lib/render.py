@@ -1,7 +1,7 @@
 """Compose the statusline (sprite left, live info right) and CLI views."""
 import time
 
-from . import data, engine, pixels, sprites
+from . import data, engine, packs, pixels, sprites
 from . import state as st
 
 DIM = "\x1b[2m"
@@ -75,13 +75,15 @@ def statusline(payload):
     event = st.read_event(payload.get("session_id"))
     mood, asleep = _mood(event, now)
 
-    grid, palette = sprites.sprite_for(buddy["name"], buddy["type"])
-    if asleep:
-        grid = sprites.closed_eyes(grid)
-    elif int(now) % 5 == 0:
-        grid = sprites.closed_eyes(grid)  # blink
-    if not asleep and int(now) % 2:
-        grid = pixels.bob(grid)
+    frames = packs.sprite_frames(buddy["name"], buddy["type"], buddy.get("shiny"))
+    if len(frames) > 1:  # official 2-frame icon: authentic party bounce
+        grid, palette = frames[0] if asleep else frames[int(now) % len(frames)]
+    else:  # chibi fallback: blink + bob
+        grid, palette = frames[0]
+        if asleep or int(now) % 5 == 0:
+            grid = sprites.closed_eyes(grid)
+        if not asleep and int(now) % 2:
+            grid = pixels.bob(grid)
     art = pixels.render(grid, palette, dim=0.55 if asleep else 1.0)
 
     shiny = "✨" if buddy.get("shiny") else ""
@@ -126,7 +128,7 @@ def status_card(state):
     if buddy is None:
         return "No buddy yet. Run /buddymon:choose <starter> — options: " + ", ".join(data.STARTERS)
 
-    grid, palette = sprites.sprite_for(buddy["name"], buddy["type"])
+    grid, palette = packs.sprite_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
     art = pixels.render(grid, palette)
     trainer = state["trainer"]
     shiny = "✨ shiny " if buddy.get("shiny") else ""

@@ -1,10 +1,24 @@
 """Trainer state and per-session event files. One JSON file, atomic writes."""
+import contextlib
+import fcntl
 import json
 import os
 import tempfile
 import time
 
 from . import paths
+
+
+@contextlib.contextmanager
+def lock():
+    """Serialize read-modify-write cycles across hook, tmux, and launchd."""
+    paths.ensure_dirs()
+    with open(paths.STATE_DIR / ".lock", "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 STATE_VERSION = 1
 
