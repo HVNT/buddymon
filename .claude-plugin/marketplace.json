@@ -1,0 +1,18 @@
+{
+  "name": "buddymon",
+  "owner": {
+    "name": "Hunter Brennick"
+  },
+  "metadata": {
+    "description": "buddymon — pixel pokemon buddy for Claude Code",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "buddymon",
+      "source": "./",
+      "description": "Pixel-art pokemon buddy: XP from tokens, evolutions, wild catches, idle naps.",
+      "version": "0.1.0"
+    }
+  ]
+}

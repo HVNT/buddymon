@@ -1,0 +1,16 @@
+{
+  "name": "buddymon",
+  "description": "A pixel-art pokemon buddy that lives in your statusline — earns XP from real token usage, evolves, catches wilds, naps when you're idle. Local-only: no network, no settings.json rewrites.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Hunter Brennick"
+  },
+  "license": "MIT",
+  "keywords": ["pokemon", "statusline", "companion", "gamification", "pixel-art"],
+  "hooks": "./hooks.json",
+  "statusLine": {
+    "type": "command",
+    "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/statusline.py\"",
+    "padding": 0
+  }
+}
