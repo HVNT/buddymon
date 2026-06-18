@@ -13,23 +13,43 @@ STARTERS = {
 EEVEE_BRANCHES = [("Vaporeon", "💧"), ("Jolteon", "⚡"), ("Flareon", "🔥")]
 EEVEE_EVOLVE_LEVEL = 25
 
-# Wild encounter pool: name -> (type, emoji, rarity). The full 251-species
-# Kanto+Johto roster, generated from the pokecrystal disassembly by
-# tools/gen_dex.py (authentic types + catch-rate-derived rarity).
+# Wild encounter pool: name -> (type, emoji, rarity). The full 649-species
+# National Dex, generated from PokéAPI by tools/gen_dex.py.
 from .dex_roster import WILDS  # noqa: E402
+from .evolutions import EVOLUTIONS  # noqa: E402
+
+
+def _species_index():
+    """name -> (type, emoji) for every species, incl. starter-line forms that
+    aren't in WILDS (Charmeleon, Raichu, …). Lets evolution targets resolve art."""
+    idx = {n: (t, e) for n, (t, e, _) in WILDS.items()}
+    for base, info in STARTERS.items():
+        idx[base] = (info["type"], info["emoji"])
+        for name, _, emoji in info["evolutions"]:
+            idx[name] = (info["type"], emoji)
+    for name, emoji in EEVEE_BRANCHES:
+        idx.setdefault(name, ("Normal", emoji))
+    return idx
+
+
+_SPECIES = _species_index()
+
+
+def species_info(name):
+    """(type, emoji) for any species; falls back to a neutral default."""
+    return _SPECIES.get(name, ("Normal", "🔵"))
+
 
 def _pre_evolution():
+    """evolved form -> the form it came from, dex-wide (from EVOLUTIONS)."""
     pre = {}
-    for starter, info in STARTERS.items():
-        chain = [starter] + [name for name, _, _ in info["evolutions"]]
-        for older, newer in zip(chain, chain[1:]):
-            pre[newer] = older
-    for name, _ in EEVEE_BRANCHES:
-        pre[name] = "Eevee"
+    for src, targets in EVOLUTIONS.items():
+        for to_name, _ in targets:
+            pre[to_name] = src
     return pre
 
 
-PRE_EVOLUTION = _pre_evolution()  # evolved form -> what it evolved from
+PRE_EVOLUTION = _pre_evolution()
 
 RARITY_WEIGHTS = [("common", 70), ("uncommon", 20), ("rare", 8), ("legendary", 2)]
 
@@ -49,3 +69,18 @@ CATCH_RATES = {"common": 0.90, "uncommon": 0.70, "rare": 0.45, "legendary": 0.20
 SHINY_ODDS = 128  # 1 in N
 ENCOUNTER_CHANCE = 0.18  # per XP-earning turn
 LEGENDARY_MIN_LEVEL = 20  # buddy level required for legendary spawns
+
+# Battle Mode (opt-in via state["mode"] == "battle"): wild encounters become a
+# weaken-then-catch battle. Simple level-scaled damage, no type chart. HP is
+# derived from level (we store no combat stats). All tunable.
+BATTLE = {
+    "buddy_hp_base": 30, "buddy_hp_per_level": 3,
+    "wild_hp_base": 25, "wild_hp_per_level": 3,
+    "atk_lo": 0.8, "atk_hi": 1.5,            # player dmg = buddy_level * U(lo,hi)
+    "wild_atk_lo": 0.5, "wild_atk_hi": 1.1,  # wild dmg = wild_level * U(lo,hi)
+    "wild_level_lo": -3, "wild_level_hi": 2,  # wild level offset from buddy
+    # base catch prob at FULL wild HP; rises up to ~2.5x as HP drops to 0.
+    "catch_base": {"common": 0.30, "uncommon": 0.22, "rare": 0.14, "legendary": 0.08},
+    "catch_hp_bonus": 1.5,   # multiplier scaling: base * (1 + bonus*(1-hp_frac))
+    "catch_cap": 0.95,
+}

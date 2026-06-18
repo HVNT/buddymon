@@ -109,6 +109,38 @@ def pad_vertical(grid, top=2, bottom=2):
     return [blank] * top + list(grid) + [blank] * bottom
 
 
+THROW_SECS = 4  # phases 0..3: throw -> jiggle -> jiggle -> result
+
+
+def throw_jiggle_bar(buddy_frame, wild_frame, phase, last_throw):
+    """~44x16 bar composite for the pokéball throw: arc in, jiggle, then catch
+    (sparkles) or break free (ball opens, wild returns)."""
+    buddy_grid, buddy_pal = buddy_frame
+    wild_grid, wild_pal = wild_frame
+    ball_grid, ball_pal = POKEBALL
+    caught = bool(last_throw and last_throw.get("caught"))
+    c = Canvas(44, 16)
+    c.sprite(mirror(buddy_grid), buddy_pal, 0, 16 - len(buddy_grid))
+
+    if phase <= 0:  # the toss: ball arcs toward the wild, wild still out
+        c.sprite(wild_grid, wild_pal, 30, 16 - len(wild_grid))
+        c.sprite(ball_grid, ball_pal, 20, 2)
+    elif phase < THROW_SECS - 1:  # jiggle: wild is in the ball, it wobbles
+        c.sprite(ball_grid, ball_pal, 30 + (1 if phase % 2 else -1), 7)
+    elif caught:  # caught: ball settles + sparkles
+        c.sprite(ball_grid, ball_pal, 30, 6)
+        c.sparkles(34, 8)
+    else:  # broke free: wild pops back out
+        c.sprite(wild_grid, wild_pal, 30, 16 - len(wild_grid))
+        c.alert_mark(26, 3)
+    return c.result()
+
+
+def throw_phase_for(elapsed):
+    phase = int(elapsed)
+    return phase if 0 <= phase < THROW_SECS else None
+
+
 def battle_bar(buddy_frame, wild_frame, phase, outcome):
     """~44x16 bar composite for one cutscene phase."""
     buddy_grid, buddy_pal = buddy_frame
@@ -142,9 +174,18 @@ def battle_bar(buddy_frame, wild_frame, phase, outcome):
     return c.result()
 
 
-def battle_screen(buddy_frame, wild_frame, outcome):
+def _hp_fill(c, x1, y1, x2, y2, frac):
+    """Draw an HP bar: full empty track, then a green fill proportional to frac."""
+    c.rect(x1, y1, x2, y2, _HP_EMPTY, fill=True)
+    if frac > 0:
+        end = x1 + max(1, round((x2 - x1) * max(0.0, min(1.0, frac))))
+        c.rect(x1, y1, end, y2, _HP, fill=True)
+
+
+def battle_screen(buddy_frame, wild_frame, outcome, wild_hp_frac=None, buddy_hp_frac=None):
     """Game Boy-style battle screen for the dropdown. Canvas sizes itself to the
-    two sprites, so it works for box (~24px) or Gen 5 (~60px) art alike."""
+    two sprites. HP fractions, when given (Battle Mode), fill the bars
+    proportionally; otherwise the bars are cosmetic (Safari/last-encounter)."""
     buddy_grid, buddy_pal = buddy_frame
     wild_grid, wild_pal = wild_frame
     sw = max(len(buddy_grid[0]), len(wild_grid[0]))
@@ -166,16 +207,16 @@ def battle_screen(buddy_frame, wild_frame, outcome):
         if outcome == "fled":
             c.dust(W - sw - 14, plat_y - 6)
     c.rect(2, 3, box_w, 14, _BOX)
-    c.rect(6, 7, box_w - 4, 10, _HP_EMPTY, fill=True)
-    if outcome != "caught":
-        c.rect(6, 7, box_w - 4, 10, _HP, fill=True)
+    wf = 0.0 if outcome == "caught" else (1.0 if wild_hp_frac is None else wild_hp_frac)
+    _hp_fill(c, 6, 7, box_w - 4, 10, wf)
 
     # buddy: bottom-left (mirrored, facing the wild), HP box bottom-right
     buddy_plat = H - 4
     c.hline(2, sw + 8, buddy_plat, _PLATFORM)
     c.sprite(mirror(buddy_grid), buddy_pal, 6, buddy_plat - len(buddy_grid))
     c.rect(W - box_w, H - 18, W - 2, H - 7, _BOX)
-    c.rect(W - box_w + 4, H - 14, W - 6, H - 11, _HP, fill=True)
+    _hp_fill(c, W - box_w + 4, H - 14, W - 6, H - 11,
+             1.0 if buddy_hp_frac is None else buddy_hp_frac)
 
     return c.result()
 

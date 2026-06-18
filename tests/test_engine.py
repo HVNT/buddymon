@@ -72,8 +72,9 @@ def test_starter_evolution_chain():
 
 def test_eevee_evolves_into_a_branch():
     s = fresh_state("Eevee")
-    engine.award_xp(s, engine.xp_for_level(data.EEVEE_EVOLVE_LEVEL), random.Random(7))
-    assert state.active_pokemon(s)["name"] in {b[0] for b in data.EEVEE_BRANCHES}
+    engine.award_xp(s, engine.xp_for_level(30), random.Random(7))
+    valid = {to for to, _ in data.EVOLUTIONS["Eevee"]}
+    assert state.active_pokemon(s)["name"] in valid
 
 
 def test_xp_capped_at_level_cap():

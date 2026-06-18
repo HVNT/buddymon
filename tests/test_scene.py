@@ -68,14 +68,14 @@ def test_latest_encounter_window(tmp_path, monkeypatch):
     assert entries[-1]["kind"] == "level"  # non-encounter newest doesn't block lookup
 
 
-def test_pre_evolution_covers_every_evolved_form():
+def test_pre_evolution_covers_lines_dexwide():
     from lib import data
-    expected = {"Charmeleon": "Charmander", "Charizard": "Charmeleon",
-                "Ivysaur": "Bulbasaur", "Venusaur": "Ivysaur",
-                "Wartortle": "Squirtle", "Blastoise": "Wartortle",
-                "Raichu": "Pikachu", "Vaporeon": "Eevee",
-                "Jolteon": "Eevee", "Flareon": "Eevee"}
-    assert data.PRE_EVOLUTION == expected
+    # starter lines + wild lines all resolve their prior form for the ceremony
+    for evolved, src in {"Charmeleon": "Charmander", "Charizard": "Charmeleon",
+                         "Venusaur": "Ivysaur", "Raichu": "Pikachu",
+                         "Gyarados": "Magikarp", "Gengar": "Haunter",
+                         "Vaporeon": "Eevee"}.items():
+        assert data.PRE_EVOLUTION[evolved] == src
 
 
 def test_silhouette_whites_out_palette_only():

@@ -70,18 +70,15 @@ def new_pokemon(name, ptype, emoji, rarity, shiny=False, level=1):
 
 
 def check_evolution(pokemon, rng):
-    """Return (new_name, new_emoji) if the pokemon evolves at its level."""
-    if pokemon["name"] == "Eevee" and pokemon["level"] >= data.EEVEE_EVOLVE_LEVEL:
-        return rng.choice(data.EEVEE_BRANCHES)
-    for starter, info in data.STARTERS.items():
-        chain = [(starter, 1, info["emoji"])] + info["evolutions"]
-        names = [c[0] for c in chain]
-        if pokemon["name"] in names[:-1]:
-            idx = names.index(pokemon["name"])
-            next_name, next_level, next_emoji = chain[idx + 1]
-            if pokemon["level"] >= next_level:
-                return next_name, next_emoji
-    return None
+    """Return (new_name, new_emoji) if the pokemon evolves at its level, else
+    None. Table-driven across the whole dex; branches (Eevee, Poliwhirl, …)
+    pick randomly among the eligible targets."""
+    targets = data.EVOLUTIONS.get(pokemon["name"], [])
+    eligible = [to for to, level in targets if pokemon["level"] >= level]
+    if not eligible:
+        return None
+    new_name = rng.choice(eligible)
+    return new_name, data.species_info(new_name)[1]
 
 
 def award_xp(state, base_xp, rng):
@@ -154,7 +151,15 @@ def roll_encounter(state, rng):
     shiny = rng.randrange(data.SHINY_ODDS) == 0
     spawn = {"name": name, "type": ptype, "emoji": emoji, "rarity": rarity, "shiny": shiny}
 
-    # Rare/legendary become interactive Safari encounters (one at a time).
+    # Battle Mode: EVERY wild becomes a weaken-then-catch battle (one at a time).
+    if state.get("mode") == "battle":
+        if state.get("pending_battle"):
+            return None
+        from . import battle
+        state["pending_battle"] = battle.start(spawn, buddy)
+        return {**spawn, "outcome": "appeared"}
+
+    # Auto Mode: rare/legendary become interactive Safari encounters.
     if rarity in data.INTERACTIVE_RARITIES:
         if state.get("pending_encounter"):
             return None  # already one in front of you

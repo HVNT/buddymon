@@ -54,6 +54,10 @@ def log_outcomes(result, encounter, source):
         elif encounter["outcome"] == "caught":
             tag = " (new species!)" if encounter.get("new_species") else ""
             written.append(append("caught", f"🎉 caught {wild}{tag}", data))
+        elif encounter["outcome"] == "ko":
+            written.append(append("fled", f"💥 {wild} fainted — it got away", data))
+        elif encounter["outcome"] == "buddy_faint":
+            written.append(append("fled", f"😵 your buddy fainted; {wild} slipped away", data))
         elif encounter["outcome"] == "fled":
             written.append(append("fled", f"💨 {wild} fled", data))
         else:

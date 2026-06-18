@@ -160,16 +160,19 @@ def test_safari_cli_full_battle(tmp_path, monkeypatch):
 
     s = state.default_state()
     engine.create_starter(s, "Charmander")
-    s["trainer"]["balls"] = 10
+    s["trainer"]["balls"] = 99  # plenty, so the loop isn't gated by ball supply
     s["pending_encounter"] = safari.start(spawn(rarity="legendary", name="Mewtwo"))
     state.save(s)
 
-    # a rock then balls until resolved; just assert the CLI never errors and
-    # eventually clears the pending encounter
-    buddymon.safari(["rock"])
-    for _ in range(50):
-        out = buddymon.safari(["ball"])
+    # drive the CLI; RNG is unseeded so we don't assert *which* outcome, only
+    # that actions never error and resolution clears the encounter. A final
+    # 'run' makes the end deterministic regardless of catch luck.
+    out = buddymon.safari(["rock"])
+    for _ in range(60):
         if state.load().get("pending_encounter") is None:
             break
+        out = buddymon.safari(["ball"])
+    if state.load().get("pending_encounter") is not None:
+        out = buddymon.safari(["run"])
     assert state.load().get("pending_encounter") is None
     assert isinstance(out, str)

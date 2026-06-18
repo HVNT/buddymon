@@ -53,6 +53,7 @@ def default_state():
         "active": None,  # pokemon id
         "pokemon": [],  # {id, name, emoji, type, rarity, level, xp, shiny, caught_at}
         "xp_sessions": {},  # session_id -> {"last_uuid": str, "updated": epoch}
+        "mode": "auto",  # "auto" (Safari) or "battle" (weaken-then-catch)
     }
 
 
