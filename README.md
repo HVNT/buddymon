@@ -38,7 +38,14 @@ Restart the session, then pick a starter:
   changes the sprite.
 - **Wild encounters** — each XP-earning turn has an 18% spawn chance
   (70/20/8/2 rarity split, legendaries gated behind Lv.20, shinies 1/128).
-  Catching consumes a ball; you earn 3 per level-up.
+  Commons/uncommons auto-resolve (one ball, caught or fled).
+- **Safari Zone** — rare and legendary spawns *wait* for you and become an
+  interactive Gen 1 Safari minigame in the menu bar dropdown: **🪨 Rock**
+  (doubles catch rate but angers it → 2× flee), **🍖 Bait** (halves catch rate
+  but it eats → ¼ flee), **⚾ Ball**, **🏃 Run**. Angry/eating are mutually
+  exclusive and tick down each turn; when anger wears off the catch boost
+  resets — so it's a race. The wild waits indefinitely until you act and never
+  flees on your first move — you always get to start the fight.
 - **Streaks** — consecutive coding days multiply XP, +2%/day up to ×1.6.
 - **Journal** — every catch, evolution, and level-up is appended permanently
   to `~/.local/state/buddymon/journal.jsonl`; browse with `/buddymon:history`

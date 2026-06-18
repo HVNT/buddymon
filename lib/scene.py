@@ -143,31 +143,39 @@ def battle_bar(buddy_frame, wild_frame, phase, outcome):
 
 
 def battle_screen(buddy_frame, wild_frame, outcome):
-    """~80x56 Game Boy-style battle screen for the dropdown image."""
+    """Game Boy-style battle screen for the dropdown. Canvas sizes itself to the
+    two sprites, so it works for box (~24px) or Gen 5 (~60px) art alike."""
     buddy_grid, buddy_pal = buddy_frame
     wild_grid, wild_pal = wild_frame
-    c = Canvas(80, 56)
+    sw = max(len(buddy_grid[0]), len(wild_grid[0]))
+    sh = max(len(buddy_grid), len(wild_grid))
+    box_w = max(34, sw + 6)
+    W = sw + box_w + 16          # sprite column + HP-box column + margins
+    H = sh * 2 + 18              # stacked wild (top) + buddy (bottom) + bands
+    c = Canvas(W, H)
 
     # wild: top-right on a platform, HP box top-left
-    c.hline(50, 78, 22, _PLATFORM)
+    plat_y = sh + 4
+    c.hline(W - sw - 8, W - 2, plat_y, _PLATFORM)
     if outcome == "caught":
         ball_grid, ball_pal = POKEBALL
-        c.sprite(ball_grid, ball_pal, 58, 14)
-        c.sparkles(62, 12)
+        c.sprite(ball_grid, ball_pal, W - sw // 2 - 12, plat_y - 12)
+        c.sparkles(W - sw // 2 - 8, plat_y - 14)
     else:
-        c.sprite(wild_grid, wild_pal, 56, 22 - len(wild_grid))
+        c.sprite(wild_grid, wild_pal, W - len(wild_grid[0]) - 6, plat_y - len(wild_grid))
         if outcome == "fled":
-            c.dust(48, 18)
-    c.rect(2, 4, 42, 14, _BOX)
-    c.rect(5, 8, 39, 10, _HP_EMPTY, fill=True)
+            c.dust(W - sw - 14, plat_y - 6)
+    c.rect(2, 3, box_w, 14, _BOX)
+    c.rect(6, 7, box_w - 4, 10, _HP_EMPTY, fill=True)
     if outcome != "caught":
-        c.rect(5, 8, 39, 10, _HP, fill=True)
+        c.rect(6, 7, box_w - 4, 10, _HP, fill=True)
 
     # buddy: bottom-left (mirrored, facing the wild), HP box bottom-right
-    c.hline(2, 32, 50, _PLATFORM)
-    c.sprite(mirror(buddy_grid), buddy_pal, 8, 50 - len(buddy_grid))
-    c.rect(44, 38, 78, 48, _BOX)
-    c.rect(47, 42, 75, 44, _HP, fill=True)
+    buddy_plat = H - 4
+    c.hline(2, sw + 8, buddy_plat, _PLATFORM)
+    c.sprite(mirror(buddy_grid), buddy_pal, 6, buddy_plat - len(buddy_grid))
+    c.rect(W - box_w, H - 18, W - 2, H - 7, _BOX)
+    c.rect(W - box_w + 4, H - 14, W - 6, H - 11, _HP, fill=True)
 
     return c.result()
 

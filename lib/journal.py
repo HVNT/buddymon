@@ -49,7 +49,9 @@ def log_outcomes(result, encounter, source):
         wild = f"{shiny}{encounter['emoji']} {encounter['name']}"
         data = {"name": encounter["name"], "rarity": encounter["rarity"],
                 "shiny": bool(encounter.get("shiny")), "source": source}
-        if encounter["outcome"] == "caught":
+        if encounter["outcome"] == "appeared":
+            written.append(append("appeared", f"👀 a wild {wild} appeared! ({encounter['rarity']})", data))
+        elif encounter["outcome"] == "caught":
             tag = " (new species!)" if encounter.get("new_species") else ""
             written.append(append("caught", f"🎉 caught {wild}{tag}", data))
         elif encounter["outcome"] == "fled":
@@ -77,9 +79,11 @@ def latest_evolution(within_secs, now=None):
 
 
 def is_rare(entry):
-    """Worth interrupting the user for: evolutions, shinies, legendaries."""
+    """Worth interrupting the user for: evolutions, shinies, rare appearances."""
     if entry["kind"] == "evolved":
         return True
     if entry.get("shiny"):
+        return True
+    if entry["kind"] == "appeared":  # interactive spawns are always rare/legendary
         return True
     return entry["kind"] in ("caught", "fled", "no_balls") and entry.get("rarity") == "legendary"

@@ -26,13 +26,9 @@ from lib import data, paths  # noqa: E402
 CRYSTAL_RAW = "https://raw.githubusercontent.com/pret/pokecrystal/master"
 POKESPRITE_RAW = "https://raw.githubusercontent.com/msikma/pokesprite/master"
 
-# Post-Gen-2 dex species: hand-picked best-fit Crystal icon classes.
-EXTRA_ICONS = {
-    "Zigzagoon": "fox", "Bidoof": "fox", "Wooloo": "jigglypuff",
-    "Lechonk": "monster", "Riolu": "fighter", "Lucario": "fighter",
-    "Munchlax": "snorlax", "Beldum": "voltorb", "Gible": "monster",
-    "Rayquaza": "gyarados", "Jirachi": "clefairy",
-}
+# Every species in the roster is Gen 1/2, so all map via menu_icons.asm.
+# (Kept for any future off-dex additions.)
+EXTRA_ICONS = {}
 
 # Shade chars used in pack grids: '.'=transparent  w=interior white
 # a=light gray  b=mid gray  c=black/outline
@@ -63,8 +59,17 @@ def dex_species():
     return sorted(names)
 
 
+# Display names whose pokecrystal constant isn't a clean uppercasing.
+SPECIAL_CONST = {
+    "Nidoran♀": "NIDORAN_F", "Nidoran♂": "NIDORAN_M",
+    "Mr. Mime": "MR__MIME", "Farfetch'd": "FARFETCH_D",
+}
+
+
 def asm_key(name):
     """'Ho-Oh' -> 'HO_OH', matching pokecrystal constants."""
+    if name in SPECIAL_CONST:
+        return SPECIAL_CONST[name]
     return name.upper().replace("-", "_").replace(" ", "_").replace(".", "").replace("'", "")
 
 
@@ -75,7 +80,8 @@ def resolve_icon(name, asm_map):
 
 
 def pokesprite_slug(name):
-    return name.lower().replace(" ", "-").replace(".", "").replace("'", "")
+    return (name.lower().replace("♀", "-f").replace("♂", "-m")
+            .replace(" ", "-").replace(".", "").replace("'", ""))
 
 
 # ── image -> grid conversion (pure-ish; PIL objects in, plain data out) ──────

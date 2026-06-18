@@ -128,7 +128,7 @@ def status_card(state):
     if buddy is None:
         return "No buddy yet. Run /buddymon:choose <starter> — options: " + ", ".join(data.STARTERS)
 
-    grid, palette = packs.sprite_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
+    grid, palette = packs.box_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
     art = pixels.render(grid, palette)
     trainer = state["trainer"]
     shiny = "✨ shiny " if buddy.get("shiny") else ""
@@ -151,21 +151,37 @@ def status_card(state):
 
 
 def _dex_universe():
-    """Every catchable species in display order: starters, then wilds by rarity."""
+    """All 251 species in display order: full starter lines, then wilds by rarity."""
     order = {"legendary": 1, "rare": 2, "uncommon": 3, "common": 4}
-    entries = [(name, info["type"], "starter") for name, info in data.STARTERS.items()]
+    entries = []
+    for name, info in data.STARTERS.items():  # base + every evolution form
+        entries.append((name, info["type"], "starter"))
+        entries += [(evo, info["type"], "starter") for evo, _, _ in info["evolutions"]]
+    entries += [(name, data.STARTERS["Eevee"]["type"], "starter")
+                for name, _ in data.EEVEE_BRANCHES]
     wilds = sorted(data.WILDS.items(), key=lambda kv: (order.get(kv[1][2], 9), kv[0]))
     entries += [(name, ptype, rarity) for name, (ptype, _, rarity) in wilds]
     return entries
 
 
+def _pad_grid(grid, w, h):
+    """Center a sprite grid in a w×h transparent box for uniform cells."""
+    grid = grid[:h]
+    left = max(0, (w - len(grid[0])) // 2)
+    padded = [("." * left + row)[:w].ljust(w, ".") for row in grid]
+    top = max(0, (h - len(padded)) // 2)
+    blank = "." * w
+    return [blank] * top + padded + [blank] * (h - top - len(padded))
+
+
 def dex_grid(state, columns=None):
-    """Terminal pokédex: sprite grid, caught in color, uncaught as ??? shadows."""
+    """Terminal pokédex: unique sprites, caught in color, uncaught as ??? shadows."""
     import shutil
     from . import packs
 
     width = columns or shutil.get_terminal_size((80, 24)).columns
-    cell_w, gap = 16, 3
+    cell_px, gap = 30, 3              # fixed pixel cell so columns align
+    cell_w = cell_px                  # render width == pixels (1 char/pixel)
     per_row = max(1, (width + gap) // (cell_w + gap))
 
     best = {}
@@ -184,22 +200,20 @@ def dex_grid(state, columns=None):
 
     def cell(name, ptype, rarity):
         p = best.get(name)
+        grid, palette = packs.box_frames(name, ptype, p.get("shiny") if p else False)[0]
+        grid = _pad_grid(grid, cell_px, 30)
+        art = pixels.render(grid, palette, dim=1.0 if p else 0.22)
         if p:
-            frames = packs.sprite_frames(name, ptype, p.get("shiny"))
-            art = pixels.render(*frames[0])
-            shiny = "✨" if p.get("shiny") else ""
-            label1, plain2 = f"{shiny}{name}", f"Lv.{p['level']}"
-            label2 = plain2
+            label1 = f"{'✨' if p.get('shiny') else ''}{name}"
+            plain2, label2 = f"Lv.{p['level']}", f"Lv.{p['level']}"
         else:
-            frames = packs.sprite_frames(name, ptype)
-            art = pixels.render(frames[0][0], frames[0][1], dim=0.22)
-            label1, plain2 = "???", rarity
-            label2 = f"{GRAY}{rarity}{RESET}"
-        lines = list(art)
-        lines.append(label1[:cell_w].center(cell_w))
-        pad = max(0, (cell_w - len(plain2)) // 2)
-        lines.append(" " * pad + label2 + " " * (cell_w - pad - len(plain2)))
-        return lines
+            label1, plain2, label2 = "???", rarity, f"{GRAY}{rarity}{RESET}"
+        pad1 = max(0, (cell_w - len(label1)) // 2)
+        pad2 = max(0, (cell_w - len(plain2)) // 2)
+        return list(art) + [
+            (" " * pad1 + label1[:cell_w]).ljust(cell_w),
+            " " * pad2 + label2 + " " * (cell_w - pad2 - len(plain2)),
+        ]
 
     by_rarity = {}
     for name, ptype, rarity in universe:
@@ -212,10 +226,6 @@ def dex_grid(state, columns=None):
         out.append(f"\n{BOLD}{rarity.upper()}{RESET}")
         for i in range(0, len(group), per_row):
             cells = [cell(*entry) for entry in group[i:i + per_row]]
-            height = max(len(c) for c in cells)
-            for c in cells:
-                while len(c) < height:
-                    c.insert(0, " " * cell_w)
             for row_parts in zip(*cells):
                 out.append((" " * gap).join(row_parts))
             out.append("")

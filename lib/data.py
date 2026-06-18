@@ -13,61 +13,10 @@ STARTERS = {
 EEVEE_BRANCHES = [("Vaporeon", "💧"), ("Jolteon", "⚡"), ("Flareon", "🔥")]
 EEVEE_EVOLVE_LEVEL = 25
 
-# Wild pool: name -> (type, emoji, rarity)
-WILDS = {
-    # common
-    "Pidgey": ("Flying", "🐦", "common"),
-    "Rattata": ("Normal", "🐀", "common"),
-    "Caterpie": ("Bug", "🐛", "common"),
-    "Weedle": ("Bug", "🐝", "common"),
-    "Zubat": ("Poison", "🦇", "common"),
-    "Oddish": ("Grass", "🌿", "common"),
-    "Poliwag": ("Water", "🌀", "common"),
-    "Magikarp": ("Water", "🐟", "common"),
-    "Sentret": ("Normal", "🐿️", "common"),
-    "Hoothoot": ("Flying", "🦉", "common"),
-    "Zigzagoon": ("Normal", "🦝", "common"),
-    "Bidoof": ("Normal", "🦫", "common"),
-    "Wooloo": ("Normal", "🐑", "common"),
-    "Lechonk": ("Normal", "🐖", "common"),
-    # uncommon
-    "Sandshrew": ("Ground", "🦔", "uncommon"),
-    "Vulpix": ("Fire", "🦊", "uncommon"),
-    "Growlithe": ("Fire", "🐕", "uncommon"),
-    "Abra": ("Psychic", "🥄", "uncommon"),
-    "Machop": ("Fighting", "💪", "uncommon"),
-    "Geodude": ("Rock", "🪨", "uncommon"),
-    "Gastly": ("Ghost", "👻", "uncommon"),
-    "Cubone": ("Ground", "🦴", "uncommon"),
-    "Eevee": ("Normal", "🦊", "uncommon"),
-    "Togepi": ("Fairy", "🥚", "uncommon"),
-    "Mareep": ("Electric", "🐏", "uncommon"),
-    "Riolu": ("Fighting", "🐺", "uncommon"),
-    "Munchlax": ("Normal", "🍙", "uncommon"),
-    # rare
-    "Snorlax": ("Normal", "😴", "rare"),
-    "Lapras": ("Water", "🦕", "rare"),
-    "Aerodactyl": ("Rock", "🦖", "rare"),
-    "Dratini": ("Dragon", "🐍", "rare"),
-    "Larvitar": ("Rock", "🦎", "rare"),
-    "Beldum": ("Steel", "🤖", "rare"),
-    "Gible": ("Dragon", "🦈", "rare"),
-    "Ditto": ("Normal", "🟣", "rare"),
-    "Porygon": ("Normal", "🕹️", "rare"),
-    "Scyther": ("Bug", "🗡️", "rare"),
-    "Chansey": ("Normal", "🥚", "rare"),
-    # legendary
-    "Articuno": ("Ice", "🧊", "legendary"),
-    "Zapdos": ("Electric", "🌩️", "legendary"),
-    "Moltres": ("Fire", "☄️", "legendary"),
-    "Mewtwo": ("Psychic", "🧬", "legendary"),
-    "Mew": ("Psychic", "🩷", "legendary"),
-    "Lugia": ("Psychic", "🌊", "legendary"),
-    "Ho-Oh": ("Fire", "🌈", "legendary"),
-    "Celebi": ("Grass", "🍀", "legendary"),
-    "Rayquaza": ("Dragon", "🐉", "legendary"),
-    "Jirachi": ("Steel", "🌠", "legendary"),
-}
+# Wild encounter pool: name -> (type, emoji, rarity). The full 251-species
+# Kanto+Johto roster, generated from the pokecrystal disassembly by
+# tools/gen_dex.py (authentic types + catch-rate-derived rarity).
+from .dex_roster import WILDS  # noqa: E402
 
 def _pre_evolution():
     pre = {}
@@ -83,6 +32,16 @@ def _pre_evolution():
 PRE_EVOLUTION = _pre_evolution()  # evolved form -> what it evolved from
 
 RARITY_WEIGHTS = [("common", 70), ("uncommon", 20), ("rare", 8), ("legendary", 2)]
+
+# Safari Zone: rare/legendary spawns become interactive minigames instead of
+# auto-resolving. Tuning per rarity — base_c is the starting catch rate (0-255,
+# Gen 1 scale), flee_base the per-turn neutral flee probability.
+INTERACTIVE_RARITIES = {"rare", "legendary"}
+SAFARI = {
+    "rare": {"base_c": 90, "flee_base": 0.10},
+    "legendary": {"base_c": 45, "flee_base": 0.18},
+}
+CATCH_DIVISOR = 300.0   # ball catch prob = min(0.9, C / CATCH_DIVISOR)
 
 # Auto-catch probability per rarity (one ball per attempt).
 CATCH_RATES = {"common": 0.90, "uncommon": 0.70, "rare": 0.45, "legendary": 0.20}

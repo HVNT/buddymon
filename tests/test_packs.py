@@ -29,10 +29,13 @@ def test_asm_key_normalization():
     assert fo.asm_key("Pikachu") == "PIKACHU"
 
 
-def test_resolve_icon_uses_extra_for_post_gen2():
-    assert fo.resolve_icon("Riolu", {}) == "fighter"
+def test_resolve_icon_maps_via_asm_and_specials():
     assert fo.resolve_icon("Eevee", {"EEVEE": "fox"}) == "fox"
     assert fo.resolve_icon("Eevee", {}) is None
+    # special-cased constants (♀/♂, Mr. Mime, Farfetch'd)
+    assert fo.asm_key("Nidoran♀") == "NIDORAN_F"
+    assert fo.asm_key("Mr. Mime") == "MR__MIME"
+    assert fo.asm_key("Farfetch'd") == "FARFETCH_D"
 
 
 def test_dex_species_includes_evolutions():

@@ -207,7 +207,7 @@ TYPE_TINTS = {
     "Flying": "#a890f0", "Bug": "#a8b820", "Poison": "#a040a0",
     "Ground": "#e0c068", "Rock": "#b8a038", "Ghost": "#705898",
     "Fighting": "#c03028", "Fairy": "#ee99ac", "Steel": "#b8b8d0",
-    "Ice": "#98d8d8", "Dragon": "#7038f8",
+    "Ice": "#98d8d8", "Dragon": "#7038f8", "Dark": "#705848",
 }
 
 

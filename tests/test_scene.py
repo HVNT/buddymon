@@ -36,8 +36,14 @@ def test_battle_scenes_render_for_all_outcomes():
             assert pixels.render(grid, palette)
             assert png.grid_to_png(grid, palette)[:4] == b"\x89PNG"[:4]
         grid, palette = scene.battle_screen(buddy, wild, outcome)
-        assert all(len(row) == 80 for row in grid) and len(grid) == 56
+        w = len(grid[0])
+        assert all(len(row) == w for row in grid)  # uniform rows
         assert png.grid_to_png(grid, palette, 2)
+        # also works with large Gen-5-sized sprites
+        big_b = (["B" * 60] * 56, {"B": "#f08030"})
+        big_w = (["W" * 60] * 56, {"W": "#58a8e8"})
+        bg, bp = scene.battle_screen(big_b, big_w, outcome)
+        assert all(len(r) == len(bg[0]) for r in bg) and png.grid_to_png(bg, bp)
 
 
 def test_phase_for_window():

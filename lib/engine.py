@@ -150,6 +150,15 @@ def roll_encounter(state, rng):
     pool = [(n, *v) for n, v in data.WILDS.items() if v[2] == rarity]
     name, ptype, emoji, _ = pool[rng.randrange(len(pool))]
     shiny = rng.randrange(data.SHINY_ODDS) == 0
+    spawn = {"name": name, "type": ptype, "emoji": emoji, "rarity": rarity, "shiny": shiny}
+
+    # Rare/legendary become interactive Safari encounters (one at a time).
+    if rarity in data.INTERACTIVE_RARITIES:
+        if state.get("pending_encounter"):
+            return None  # already one in front of you
+        from . import safari
+        state["pending_encounter"] = safari.start(spawn)
+        return {**spawn, "outcome": "appeared"}
 
     trainer = state["trainer"]
     if trainer.get("balls", 0) <= 0:

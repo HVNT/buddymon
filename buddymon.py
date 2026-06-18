@@ -13,6 +13,7 @@ Usage:
   buddymon.py frames [--scale N]  write current buddy frame PNGs + meta (hammerspoon)
   buddymon.py menubar             SwiftBar plugin output (sprite icon + dropdown)
   buddymon.py history [N]         the buddy's journey journal (default last 20)
+  buddymon.py safari <action>     play a turn vs a pending wild (rock|bait|ball|run)
 """
 import sys
 from pathlib import Path
@@ -203,6 +204,12 @@ def _wild_frames(entry):
     return packs.sprite_frames(entry["name"], wtype, entry.get("shiny"))
 
 
+def _box_frame(name, ptype, shiny):
+    """First Gen 5 frame for menu-bar battle-screen stills (PNG surface)."""
+    from lib import packs
+    return packs.gen5_frames(name, ptype, shiny)[0]
+
+
 BAR_POINT_HEIGHT = 20  # how tall the bar sprite displays, in points
 
 
@@ -275,14 +282,14 @@ _RARITY_ORDER = {"starter": 0, "legendary": 1, "rare": 2, "uncommon": 3, "common
 def _dex_icon(p):
     import base64
     from lib import packs, png
-    grid, palette = packs.sprite_frames(p["name"], p["type"], p.get("shiny"))[0]
-    dpi = len(grid) * 2 * 72 / 12  # ~12pt submenu icons
+    grid, palette = packs.gen5_frames(p["name"], p["type"], p.get("shiny"))[0]
+    dpi = len(grid) * 2 * 72 / 16  # ~16pt submenu icons
     return base64.b64encode(png.grid_to_png(grid, palette, 2, dpi=dpi)).decode()
 
 
 def _dex_submenu(s):
-    from lib import data
-    total = len(data.WILDS) + len(data.STARTERS)
+    from lib import render
+    total = len(render._dex_universe())
     species = {}
     for p in s["pokemon"]:
         best = species.get(p["name"])
@@ -316,7 +323,12 @@ def _last_encounter_section(now, frame_list):
     entry = journal.latest_encounter(600, now)
     if entry is None:
         return []
-    grid, palette = scene.battle_screen(frame_list[0], _wild_frames(entry)[0], entry["kind"])
+    from lib import data, state as st
+    buddy = st.active_pokemon(st.load())
+    buddy_box = _box_frame(buddy["name"], buddy["type"], buddy.get("shiny"))
+    wtype = data.WILDS.get(entry["name"], ("Normal",))[0]
+    wild_box = _box_frame(entry["name"], wtype, entry.get("shiny"))
+    grid, palette = scene.battle_screen(buddy_box, wild_box, entry["kind"])
     img = base64.b64encode(png.grid_to_png(grid, palette, 2)).decode()
     dialogue = {"caught": f"You caught {entry['name'].upper()}!",
                 "fled": f"Wild {entry['name'].upper()} fled!",
@@ -324,20 +336,60 @@ def _last_encounter_section(now, frame_list):
     return ["---", f"{dialogue} | image={img}"]
 
 
+def _safari_section(s):
+    """Dropdown battle UI for a pending encounter: scene image + action buttons."""
+    import base64
+    from lib import data, packs, png, safari as sf, scene
+    pending = s.get("pending_encounter")
+    if not pending:
+        return []
+    script = Path(__file__).resolve()
+    buddy = state.active_pokemon(s)
+    buddy_box = _box_frame(buddy["name"], buddy["type"], buddy.get("shiny"))
+    wild_box = _box_frame(pending["name"], pending["type"], pending["shiny"])
+    grid, palette = scene.battle_screen(buddy_box, wild_box, "fled")
+    img = base64.b64encode(png.grid_to_png(grid, palette, 2)).decode()
+    balls = s["trainer"].get("balls", 0)
+
+    def action(label, name):
+        return (f"--{label} | bash=/usr/bin/python3 param1={script} "
+                f"param2=safari param3={name} terminal=false refresh=true")
+
+    lines = [
+        "---",
+        f"🌿 SAFARI — {sf.status_text(pending)} | image={img}",
+        f"--{pending['last_msg']}",
+        f"--{sf.odds_hint(pending)}",
+        action("🪨 Throw Rock", "rock"),
+        action("🍖 Throw Bait", "bait"),
+        action(f"⚾ Throw Ball ({balls})" if balls else "⚾ Out of balls", "ball"),
+        action("🏃 Run away", "run"),
+    ]
+    return lines
+
+
 def _menubar_lines(s, frame_idx):
     import base64, time
-    from lib import journal, png, render, scene
+    from lib import journal, png, render, safari as sf, scene
     buddy, frame_list = _buddy_frames(s)
     if buddy is None:
         return ["🥚 | dropdown=false"]
     now = time.time()
 
     bar_line = None
+    pending = s.get("pending_encounter")
     evo = journal.latest_evolution(scene.EVOLUTION_SECS, now)
-    if evo is not None:  # evolution ceremony outranks encounter replays
+    if evo is not None:  # evolution ceremony (transient) outranks everything
         phase = scene.evolution_phase_for(now - evo["ts"])
         if phase is not None:
             bar_line = _evolution_line(evo, phase)
+    if bar_line is None and pending:
+        # a wild is waiting: show it in the bar with an alert
+        wild = packs.sprite_frames(pending["name"], pending["type"], pending["shiny"])
+        grid, palette = wild[frame_idx % len(wild)]
+        icon = base64.b64encode(
+            png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
+        bar_line = f"❗ | image={icon}"
     if bar_line is None:
         entry = journal.latest_encounter(scene.CUTSCENE_SECS, now)
         if entry is not None:
@@ -346,7 +398,9 @@ def _menubar_lines(s, frame_idx):
                 bar_line = _cutscene_line(entry, phase, frame_list, frame_idx)
 
     if bar_line is None:
-        grid, palette = frame_list[frame_idx % len(frame_list)]
+        from lib import packs
+        frames = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))
+        grid, palette = frames[frame_idx % len(frames)]  # animate the BW idle
         icon = base64.b64encode(
             png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
         shiny = "✨" if buddy.get("shiny") else ""
@@ -364,6 +418,7 @@ def _menubar_lines(s, frame_idx):
     event = state.read_event("cross") or {}
     if event.get("detail") and time.time() - event.get("ts", 0) < 600:
         lines.append(event["detail"])
+    lines.extend(_safari_section(s))
     lines.extend(_last_encounter_section(now, frame_list))
     recent = journal.tail(3)
     if recent:
@@ -403,6 +458,47 @@ def menubar(args):
         time.sleep(1)
 
 
+def _resolve_safari(s, pending, outcome):
+    """Translate a finished Safari encounter into collection + journal effects."""
+    from lib import engine, journal, notify
+    enc = {"name": pending["name"], "emoji": pending["emoji"],
+           "rarity": pending["rarity"], "shiny": pending["shiny"]}
+    if outcome["caught"]:
+        already = any(p["name"] == pending["name"] for p in s["pokemon"])
+        s["pokemon"].append(engine.new_pokemon(
+            pending["name"], pending["type"], pending["emoji"],
+            pending["rarity"], pending["shiny"]))
+        enc.update(outcome="caught", new_species=not already)
+    elif outcome.get("ran"):
+        enc = None  # running away isn't worth a journal line
+    else:  # fled (or expired)
+        enc.update(outcome="fled")
+    if enc:
+        for entry in journal.log_outcomes(None, enc, "safari"):
+            if journal.is_rare(entry):
+                notify.notify("buddymon", entry["text"])
+    s.pop("pending_encounter", None)
+
+
+def safari(args):
+    from lib import safari as sf
+    import random
+    action = args[0] if args else ""
+    if action not in sf.ACTIONS:
+        return "Usage: safari rock|bait|ball|run"
+    with state.lock():
+        s = state.load()
+        pending = s.get("pending_encounter")
+        if not pending:
+            return "No wild pokémon right now."
+        outcome = sf.ACTIONS[action](pending, s["trainer"], random.Random())
+        msg = pending["last_msg"]
+        if outcome["done"]:
+            _resolve_safari(s, pending, outcome)
+        state.save(s)
+    return msg
+
+
 def history(args):
     import time
     from lib import journal
@@ -433,6 +529,7 @@ def main():
         "frames": frames,
         "menubar": menubar,
         "history": history,
+        "safari": safari,
         "status": lambda a: render.status_card(state.load()),
         "dex": lambda a: (render.dex_grid(state.load())
                           if (sys.stdout.isatty() or "--grid" in a) and "--list" not in a
