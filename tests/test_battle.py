@@ -43,6 +43,13 @@ def test_start_sets_hp_from_levels():
     assert p["wild_level"] >= 1
 
 
+def test_start_uses_spawn_level_and_clamps_to_species_stage():
+    buddy = {"level": 5}
+    p = battle.start({**spawn(name="Charizard", ptype="Fire"), "level": 20}, buddy)
+    assert p["wild_level"] == 36
+    assert p["level"] == 36
+
+
 def test_attack_lowers_wild_and_can_ko():
     buddy = {"level": 20}
     p = battle.start(spawn(), buddy)
@@ -233,38 +240,174 @@ def test_recent_evolution_notice_persists_after_animation(tmp_path, monkeypatch)
     monkeypatch.setattr(
         buddymon.state, "read_event",
         lambda name: (
-            {"detail": "+11429 progress", "ts": notice_ts}
+            {"detail": "+11429 progress  🎊 evolved into Charizard Lv.36!", "ts": notice_ts}
             if name == "cross" else {}
         ),
     )
 
     bar = buddymon._bar_line(s, buddy, [], 0)
-    dropdown = buddymon._dropdown_lines(s, buddy, [])
+    dropdown = buddymon._dropdown_lines(s, buddy)
 
     assert "🎊 CHARIZARD!" in bar
     assert any("evolved into Charizard Lv.36" in line for line in dropdown)
     assert any(f"color={buddymon.EVOLUTION_NOTICE_COLOR}" in line for line in dropdown)
-    assert any("+11429 progress" in line for line in dropdown)
-    assert any(f"color={buddymon.EVENT_NOTICE_COLOR}" in line for line in dropdown)
+    assert not any("+11429 progress" in line for line in dropdown)
+    assert not any(f"color={buddymon.EVENT_NOTICE_COLOR}" in line for line in dropdown)
     assert buddymon.EVOLUTION_NOTICE_COLOR == "#4c1d95"
     assert buddymon.EVENT_NOTICE_COLOR == "#1e3a8a"
 
 
-def test_switch_submenu_child_rows_carry_no_png():
-    # Per-row base64 PNGs made SwiftBar hoard ~90 images and leak >1GB RAM, so
-    # the child rows must stay PNG-free. A cheap SF Symbol (sfimage=) on the
-    # parent is fine — it's a native glyph, not image data.
+def test_switch_submenu_lists_favorites_without_png():
+    # The submenu is now the favorites shortlist. Per-row base64 PNGs made
+    # SwiftBar hoard ~90 images and leak >1GB RAM, so child rows stay PNG-free.
     import buddymon
+    from lib import favorites
     s = fresh()
-    s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=4))
+    p = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=4)
+    favorites.set_favorite(p, True)
+    s["pokemon"].append(p)
 
-    lines = buddymon._switch_submenu(s, state.active_pokemon(s)["name"])
+    lines = buddymon._switch_submenu(s)
 
     assert lines[0].startswith("Switch buddy")
     child_rows = [ln for ln in lines if ln.startswith("--")]
-    assert any("Pidgey" in ln and "Lv.4" in ln and "param2=switch" in ln
+    assert any("--Pidgey · Lv.4" in ln and "param2=switch-id" in ln
                for ln in child_rows)
-    assert all("image=" not in ln for ln in child_rows)  # no PNG on the 1-per-species rows
+    assert all("image=" not in ln for ln in child_rows)  # no PNG on the shortlist rows
+
+
+def test_switch_submenu_empty_state_opens_party():
+    import buddymon
+    s = fresh()  # only the active (favorited) starter, which the submenu excludes
+    lines = buddymon._switch_submenu(s)
+    assert lines[0].startswith("Switch buddy")
+    body = [ln for ln in lines if ln.startswith("--")]
+    assert len(body) == 1
+    assert "param2=open-menu" in body[0] and "param3=party" in body[0]
+
+
+def test_switch_submenu_caps_rows_and_links_to_party_menu():
+    import buddymon
+    from lib import favorites
+    s = fresh()
+    for i in range(buddymon.SWITCH_SUBMENU_LIMIT + 3):
+        p = engine.new_pokemon(f"Mon{i:02d}", "Normal", "•", "common", level=1)
+        favorites.set_favorite(p, True)
+        s["pokemon"].append(p)
+
+    lines = buddymon._switch_submenu(s)
+    child_rows = [ln for ln in lines if ln.startswith("--") and "param2=switch-id" in ln]
+
+    assert len(child_rows) == buddymon.SWITCH_SUBMENU_LIMIT
+    assert lines[-1].startswith("--More in menu...")
+    assert "param2=open-menu" in lines[-1]
+    assert "param3=party" in lines[-1]
+    assert "terminal=false" in lines[-1]
+
+
+def test_swiftbar_dropdown_action_order_is_menu_tokens_then_switch_without_dex(monkeypatch):
+    import buddymon
+    monkeypatch.setattr(
+        buddymon.token_usage,
+        "current_day_totals",
+        lambda: {"today": 208_000_000, "yesterday": 201_000_000},
+    )
+    s = fresh()
+    s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=4))
+    buddy = state.active_pokemon(s)
+
+    lines = buddymon._dropdown_lines(s, buddy)
+
+    open_i = next(i for i, line in enumerate(lines) if line.startswith("Open menu"))
+    tokens_i = next(i for i, line in enumerate(lines) if line.startswith("Token Usage"))
+    switch_i = next(i for i, line in enumerate(lines) if line.startswith("Switch buddy"))
+    stats_i = next(i for i, line in enumerate(lines) if line.startswith("streak"))
+    assert stats_i == open_i - 1
+    assert open_i < tokens_i < switch_i
+    assert "sfimage=gearshape" in lines[open_i]
+    assert "param2=open-menu" in lines[open_i]
+    assert "terminal=false" in lines[open_i]
+    assert "sfimage=chart.bar" in lines[tokens_i]
+    assert lines[tokens_i].startswith(
+        "Token Usage · Today 208M · Yesterday 201M"
+    )
+    assert "param2=open-menu" in lines[tokens_i]
+    assert "param3=tokens" in lines[tokens_i]
+    assert "terminal=false" in lines[tokens_i]
+    assert not any(line.startswith("Pokédex") for line in lines)
+    assert not any(line.startswith("Tokens used") for line in lines)
+    assert not any(line.startswith("SwiftBar") for line in lines)
+
+
+def test_swiftbar_dropdown_active_summary_uses_sprite_and_caught_metadata(monkeypatch):
+    import buddymon
+    s = fresh()
+    buddy = state.active_pokemon(s)
+    caught = buddymon.time.mktime((2026, 5, 12, 9, 30, 0, 0, 0, -1))
+    now = caught + 123 * 86400 + 60
+    buddy.update({
+        "name": "Gastly",
+        "type": "Ghost",
+        "emoji": "👻",
+        "rarity": "uncommon",
+        "level": 15,
+        "caught_at": caught,
+    })
+    monkeypatch.setattr(buddymon.time, "time", lambda: now)
+
+    lines = buddymon._dropdown_lines(s, buddy)
+
+    assert lines[0] == "---"
+    assert "Gastly · Lv.15" in lines[1]
+    assert "image=" in lines[1]
+    assert "👻" not in lines[1]
+    assert any(symbol in lines[1] for symbol in ("♂", "♀"))
+    assert lines[2].startswith("Lv.15 ")
+    assert " to Lv.16" in lines[2]
+    assert "123 days old · Caught 5/12/26" in lines[3]
+    assert "Caught 5/12/26" in lines[3]
+    title_i = next(i for i, line in enumerate(lines) if "Gastly" in line and "Lv.15" in line)
+    progress_i = next(i for i, line in enumerate(lines) if line.startswith("Lv.15 "))
+    assert title_i < progress_i
+
+
+def test_swiftbar_recent_catch_notice_shows_event_time(monkeypatch):
+    import buddymon
+    s = fresh()
+    buddy = state.active_pokemon(s)
+    event_ts = buddymon.time.mktime((2026, 6, 26, 9, 46, 0, 0, 0, -1))
+    monkeypatch.setattr(buddymon.time, "time", lambda: event_ts + 30)
+    monkeypatch.setattr(
+        buddymon.state,
+        "read_event",
+        lambda name: (
+            {"detail": "🎉 caught 🐾 Doduo Lv.17", "ts": event_ts}
+            if name == "cross" else {}
+        ),
+    )
+
+    lines = buddymon._dropdown_lines(s, buddy)
+
+    assert any("🎉 caught 🐾 Doduo Lv.17 · 9:46 AM" in line for line in lines)
+
+
+def test_swiftbar_dropdown_stats_summary_sits_above_open_menu():
+    import buddymon
+    s = fresh()
+    s["trainer"]["streak"] = 5
+    s["trainer"]["balls"] = 934
+    for i in range(171):
+        s["pokemon"].append(engine.new_pokemon(f"Mon{i:03d}", "Normal", "•", "common", level=1))
+    buddy = state.active_pokemon(s)
+
+    lines = buddymon._dropdown_lines(s, buddy)
+
+    assert lines[0] == "---"
+    open_i = next(i for i, line in enumerate(lines) if line.startswith("Open menu"))
+    assert (
+        lines[open_i - 1]
+        == "streak 5d · ◓ 934 · 📖 172 species | sfimage=flame.fill color=#8e8e93"
+    )
 
 
 def test_gender_symbol_is_binary_and_stable():

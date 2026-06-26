@@ -11,7 +11,8 @@ Usage:
   buddymon.py collect             count tokens from other agent CLIs
   buddymon.py tiny [--collect]    one-line plain-text status (tmux status bar)
   buddymon.py menubar             SwiftBar plugin output (sprite icon + dropdown)
-  buddymon.py menu                interactive terminal UI (party/dex/journal/status)
+  buddymon.py menu                interactive terminal UI (party/dex/status/tokens)
+  buddymon.py tokens              token usage report
   buddymon.py history [N]         the buddy's journey journal (default last 20)
   buddymon.py safari <action>     play a turn vs a pending wild (rock|bait|ball|run)
   buddymon.py battle <action>     battle-mode turn (attack|ball|run)
@@ -27,12 +28,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import (  # noqa: E402
-    battle as bt, collectors, data, engine, journal, notify, packs, paths,
-    pixels, png, render, safari as sf, scene, sprites, state, tui,
+    battle as bt, collectors, data, engine, favorites, journal, notify, packs,
+    paths, pixels, png, render, safari as sf, scene, sprites, state,
+    token_usage, tui,
 )
 
 EVOLUTION_NOTICE_COLOR = "#4c1d95"
 EVENT_NOTICE_COLOR = "#1e3a8a"
+DOT_SEP = " · "
 
 
 def choose(args):
@@ -63,6 +66,19 @@ def switch(args):
     s["active"] = best["id"]
     state.save(s)
     return f"{best['emoji']} {best['name']} (Lv.{best['level']}) is now your buddy!"
+
+
+def switch_id(args):
+    target = (args[0] if args else "").strip()
+    if not target:
+        return "Usage: switch-id <id>"
+    s = state.load()
+    match = next((p for p in s["pokemon"] if str(p["id"]) == target), None)
+    if match is None:
+        return "That buddy is no longer in your collection. See /buddymon:dex"
+    s["active"] = match["id"]
+    state.save(s)
+    return f"{match['emoji']} {match['name']} (Lv.{match['level']}) is now your buddy!"
 
 
 def preview(_args):
@@ -166,7 +182,9 @@ def tiny(args):
     bits.append(f"🪙{render.compact_number(trainer.get('total_tokens', 0))}")
     event = state.read_event("cross")
     if event and event.get("detail") and time.time() - event.get("ts", 0) < 600:
-        bits.append(event["detail"])
+        detail = engine.display_event_detail(event["detail"])
+        if detail:
+            bits.append(detail)
     return " ".join(bits)
 
 
@@ -189,13 +207,18 @@ def _battle_sprite(name, ptype, shiny):
 
 
 BAR_POINT_HEIGHT = 20  # how tall the bar sprite displays, in points
+ACTIVE_IMAGE_POINT_HEIGHT = 36
 BATTLE_IMAGE_SCALE = 2
 BATTLE_POINT_WIDTH = 240  # how wide the dropdown battle scene displays, in points
 
 
+def _sprite_dpi(grid, scale=4, point_height=BAR_POINT_HEIGHT):
+    """DPI that makes a scaled sprite render at a target point height."""
+    return len(grid) * scale * 72 / point_height
+
+
 def _bar_dpi(grid, scale=4):
-    """DPI that makes a scaled sprite render at BAR_POINT_HEIGHT points."""
-    return len(grid) * scale * 72 / BAR_POINT_HEIGHT
+    return _sprite_dpi(grid, scale, BAR_POINT_HEIGHT)
 
 
 def _scene_dpi(grid, scale=2):
@@ -298,43 +321,29 @@ def _cutscene_line(entry, phase, frame_list, frame_idx):
     return f"{text} | image={img}"
 
 
-_RARITY_ORDER = {"starter": 0, "legendary": 1, "rare": 2, "uncommon": 3, "common": 4}
+SWITCH_SUBMENU_LIMIT = 20
 
 
-def _dex_submenu(s):
-    total = len(render._dex_universe())
-    species = {}
-    for p in s["pokemon"]:
-        best = species.get(p["name"])
-        if best is None or p["level"] > best["level"]:
-            species[p["name"]] = p
-    mons = sorted(species.values(),
-                  key=lambda p: (_RARITY_ORDER.get(p["rarity"], 9), -p["level"], p["name"]))
-    lines = [f"Pokédex  {len(species)}/{total} | sfimage=book.closed"]
-    for p in mons:
-        shiny = "✨" if p.get("shiny") else ""
-        lines.append(f"--{shiny}{p['name']}  Lv.{p['level']}  ·  {p['rarity']}")
-    return lines
-
-
-def _switch_submenu(s, active_name):
+def _switch_submenu(s):
     script = Path(__file__).resolve()
-    species = {}
-    for p in s["pokemon"]:
-        if p["name"] == active_name:
-            continue
-        best = species.get(p["name"])
-        if best is None or p["level"] > best["level"]:
-            species[p["name"]] = p
-    mons = sorted(species.values(),
-                  key=lambda p: (_RARITY_ORDER.get(p["rarity"], 9), -p["level"], p["name"]))
+    active_id = s.get("active")
+    mons = [p for p in favorites.favorites(s) if p["id"] != active_id]
+    lines = [f"Switch buddy | sfimage=arrow.triangle.2.circlepath"]
     if not mons:
-        return []
-    lines = ["Switch buddy | sfimage=arrow.triangle.2.circlepath"]
-    for p in mons:
+        lines.append(f"--No favorites yet — open Party | sfimage=star "
+                     f"bash=/usr/bin/python3 param1={script} param2=open-menu "
+                     f"param3=party terminal=false")
+        return lines
+    for p in mons[:SWITCH_SUBMENU_LIMIT]:
         shiny = "✨" if p.get("shiny") else ""
-        lines.append(f"--{shiny}{p['name']}  Lv.{p['level']} | bash=/usr/bin/python3 "
-                     f"param1={script} param2=switch param3={p['name']} terminal=false")
+        label = DOT_SEP.join((f"{shiny}{p['name']}", f"Lv.{p['level']}"))
+        lines.append(f"--{label} | bash=/usr/bin/python3 "
+                     f"param1={script} param2=switch-id param3={p['id']} terminal=false")
+    if len(mons) > SWITCH_SUBMENU_LIMIT:
+        more = len(mons) - SWITCH_SUBMENU_LIMIT
+        lines.append(f"--More in menu... ({more} more) | sfimage=ellipsis.circle "
+                     f"bash=/usr/bin/python3 param1={script} param2=open-menu "
+                     f"param3=party terminal=false")
     return lines
 
 
@@ -352,7 +361,7 @@ def _fight_launcher(script, name):
     """Open the TUI to fight — the dropdown is a native menu (closes on click),
     so turn-by-turn play lives in the TUI (arrow-keys + enter, stays open)."""
     return (f"⌨️ Fight {name} in buddymon | bash=/usr/bin/python3 "
-            f"param1={script} param2=menu terminal=true")
+            f"param1={script} param2=open-menu terminal=false")
 
 
 def _safari_section(s):
@@ -397,7 +406,7 @@ def _battle_section(s):
         f"| image={img}",
         f"⚔️ {bt.status_text(pending)}",
         pending["last_msg"],
-        f"catch ~{round(bt.catch_probability(pending) * 100)}%  ·  ⚾ ∞",
+        DOT_SEP.join((f"catch ~{round(bt.catch_probability(pending) * 100)}%", "⚾ ∞")),
         _fight_launcher(script, pending["name"]),
     ]
 
@@ -448,19 +457,92 @@ def _bar_line(s, buddy, frame_list, frame_idx):
     return f"{shiny} | image={icon}" if shiny else f"| image={icon}"
 
 
-def _dropdown_lines(s, buddy, frame_list):
+def _active_pokemon_section(buddy, gender, now):
+    """Facebook-style media row: real sprite avatar plus identity/meta text."""
+    grid, palette = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
+    img = base64.b64encode(
+        png.grid_to_png(
+            grid,
+            palette,
+            4,
+            dpi=_sprite_dpi(grid, 4, ACTIVE_IMAGE_POINT_HEIGHT),
+        )
+    ).decode()
+    name = f"✨ {buddy['name']}" if buddy.get("shiny") else buddy["name"]
+    title = DOT_SEP.join(part for part in (name, f"Lv.{buddy['level']}", gender) if part)
+    return [
+        f"{title} | image={img}",
+        f"{_caught_meta(buddy.get('caught_at'), now)} | color=#6b7280",
+    ]
+
+
+def _caught_meta(caught_at, now):
+    if not caught_at:
+        return DOT_SEP.join(("Age unknown", "Caught unknown"))
+    days = max(0, int((now - caught_at) // 86400))
+    day_word = "day" if days == 1 else "days"
+    caught = time.localtime(caught_at)
+    caught_date = f"{caught.tm_mon}/{caught.tm_mday}/{caught.tm_year % 100:02d}"
+    return DOT_SEP.join((f"{days} {day_word} old", f"Caught {caught_date}"))
+
+
+def _level_progress_line(buddy):
+    level = buddy.get("level", 1)
+    if level >= engine.LEVEL_CAP:
+        return f"Lv.{level} {render.xp_bar(buddy, 12)}{DOT_SEP}MAX | color=#1f2937"
+    floor = engine.xp_for_level(level)
+    ceiling = engine.xp_for_level(level + 1)
+    current = max(0, int(buddy.get("xp", 0)) - floor)
+    span = max(1, ceiling - floor)
+    pct = min(100, int(current * 100 / span))
+    remaining = max(0, ceiling - int(buddy.get("xp", 0)))
+    bar = render.xp_bar(buddy, 12).split(" ", 1)[0]
+    return (
+        f"Lv.{level} {bar} {pct}%{DOT_SEP}{remaining:,} to Lv.{level + 1} "
+        "| color=#1f2937"
+    )
+
+
+def _dropdown_stats_line(s):
+    trainer = s["trainer"]
+    species_n = len({p["name"] for p in s["pokemon"]})
+    stats = DOT_SEP.join((
+        f"streak {trainer.get('streak', 0)}d",
+        f"◓ {trainer.get('balls', 0)}",
+        f"📖 {species_n} species",
+    ))
+    return f"{stats} | sfimage=flame.fill color=#8e8e93"
+
+
+def _event_time_label(ts):
+    try:
+        value = float(ts)
+    except (TypeError, ValueError):
+        return ""
+    if value <= 0:
+        return ""
+    return time.strftime("%I:%M %p", time.localtime(value)).lstrip("0")
+
+
+def _dropdown_event_detail(detail, latest_evolution=None, event_ts=None):
+    text = engine.display_event_detail(detail)
+    if latest_evolution and text.startswith("🎊 evolved into"):
+        marker = "!  "
+        text = text.split(marker, 1)[1].strip() if marker in text else ""
+    label = _event_time_label(event_ts)
+    if text and label:
+        return DOT_SEP.join((text, label))
+    return text
+
+
+def _dropdown_lines(s, buddy):
     """The dropdown body (heavy: many sprite PNGs). Only visible on click, so
     the stream rebuilds it on a slow cadence, not every tick."""
     now = time.time()
-    trainer = s["trainer"]
     g = render.gender_symbol(buddy)
-    species_n = len({p["name"] for p in s["pokemon"]})
-    lines = [
-        "---",
-        f"{buddy['emoji']} {buddy['name']}  Lv.{buddy['level']}" + (f"  {g}" if g else ""),
-        f"🔥 streak {trainer.get('streak', 0)}d   ◓ {trainer.get('balls', 0)}   "
-        f"📖 {species_n} species",
-    ]
+    active_lines = _active_pokemon_section(buddy, g, now)
+    lines = ["---", active_lines[0], _level_progress_line(buddy)]
+    lines.extend(active_lines[1:])
     evo = journal.latest_evolution(EVOLUTION_DROPDOWN_NOTICE_SECS, now)
     if evo is not None:
         lvl = f" Lv.{evo['level']}" if evo.get("level") else ""
@@ -469,28 +551,42 @@ def _dropdown_lines(s, buddy, frame_list):
         )
     event = state.read_event("cross") or {}
     if event.get("detail") and now - event.get("ts", 0) < 600:
-        lines.append(f"{event['detail']} | color={EVENT_NOTICE_COLOR}")
-    lines.append(f"Tokens used {trainer.get('total_tokens', 0):,}")
-    lines.append(f"Level {render.xp_bar(buddy, 12)}")
+        detail = _dropdown_event_detail(event["detail"], evo, event.get("ts"))
+        if detail:
+            lines.append(f"{detail} | color={EVENT_NOTICE_COLOR}")
     lines.extend(_safari_section(s))      # auto mode, rare/legendary
     lines.extend(_battle_section(s))      # battle mode, any wild
     lines.extend(_last_encounter_section(s, now))
-    # The menu bar is the ambient glance; full browsing (dex/journal/status/
-    # switch/settings) lives in the launchable TUI to keep this uncluttered.
+    # The menu bar is the ambient glance; full browsing lives in the
+    # launchable TUI to keep this uncluttered.
     script = Path(__file__).resolve()
     lines.append("---")
-    lines.extend(_dex_submenu(s))
-    lines.extend(_switch_submenu(s, buddy["name"]))
-    lines.append(f"Open buddymon | sfimage=keyboard bash=/usr/bin/python3 "
-                 f"param1={script} param2=menu terminal=true")
+    lines.append(_dropdown_stats_line(s))
+    lines.append(f"Open menu | sfimage=gearshape bash=/usr/bin/python3 "
+                 f"param1={script} param2=open-menu terminal=false")
+    lines.append(
+        f"{_token_usage_menu_title()} | sfimage=chart.bar bash=/usr/bin/python3 "
+        f"param1={script} param2=open-menu param3=tokens terminal=false"
+    )
+    lines.extend(_switch_submenu(s))
     return lines
+
+
+def _token_usage_menu_title():
+    try:
+        totals = token_usage.current_day_totals()
+    except Exception:
+        return "Token Usage"
+    today = token_usage.compact_tokens(totals.get("today", 0))
+    yesterday = token_usage.compact_tokens(totals.get("yesterday", 0))
+    return DOT_SEP.join(("Token Usage", f"Today {today}", f"Yesterday {yesterday}"))
 
 
 def _menubar_lines(s, frame_idx):
     buddy, frame_list = _buddy_frames(s)
     if buddy is None:
         return ["🥚 | dropdown=false"]
-    return [_bar_line(s, buddy, frame_list, frame_idx)] + _dropdown_lines(s, buddy, frame_list)
+    return [_bar_line(s, buddy, frame_list, frame_idx)] + _dropdown_lines(s, buddy)
 
 
 IDLE_HEARTBEAT = 20  # when idle, re-emit at most this often (SwiftBar caches images)
@@ -538,7 +634,7 @@ def menubar(args):
             print("~~~\n🥚 | dropdown=false", flush=True)
         else:
             if dropdown is None or (animating and frame_idx % DROPDOWN_EVERY == 0):
-                dropdown = _dropdown_lines(s, buddy, frame_list)
+                dropdown = _dropdown_lines(s, buddy)
             bar = _bar_line(s, buddy, frame_list, frame_idx)
             print("~~~")
             print("\n".join([bar] + dropdown), flush=True)
@@ -579,10 +675,20 @@ def mode(args):
         else "  — commons auto-catch, rare/legendary use Safari")
 
 
-def menu(_args):
-    """Launch the interactive terminal UI (party / dex / journal / status / settings)."""
-    tui.run()
+def menu(args):
+    """Launch the interactive terminal UI."""
+    tui.run(args[0] if args else None)
     return ""
+
+
+def open_menu(args):
+    """Open the interactive menu in Ghostty when available, else Terminal.app."""
+    notify.open_menu(args[0] if args else None)
+    return ""
+
+
+def tokens(_args):
+    return "\n".join(token_usage.report_lines())
 
 
 def history(args):
@@ -606,12 +712,15 @@ def main():
     handlers = {
         "choose": choose,
         "switch": switch,
+        "switch-id": switch_id,
         "preview": preview,
         "export-chibi": export_chibi,
         "collect": collect,
         "tiny": tiny,
         "menubar": menubar,
         "menu": menu,
+        "open-menu": open_menu,
+        "tokens": tokens,
         "history": history,
         "safari": safari,
         "battle": battle,
