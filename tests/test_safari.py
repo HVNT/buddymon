@@ -100,6 +100,29 @@ def test_ball_catches_on_low_roll():
     assert out["caught"] and out["done"]
 
 
+def test_start_carries_spawn_level():
+    p = safari.start({**spawn(), "level": 44})
+    assert p["level"] == 44
+    assert "Lv.44" in safari.status_text(p)
+
+
+def test_take_turn_catches_at_pending_level(tmp_path, monkeypatch):
+    from lib import notify, paths
+    monkeypatch.setattr(paths, "JOURNAL_FILE", tmp_path / "journal.jsonl")
+    monkeypatch.setattr(notify, "notify", lambda *a, **k: None)
+
+    s = state.default_state()
+    engine.create_starter(s, "Charmander")
+    s["trainer"]["balls"] = 3
+    s["pending_encounter"] = safari.start({**spawn(name="Snorlax"), "level": 44})
+
+    outcome, _ = safari.take_turn(s, "ball", SeqRandom([0.0]))
+
+    assert outcome["caught"]
+    assert s["pokemon"][-1]["name"] == "Snorlax"
+    assert s["pokemon"][-1]["level"] == 44
+
+
 def test_run_ends_without_catch():
     p = safari.start(spawn())
     out = safari.run(p, {"balls": 3}, SeqRandom([]))

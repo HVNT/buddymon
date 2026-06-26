@@ -21,12 +21,17 @@ def _hp_max(base_key, per_key, level):
 def start(spawn, buddy):
     lvl = buddy["level"]
     b = data.BATTLE
-    wild_level = max(1, lvl + (b["wild_level_lo"] + b["wild_level_hi"]) // 2)
+    default_level = lvl + (b["wild_level_lo"] + b["wild_level_hi"]) // 2
+    wild_level = engine.clamp_species_level(
+        spawn["name"],
+        spawn.get("level", default_level),
+    )
     wild_hp = _hp_max("wild_hp_base", "wild_hp_per_level", wild_level)
     buddy_hp = _hp_max("buddy_hp_base", "buddy_hp_per_level", lvl)
     return {
         "name": spawn["name"], "type": spawn["type"], "emoji": spawn["emoji"],
         "rarity": spawn["rarity"], "shiny": bool(spawn.get("shiny")),
+        "level": wild_level,
         "wild_level": wild_level, "wild_hp": wild_hp, "wild_hp_max": wild_hp,
         "buddy_hp": buddy_hp, "buddy_hp_max": buddy_hp,
         "balls_thrown": 0, "last_msg": f"A wild {spawn['name']} appeared!",
@@ -105,7 +110,9 @@ ACTIONS = {"attack": attack, "ball": throw_ball, "run": run}
 
 
 def status_text(p):
-    return (f"{p['name']} HP {int(wild_hp_frac(p) * 100)}%  ·  "
+    level = p.get("wild_level") or p.get("level")
+    label = f"{p['name']} Lv.{level}" if level else p["name"]
+    return (f"{label} HP {int(wild_hp_frac(p) * 100)}%  ·  "
             f"your buddy HP {int(buddy_hp_frac(p) * 100)}%")
 
 
@@ -118,7 +125,8 @@ def throwing(p, now=None):
 def _resolve(s, pending, outcome):
     """Apply a finished Battle-Mode encounter to state: collect + journal + notify."""
     enc = {"name": pending["name"], "emoji": pending["emoji"],
-           "rarity": pending["rarity"], "shiny": pending["shiny"]}
+           "rarity": pending["rarity"], "shiny": pending["shiny"],
+           "level": pending.get("wild_level")}
     if outcome["caught"]:
         already = any(p["name"] == pending["name"] for p in s["pokemon"])
         s["pokemon"].append(engine.new_pokemon(

@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import date
 
-from . import data
+from . import data, favorites
 
 # Tokens per 1 progress point, by usage tier.
 XP_TIERS = {"output": 75, "input": 500, "cache_write": 250, "cache_read": 1000}
@@ -60,7 +60,7 @@ def update_streak(trainer, today=None):
 
 
 def new_pokemon(name, ptype, emoji, rarity, shiny=False, level=1):
-    return {
+    p = {
         "id": uuid.uuid4().hex[:8],
         "name": name,
         "type": ptype,
@@ -71,6 +71,62 @@ def new_pokemon(name, ptype, emoji, rarity, shiny=False, level=1):
         "shiny": shiny,
         "caught_at": time.time(),
     }
+    # Seed the favorites shortlist with the standouts so it's never cold:
+    # shinies, legendaries/mythics, and starters auto-favorite on catch.
+    if favorites.should_auto_favorite(p):
+        favorites.set_favorite(p, True)
+    return p
+
+
+def evolution_level_bounds(name):
+    """Legal wild-level band for this evolution stage.
+
+    A species starts at the level its previous form evolves into it, and stops
+    one level before it would evolve onward. Standalone species use the full
+    playable level range.
+    """
+    lower = 1
+    prev = data.PRE_EVOLUTION.get(name)
+    if prev:
+        into_levels = [level for to_name, level in data.EVOLUTIONS.get(prev, [])
+                       if to_name == name]
+        if into_levels:
+            lower = max(lower, min(int(level) for level in into_levels))
+
+    next_levels = [int(level) for _, level in data.EVOLUTIONS.get(name, [])]
+    upper = min(next_levels) - 1 if next_levels else LEVEL_CAP
+    lower = max(1, min(LEVEL_CAP, lower))
+    upper = max(lower, min(LEVEL_CAP, upper))
+    return lower, upper
+
+
+def clamp_species_level(name, level):
+    lower, upper = evolution_level_bounds(name)
+    return max(lower, min(upper, int(level)))
+
+
+def _normal_level_between(lower, upper, rng):
+    lower, upper = int(lower), int(upper)
+    if lower >= upper:
+        return lower
+    gauss = getattr(rng, "gauss", None)
+    if gauss is None:
+        return rng.randint(lower, upper)
+
+    mean = (lower + upper) / 2
+    sigma = max(1.0, (upper - lower + 1) / 6)
+    sample = mean
+    for _ in range(8):
+        sample = gauss(mean, sigma)
+        rounded = int(round(sample))
+        if lower <= rounded <= upper:
+            return rounded
+    return max(lower, min(upper, int(round(sample))))
+
+
+def wild_level_for(name, rng):
+    lower, upper = evolution_level_bounds(name)
+    return _normal_level_between(lower, upper, rng)
 
 
 def check_evolution(pokemon, rng):
@@ -126,6 +182,8 @@ def award_xp(state, base_xp, rng):
         "leveled": leveled > 0,
         "evolved": evolved,
         "buddy": buddy["name"],
+        "buddy_shiny": bool(buddy.get("shiny")),
+        "buddy_rarity": buddy.get("rarity"),
     }
 
 
@@ -153,7 +211,11 @@ def roll_encounter(state, rng):
     pool = [(n, *v) for n, v in data.WILDS.items() if v[2] == rarity]
     name, ptype, emoji, _ = pool[rng.randrange(len(pool))]
     shiny = rng.randrange(data.SHINY_ODDS) == 0
-    spawn = {"name": name, "type": ptype, "emoji": emoji, "rarity": rarity, "shiny": shiny}
+    level = wild_level_for(name, rng)
+    spawn = {
+        "name": name, "type": ptype, "emoji": emoji, "rarity": rarity,
+        "shiny": shiny, "level": level,
+    }
 
     # Battle Mode: EVERY wild becomes a weaken-then-catch battle (one at a time).
     if state.get("mode") == "battle":
@@ -178,7 +240,8 @@ def roll_encounter(state, rng):
     trainer["balls"] -= 1
     if rng.random() <= data.CATCH_RATES[rarity]:
         already_owned = any(p["name"] == name for p in state["pokemon"])
-        state["pokemon"].append(new_pokemon(name, ptype, emoji, rarity, shiny))
+        state["pokemon"].append(new_pokemon(
+            name, ptype, emoji, rarity, shiny, level=level))
         return {**spawn, "outcome": "caught", "new_species": not already_owned}
     return {**spawn, "outcome": "fled"}
 
@@ -188,22 +251,39 @@ def summarize_events(result, encounter):
     parts = []
     if result:
         if result["evolved"]:
-            parts.append(f"🎊 evolved into {result['evolved']}!")
+            level = f" Lv.{result['new_level']}" if result.get("new_level") else ""
+            parts.append(f"🎊 evolved into {result['evolved']}{level}!")
         elif result["leveled"]:
-            parts.append(f"⬆️ Lv.{result['new_level']}!")
-        else:
-            parts.append(f"+{result['xp']} progress")
+            parts.append(f"🆙 Lv.{result['new_level']}!")
     if encounter:
         shiny = "✨" if encounter["shiny"] else ""
-        wild = f"{shiny}{encounter['emoji']} {encounter['name']}"
+        level = f" Lv.{encounter['level']}" if encounter.get("level") else ""
+        wild = f"{shiny}{encounter['emoji']} {encounter['name']}{level}"
         if encounter["outcome"] == "caught":
             tag = " (new!)" if encounter.get("new_species") else ""
             parts.append(f"🎉 caught {wild}{tag}")
         elif encounter["outcome"] == "fled":
             parts.append(f"💨 {wild} fled")
-        else:
+        elif encounter["outcome"] == "appeared":
+            parts.append(f"👀 a wild {wild} appeared!")
+        elif encounter["outcome"] == "no_balls":
             parts.append(f"😱 {wild} appeared — no balls left!")
+        elif encounter["outcome"] == "ko":
+            parts.append(f"💥 {wild} fainted — it got away")
+        elif encounter["outcome"] == "buddy_faint":
+            parts.append(f"😵 your buddy fainted; {wild} slipped away")
     return "  ".join(parts)
+
+
+def display_event_detail(detail):
+    """Hide old internal progress prefixes from user-facing event surfaces."""
+    text = str(detail or "").strip()
+    if not text.startswith("+"):
+        return text
+    parts = text.split(None, 2)
+    if len(parts) >= 2 and parts[0][1:].isdigit() and parts[1] == "progress":
+        return parts[2].strip() if len(parts) > 2 else ""
+    return text
 
 
 def create_starter(state, starter_name):

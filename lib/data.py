@@ -15,7 +15,7 @@ EEVEE_EVOLVE_LEVEL = 25
 
 # Wild encounter pool: name -> (type, emoji, rarity). The full 649-species
 # National Dex, generated from PokéAPI by tools/gen_dex.py.
-from .dex_roster import WILDS  # noqa: E402
+from .dex_roster import DEX_NUMBERS, WILDS  # noqa: E402
 from .evolutions import EVOLUTIONS  # noqa: E402
 
 

@@ -129,7 +129,7 @@ def statusline(payload):
     announce = ""
     if event and event.get("event") == "stop" and event.get("detail"):
         if now - event.get("ts", 0) < ANNOUNCE_SECS:
-            announce = event["detail"]
+            announce = engine.display_event_detail(event["detail"])
 
     warn = ""
     pct = _context_pct(payload)
@@ -204,17 +204,20 @@ def status_summary(state):
     return "\n".join(lines)
 
 
+def dex_number(name):
+    return data.DEX_NUMBERS[name]
+
+
 def _dex_universe():
-    """All display species: full starter lines, then wilds by rarity."""
-    order = {"legendary": 1, "rare": 2, "uncommon": 3, "common": 4}
+    """All display species in National Dex order."""
     entries = []
     for name, info in data.STARTERS.items():  # base + every evolution form
         entries.append((name, info["type"], "starter"))
         entries += [(evo, info["type"], "starter") for evo, _, _ in info["evolutions"]]
     entries += [(name, data.STARTERS["Eevee"]["type"], "starter")
                 for name, _ in data.EEVEE_BRANCHES]
-    wilds = sorted(data.WILDS.items(), key=lambda kv: (order.get(kv[1][2], 9), kv[0]))
-    entries += [(name, ptype, rarity) for name, (ptype, _, rarity) in wilds]
+    entries += [(name, ptype, rarity) for name, (ptype, _, rarity) in data.WILDS.items()]
+    entries.sort(key=lambda entry: dex_number(entry[0]))
     return entries
 
 
@@ -321,6 +324,6 @@ def dex(state):
         for p in sorted(mons.values(), key=lambda q: -q["level"]):
             shiny = "✨" if p.get("shiny") else " "
             out.append(f"  {shiny}{p['emoji']} {p['name']:<12} Lv.{p['level']}")
-    total = len(data.WILDS) + len(data.STARTERS)
+    total = len(_dex_universe())
     out.append(f"\n{len({p['name'] for p in state['pokemon']})}/{total} species")
     return "\n".join(out)

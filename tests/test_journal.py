@@ -33,15 +33,18 @@ def test_log_outcomes_kinds(tmp_path, monkeypatch):
                  "shiny": False, "outcome": "fled"}
     written = journal.log_outcomes(result, encounter, "claude")
     assert [e["kind"] for e in written] == ["evolved", "fled"]
+    assert "Lv.16" in written[0]["text"]
     assert written[1]["rarity"] == "legendary"
 
     written = journal.log_outcomes(
         {"xp": 5, "old_level": 3, "new_level": 3, "leveled": False,
          "evolved": None, "buddy": "Pikachu"},
         {"name": "Pidgey", "emoji": "🐦", "rarity": "common", "shiny": True,
-         "outcome": "caught", "new_species": True}, "cross")
+         "level": 12, "outcome": "caught", "new_species": True}, "cross")
     assert [e["kind"] for e in written] == ["caught"]
     assert written[0]["shiny"] is True
+    assert written[0]["level"] == 12
+    assert "Lv.12" in written[0]["text"]
 
 
 def test_is_rare_truth_table():

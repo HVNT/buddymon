@@ -18,12 +18,13 @@ def append(kind, text, data=None):
 
 
 def tail(n=20):
+    """Most recent n entries, or the whole journal when n is None."""
     try:
         lines = paths.JOURNAL_FILE.read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
     entries = []
-    for line in lines[-n:]:
+    for line in (lines if n is None else lines[-n:]):
         try:
             entries.append(json.loads(line))
         except json.JSONDecodeError:
@@ -36,19 +37,25 @@ def log_outcomes(result, encounter, source):
     journal entries. Returns the entries written."""
     written = []
     if result:
+        prog = {"level": result["new_level"], "source": source,
+                "shiny": result.get("buddy_shiny"), "rarity": result.get("buddy_rarity")}
         if result.get("evolved"):
             written.append(append(
-                "evolved", f"🎊 evolved into {result['evolved']}",
-                {"name": result["evolved"], "level": result["new_level"], "source": source}))
+                "evolved", f"🎊 evolved into {result['evolved']} Lv.{result['new_level']}",
+                {"name": result["evolved"], **prog}))
         elif result.get("leveled"):
             written.append(append(
-                "level", f"⬆️ {result['buddy']} reached Lv.{result['new_level']}",
-                {"name": result["buddy"], "level": result["new_level"], "source": source}))
+                "level", f"🆙 {result['buddy']} reached Lv.{result['new_level']}",
+                {"name": result["buddy"], **prog}))
     if encounter:
         shiny = "✨" if encounter.get("shiny") else ""
-        wild = f"{shiny}{encounter['emoji']} {encounter['name']}"
+        level = encounter.get("level")
+        level_text = f" Lv.{level}" if level else ""
+        wild = f"{shiny}{encounter['emoji']} {encounter['name']}{level_text}"
         data = {"name": encounter["name"], "rarity": encounter["rarity"],
                 "shiny": bool(encounter.get("shiny")), "source": source}
+        if level:
+            data["level"] = level
         if encounter["outcome"] == "appeared":
             written.append(append("appeared", f"👀 a wild {wild} appeared! ({encounter['rarity']})", data))
         elif encounter["outcome"] == "caught":

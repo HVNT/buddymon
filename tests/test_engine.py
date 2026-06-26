@@ -117,6 +117,96 @@ def test_encounter_chance_is_tuned_for_visible_cadence():
     assert data.ENCOUNTER_CHANCE == 0.35
 
 
+def test_summary_hides_plain_progress_without_another_event():
+    result = {
+        "xp": 2138, "old_level": 20, "new_level": 20,
+        "leveled": False, "evolved": None, "buddy": "Gastly",
+    }
+
+    assert engine.summarize_events(result, None) == ""
+
+
+def test_summary_uses_meaningful_outcomes_with_levels():
+    result = {
+        "xp": 2138, "old_level": 24, "new_level": 25,
+        "leveled": True, "evolved": "Haunter", "buddy": "Haunter",
+    }
+    encounter = {
+        "name": "Kricketot", "emoji": "🐛", "rarity": "common",
+        "shiny": False, "level": 7, "outcome": "caught",
+        "new_species": True,
+    }
+
+    assert engine.summarize_events(result, None) == "🎊 evolved into Haunter Lv.25!"
+    assert engine.summarize_events(
+        {**result, "leveled": False, "evolved": None},
+        encounter,
+    ) == "🎉 caught 🐛 Kricketot Lv.7 (new!)"
+
+
+def test_summary_distinguishes_appeared_from_no_balls():
+    encounter = {
+        "name": "Venonat", "emoji": "🐛", "rarity": "common",
+        "shiny": False, "level": 14,
+    }
+
+    assert engine.summarize_events(None, {**encounter, "outcome": "appeared"}) == (
+        "👀 a wild 🐛 Venonat Lv.14 appeared!"
+    )
+    assert engine.summarize_events(None, {**encounter, "outcome": "no_balls"}) == (
+        "😱 🐛 Venonat Lv.14 appeared — no balls left!"
+    )
+
+
+def test_display_event_detail_removes_old_progress_prefix():
+    assert engine.display_event_detail("+2138 progress") == ""
+    assert engine.display_event_detail("+2138 progress  🎊 evolved into Haunter") == (
+        "🎊 evolved into Haunter"
+    )
+    assert engine.display_event_detail("🎊 evolved into Haunter Lv.25!") == (
+        "🎊 evolved into Haunter Lv.25!"
+    )
+
+
+class FixedGauss:
+    def __init__(self, samples):
+        self.samples = list(samples)
+
+    def gauss(self, mean, sigma):
+        return self.samples.pop(0) if self.samples else mean
+
+    def randint(self, lower, upper):
+        return lower
+
+
+def test_evolution_stage_level_bounds():
+    assert engine.evolution_level_bounds("Charmander") == (1, 15)
+    assert engine.evolution_level_bounds("Charmeleon") == (16, 35)
+    assert engine.evolution_level_bounds("Charizard") == (36, engine.LEVEL_CAP)
+    assert engine.evolution_level_bounds("Absol") == (1, engine.LEVEL_CAP)
+
+
+def test_wild_level_uses_bounded_normal_distribution():
+    assert engine.wild_level_for("Charmeleon", FixedGauss([25.2])) == 25
+    assert engine.wild_level_for("Charmeleon", FixedGauss([5] * 8)) == 16
+    assert engine.wild_level_for("Charmeleon", FixedGauss([99] * 8)) == 35
+
+
+def test_roll_encounter_persists_spawn_level_on_auto_catch(monkeypatch):
+    monkeypatch.setattr(data, "ENCOUNTER_CHANCE", 1.0)
+    monkeypatch.setattr(data, "RARITY_WEIGHTS", [("common", 100)])
+    monkeypatch.setitem(data.CATCH_RATES, "common", 1.0)
+    monkeypatch.setattr(engine, "wild_level_for", lambda name, rng: 23)
+
+    s = fresh_state()
+    result = engine.roll_encounter(s, random.Random(4))
+
+    assert result["outcome"] == "caught"
+    assert result["level"] == 23
+    assert s["pokemon"][-1]["level"] == 23
+    assert s["pokemon"][-1]["xp"] == engine.xp_for_level(23)
+
+
 # ── transcript anchor pattern ────────────────────────────────────────────────
 
 def _write_transcript(path, entries):
@@ -242,11 +332,39 @@ def test_v1_state_migrates_without_level_loss(tmp_path, monkeypatch):
 
     migrated = state.load()
     buddy = state.active_pokemon(migrated)
-    assert migrated["version"] == 2
+    assert migrated["version"] == 3
     assert buddy["level"] == 21
     assert buddy["xp"] == engine.xp_for_level(21)  # snapped to new floor
     assert engine.level_from_xp(buddy["xp"]) == 21
     assert migrated["trainer"]["total_tokens"] == 0
+
+
+def test_v2_state_migrates_evolved_forms_up_to_stage_floor(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    v2 = state.default_state()
+    v2["version"] = 2
+    v2["pokemon"] = [
+        {"id": "h", "name": "Haunter", "type": "Ghost",
+         "emoji": "👻", "rarity": "uncommon", "level": 5,
+         "xp": 0, "shiny": False, "caught_at": 0},
+        {"id": "c", "name": "Charmander", "type": "Fire",
+         "emoji": "🦎", "rarity": "starter", "level": 20,
+         "xp": engine.xp_for_level(20), "shiny": False, "caught_at": 0},
+    ]
+    v2["active"] = "h"
+    state.save(v2)
+
+    migrated = state.load()
+    haunter = state.active_pokemon(migrated)
+    charmander = next(p for p in migrated["pokemon"] if p["id"] == "c")
+
+    assert migrated["version"] == 3
+    assert haunter["level"] == 25
+    assert haunter["xp"] == engine.xp_for_level(25)
+    assert charmander["level"] == 20
 
 
 def test_milestone_balls_accrue_with_lifetime_xp():

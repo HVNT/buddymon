@@ -38,7 +38,7 @@ def _atomic_write_json(path, obj, indent=None):
         raise
 
 
-STATE_VERSION = 2
+STATE_VERSION = 3
 
 
 def default_state():
@@ -65,6 +65,7 @@ def _migrate(state):
     trainer.setdefault("balls", 10)
     trainer.setdefault("total_xp", 0)
     trainer.setdefault("total_tokens", 0)
+    version = state.get("version", STATE_VERSION)
     if state.get("version") == 1:
         # v2 moved to a cubic XP curve. Keep every pokemon's level and name;
         # snap xp up to the new curve's floor so nothing de-levels.
@@ -72,6 +73,20 @@ def _migrate(state):
         for p in state["pokemon"]:
             p["xp"] = max(p["xp"], engine.xp_for_level(p["level"]))
         state["version"] = 2
+        version = 2
+    if version < 3:
+        # v3 made wild levels evolution-stage-aware. Existing caught evolved
+        # forms may predate that and sit below the level their previous form
+        # evolves into them. Raise only; never de-level older unevolved catches.
+        from . import engine
+        for p in state.get("pokemon", []):
+            level = max(1, int(p.get("level") or 1))
+            lower, _ = engine.evolution_level_bounds(p.get("name", ""))
+            if level < lower:
+                level = lower
+                p["level"] = level
+            p["xp"] = max(int(p.get("xp") or 0), engine.xp_for_level(level))
+        state["version"] = 3
     return state
 
 
@@ -79,7 +94,8 @@ def load():
     if paths.STATE_FILE.exists():
         try:
             state = json.loads(paths.STATE_FILE.read_text(encoding="utf-8"))
-            if isinstance(state, dict) and state.get("version") in (1, STATE_VERSION):
+            version = state.get("version")
+            if isinstance(state, dict) and isinstance(version, int) and 1 <= version <= STATE_VERSION:
                 return _migrate(state)
         except (json.JSONDecodeError, OSError):
             pass

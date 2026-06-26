@@ -17,6 +17,7 @@ def start(encounter):
         "name": encounter["name"], "type": encounter["type"],
         "emoji": encounter["emoji"], "rarity": encounter["rarity"],
         "shiny": bool(encounter.get("shiny")),
+        "level": int(encounter.get("level") or 1),
         "c": base_c, "base_c": base_c,
         "angry": 0, "eating": 0, "balls_thrown": 0, "moves": 0,
         "last_msg": f"A wild {encounter['name']} appeared!",
@@ -102,11 +103,17 @@ ACTIONS = {"rock": throw_rock, "bait": throw_bait, "ball": throw_ball, "run": ru
 
 
 def status_text(pending):
+    label = _label(pending)
     if pending["angry"] > 0:
-        return f"{pending['name']} is angry 🪨×{pending['angry']}"
+        return f"{label} is angry 🪨×{pending['angry']}"
     if pending["eating"] > 0:
-        return f"{pending['name']} is eating 🍖×{pending['eating']}"
-    return f"{pending['name']} is watching…"
+        return f"{label} is eating 🍖×{pending['eating']}"
+    return f"{label} is watching…"
+
+
+def _label(pending):
+    level = pending.get("level")
+    return f"{pending['name']} Lv.{level}" if level else pending["name"]
 
 
 def odds_hint(pending):
@@ -120,12 +127,14 @@ def odds_hint(pending):
 def _resolve(s, pending, outcome):
     """Apply a finished Safari encounter to state: collect + journal + notify."""
     enc = {"name": pending["name"], "emoji": pending["emoji"],
-           "rarity": pending["rarity"], "shiny": pending["shiny"]}
+           "rarity": pending["rarity"], "shiny": pending["shiny"],
+           "level": pending.get("level")}
     if outcome["caught"]:
         already = any(p["name"] == pending["name"] for p in s["pokemon"])
         s["pokemon"].append(engine.new_pokemon(
             pending["name"], pending["type"], pending["emoji"],
-            pending["rarity"], pending["shiny"]))
+            pending["rarity"], pending["shiny"],
+            level=pending.get("level", 1)))
         enc.update(outcome="caught", new_species=not already)
     elif outcome.get("ran"):
         enc = None  # running away isn't worth a journal line
