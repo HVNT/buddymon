@@ -69,3 +69,76 @@ def test_notify_fires_only_for_rare(tmp_path, monkeypatch):
         if journal.is_rare(e):
             notify.notify("buddymon", e["text"])
     assert len(calls) == 1 and "Articuno" in calls[0]
+
+
+def test_open_menu_cmd_runs_stateful_launcher():
+    from lib import notify
+
+    cmd = notify.open_menu_cmd("tokens")
+
+    assert cmd.startswith("/usr/bin/python3 ")
+    assert "buddymon.py open-menu tokens" in cmd
+
+
+def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
+    from lib import menu_launcher
+
+    killed = []
+    spawned = []
+    ps = "\n".join([
+        "  101 /Applications/Ghostty.app/Contents/MacOS/ghostty",
+        "  202 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 /Users/hunt/buddymon/buddymon.py menu\\n",
+        "  303 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 /tmp/other/buddymon.py menu\\n",
+        "  404 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh",
+    ])
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+
+    def fake_run(args, **_kwargs):
+        if args[:3] == ["ps", "-ax", "-o"]:
+            return type("Result", (), {"returncode": 0, "stdout": ps})()
+        if args[0] == "kill":
+            killed.append(int(args[1]))
+            return type("Result", (), {"returncode": 0, "stdout": ""})()
+        raise AssertionError(args)
+
+    monkeypatch.setattr(menu_launcher.subprocess, "run", fake_run)
+    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+
+    menu_launcher.open_menu("tokens")
+
+    assert killed == [202]
+    assert spawned and spawned[0][:4] == ["open", "-na", "Ghostty", "--args"]
+    assert "--window-width=88" in spawned[0]
+    assert "--window-height=30" in spawned[0]
+    assert any("buddymon.py menu tokens" in part for part in spawned[0])
+
+
+def test_open_menu_uses_iterm_when_ghostty_missing(monkeypatch):
+    from lib import menu_launcher
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: False)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+
+    menu_launcher.open_menu("tokens")
+
+    assert spawned and spawned[0][0] == "osascript"
+    assert "iTerm" in spawned[0][2]
+    assert "buddymon.py menu tokens" in spawned[0][2]
+
+
+def test_open_menu_uses_terminal_when_ghostty_and_iterm_missing(monkeypatch):
+    from lib import menu_launcher
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: False)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: False)
+    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+
+    menu_launcher.open_menu("tokens")
+
+    assert spawned and spawned[0][0] == "osascript"
+    assert any("Terminal" in part for part in spawned[0])
+    assert any("buddymon.py menu tokens" in part for part in spawned[0])
