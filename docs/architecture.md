@@ -12,8 +12,11 @@ BuddyMon is a tiny local game wrapped around Claude Code activity.
 5. Renderers show the same state in several places:
    - `statusline.py` for Claude Code
    - `buddymon.py menubar` for SwiftBar
+   - `buddymon.py menu` for the interactive terminal UI
    - `buddymon.py tiny --collect` for tmux
    - `/buddymon:*` commands for direct actions
+6. `lib/menu_launcher.py` opens that menu from SwiftBar, preferring Ghostty,
+   then iTerm2, then Terminal.app.
 
 ## Boundaries
 

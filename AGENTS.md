@@ -36,13 +36,17 @@ a small pokemon-style statusline/menu-bar game.
 ## Documentation Upkeep
 
 - When code changes behavior, update the matching markdown in the same change.
-- Update `DECISIONS.md` when the "why" changes: architecture, state, assets,
+- Update `docs/decisions.md` when the "why" changes: architecture, state, assets,
   game balance, install shape, privacy, or runtime boundaries.
 - Update `CHANGELOG.md` as the project journal for user-visible changes.
 - Update `README.md` only for current install, commands, core behavior, and doc
   links; keep deep detail in the smaller docs.
-- Update `ARCHITECTURE.md`, `DEVELOPMENT.md`, `TROUBLESHOOTING.md`, `ASSETS.md`,
-  or `commands/*.md` when code changes make those docs stale.
+- Update `docs/architecture.md`, `docs/development.md`,
+  `docs/troubleshooting.md`, `docs/assets.md`, or `commands/*.md` when code
+  changes make those docs stale.
+- Use local ignored `plans/` for scoped implementation gameplans that are likely
+  to be built. Use local ignored `ideas/` for exploratory or optional product
+  notes that should be kept out of the public tree until explicitly promoted.
 - Do not edit the gameplay journal at `~/.local/state/buddymon/journal.jsonl`
   as documentation.
 

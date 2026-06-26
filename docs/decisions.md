@@ -130,3 +130,19 @@ roughly doubles all encounter cadence without making rare and legendary pokemon
 disproportionately common.
 
 **Cost:** common auto-resolves and rare/legendary waits will show up more often.
+
+## 2026-06-24 — Bound wild levels by evolution stage
+
+**Decision:** wild encounter levels are sampled from a truncated normal
+distribution inside each species' evolution-stage range. Evolved forms start at
+the level their previous form evolves into them; pre-evolution forms stop one
+level before evolving; standalone species use the full Lv.1-60 range.
+
+**Why:** this keeps catches plausible without maintaining region-specific wild
+level tables.
+
+**Cost:** intentionally over-leveled unevolved pokemon, like a Lv.20
+Charmander, are not modeled yet.
+
+Existing caught evolved forms migrate upward to their stage floor, but existing
+over-leveled unevolved forms are preserved.

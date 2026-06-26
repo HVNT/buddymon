@@ -1,10 +1,11 @@
 # buddymon
 
-A pixel-art pokémon buddy that lives in your Claude Code statusline. It earns
-progress from the real tokens you burn, levels up, evolves, catches wild
-pokémon while you work — and visibly reacts to your session: thinks when you
-think, works when tools run, asks for you on permission prompts, and curls up
-asleep when you go idle.
+A pixel-art pokémon buddy that lives in your Claude Code statusline and menu
+bar, with a full terminal menu for party management, encounters, collection
+browsing, and token reports. It earns progress from the real tokens you burn,
+levels up, evolves, catches wild pokémon while you work — and visibly reacts to
+your session: thinks when you think, works when tools run, asks for you on
+permission prompts, and curls up asleep when you go idle.
 
 ```
   ▄▀▀▀▀▀▀▄        ⚡ Pikachu Lv.12
@@ -44,7 +45,9 @@ Restart the session, then pick a starter:
   across the dex; if a pokemon has multiple eligible evolutions, one is picked.
 - **Wild encounters** — each progress-earning turn has a 35% spawn chance
   (70/20/8/2 rarity split, legendaries gated behind Lv.20, shinies 1/128).
-  In Auto Mode, commons/uncommons auto-resolve (one ball, caught or fled).
+  Wild levels are sampled from each species' evolution-stage range, so evolved
+  forms never appear below their evolution level. In Auto Mode,
+  commons/uncommons auto-resolve (one ball, caught or fled).
 - **Safari Zone** — rare and legendary spawns *wait* for you and become an
   interactive Gen 1 Safari minigame in the menu bar dropdown: **🪨 Rock**
   (doubles catch rate but angers it → 2× flee), **🍖 Bait** (halves catch rate
@@ -54,6 +57,13 @@ Restart the session, then pick a starter:
   flees on your first move — you always get to start the fight.
 - **Battle Mode** — optional weaken-then-catch battles for every wild spawn.
   Toggle it from the menu bar or with `/buddymon:mode battle`.
+- **Party, Box, and favorites** — the terminal menu has a Party view for your
+  active team and a Box view for every caught individual, including duplicates.
+  Press `f` in Party or Box to star favorites; favorites stay easy to switch to
+  from the SwiftBar dropdown.
+- **Token Usage** — the terminal menu and `python3 buddymon.py tokens` show
+  local usage summaries for today, yesterday, this week, this month, last
+  month, and a cached daily timeline by client.
 - **Streaks** — consecutive coding days multiply progress, +2%/day up to ×1.6.
 - **Journal** — every catch, evolution, and level-up is appended permanently
   to `~/.local/state/buddymon/journal.jsonl`; browse with `/buddymon:history`
@@ -100,6 +110,26 @@ one buddy and one dex. Token sources by client:
 anchors existing logs without counting them (no history dump), after that only
 new tokens count. A file lock serializes it with the Claude hook.
 (Collector parsing approach adapted from agent-platform's token-usage workflow.)
+
+## Terminal menu
+
+Open the full menu directly:
+
+```
+python3 buddymon.py menu          # main menu
+python3 buddymon.py menu tokens   # jump to Token Usage
+python3 buddymon.py menu party    # jump to Party
+```
+
+The SwiftBar dropdown's **Open menu**, encounter, Party overflow, and Token
+Usage actions use the same launcher. It prefers Ghostty for inline PNG sprites,
+then iTerm2, then Terminal.app. Ghostty launches first close only Ghostty
+processes explicitly running this checkout's `buddymon.py menu`, so repeated
+clicks do not grow Dock icons or touch unrelated Ghostty windows.
+
+The terminal menu includes Party, Pokédex, Journal, Status, Box, Token Usage,
+Settings, and any waiting encounter. Ghostty and iTerm2 render real inline
+images; plain terminals fall back to terminal-safe pixel art.
 
 ### Keep the menu bar always alive (optional)
 
@@ -162,13 +192,22 @@ load with `launchctl load ~/Library/LaunchAgents/...`, remove with
 | `/buddymon:official` | fetch the official Gen 2 icon pack (asks first) |
 | `/buddymon:uninstall` | clean removal instructions |
 
+Direct CLI helpers:
+
+| Command | What |
+|---|---|
+| `python3 buddymon.py menu [screen]` | open the interactive terminal menu |
+| `python3 buddymon.py tokens` | local token usage report |
+| `python3 buddymon.py collect` | collect Codex/Auggie token progress |
+| `python3 buddymon.py preview` | render every sprite for art QA |
+
 ## More docs
 
-- [DECISIONS.md](DECISIONS.md) — why it works this way
-- [ARCHITECTURE.md](ARCHITECTURE.md) — simple system map
-- [DEVELOPMENT.md](DEVELOPMENT.md) — local dev commands
-- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — common fixes
-- [ASSETS.md](ASSETS.md) — sprite asset rules
+- [docs/decisions.md](docs/decisions.md) — why it works this way
+- [docs/architecture.md](docs/architecture.md) — simple system map
+- [docs/development.md](docs/development.md) — local dev commands
+- [docs/troubleshooting.md](docs/troubleshooting.md) — common fixes
+- [docs/assets.md](docs/assets.md) — sprite asset rules
 - [CHANGELOG.md](CHANGELOG.md) — human release notes
 
 ## Design guarantees

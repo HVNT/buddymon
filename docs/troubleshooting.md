@@ -21,6 +21,11 @@ osascript -e 'quit app "SwiftBar"' && open -a SwiftBar
 
 The menu bar stream is long-lived, so it can keep old code in memory.
 
+## SwiftBar opened too many Ghostty icons
+
+Restart SwiftBar so it reloads the current launcher. Repeated menu clicks
+should leave one BuddyMon-owned Ghostty menu window.
+
 ## SwiftBar's own icon is still visible
 
 Enable Stealth Mode:
@@ -42,7 +47,7 @@ Check the basics:
 ## Sprites look plain
 
 The built-in sprites are the fallback. Run `/buddymon:official` for Gen 2 menu
-icons, or see [ASSETS.md](ASSETS.md) for the other local packs.
+icons, or see [assets.md](assets.md) for the other local packs.
 
 ## A rare wild is waiting
 
