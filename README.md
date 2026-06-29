@@ -1,5 +1,7 @@
 # buddymon
 
+NOTE: IT LOOKS WAY BETTER ON GHOSTTY. Ghostty supports image rendering, unlike the default OS X terminal. iterm2 is also supported, but currently untested. If you do not have Ghostty nor iterm2 then buddymon will convert an image into pixel art – which isn't exactly Picasso-level art.
+
 A pixel-art pokémon buddy that lives in your Claude Code statusline and menu
 bar, with a full terminal menu for party management, encounters, collection
 browsing, and token reports. It earns progress from the real tokens you burn,
