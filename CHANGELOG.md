@@ -67,6 +67,24 @@ git tags and matching plugin metadata versions.
 
 ### Changed
 
+- Made native status synchronization event driven. Atomic local `state.json`
+  saves now trigger one debounced, coalesced refresh, opening the dropdown asks
+  for fresh status immediately, and the existing 30-second poll remains only as
+  recovery. Terminal-started battles no longer wait on the polling interval or
+  the menu-bar animation queue before appearing in the native menu.
+- Removed the hidden `B` shortcut from native back chevrons so the visible
+  Safari `B / Bait` action receives the key instead of navigating away.
+- Fixed repeated Ghostty confirmation prompts when Party, Box, Pokédex, or
+  Activity launches from the installed app. Ghostty now starts a stable system
+  shell and receives the safely quoted BuddyMon command as startup input instead
+  of treating the app-bundled Python runtime as a file to open.
+- Activity now scrolls through the complete local journey instead of silently
+  stopping at the newest 200 entries while claiming to show everything.
+- Removed compact view entrance animations. Home and every drill-in now render
+  their complete shell and content immediately, with no row-count-dependent
+  fade or stagger. The obsolete reveal stack, timing tokens, presentation gate,
+  and preview specimen were deleted; regression coverage now keeps compact
+  views static. Pokémon and control motion remain unchanged.
 - Removed the unreachable expanded native dashboard graph, hidden expansion
   action, and obsolete Home snapshot tooling. The native bridge now exposes
   only Encounter, Token Usage, Trainer, and Settings plus encounter/preference
@@ -162,11 +180,6 @@ git tags and matching plugin metadata versions.
 - Tightened the root Field Guide inset and reduced the buddy sprite to align
   with its three identity rows. Battle names and caught, fled, or ran-away
   result titles now use neutral ink with color isolated to one rarity letter.
-- Added a quick shared section entrance across compact Home, Tokens, Trainer,
-  Battle, and Battle Result views. Rows now stay at their final geometry and
-  fade in sequentially with a smooth ease-in on open or navigation, avoiding
-  the previous vertical expansion effect. The reveal does not replay for
-  same-screen refreshes and appears immediately with macOS Reduce Motion.
 - Replaced the native app's static sprite plus generic alert nudge with a thin
   sequence player. Python now supplies stable baseline, queued-moment, and
   persistent-attention payloads so short events play once without restarting on

@@ -41,16 +41,12 @@ reachable from the shipping menu-bar panel.
 
 ## Motion
 
-- Use `BuddyMonSectionRevealStackView` for vertically ordered cards or sections
-  that should enter together. Its default
-  `BuddyMonBrand.Motion.quickSectionReveal` style keeps every arranged view at
-  its final size and position, then fades rows in over 240 milliseconds,
-  staggered 55 milliseconds from top to bottom with an ease-in curve. Never
-  animate compact row geometry during entrance.
-- Compact screens reveal once when the dropdown opens or navigation presents a
-  different screen. A routine same-screen refresh must not replay the entrance.
-- Reduce Motion presents every section immediately. Animation never changes the
-  model-layer layout or final values, keeping static captures deterministic.
+- Compact screens and drill-ins render completely and immediately. Do not add
+  whole-view, card, or row entrance fades, staggers, scale effects, or geometry
+  transitions. The panel window animation remains disabled as well.
+- Pokémon state playback, sprite motion, badge feedback, and direct control
+  hover feedback remain separate brand-owned behaviors. They must honor macOS
+  Reduce Motion and must never delay navigation or content visibility.
 
 ## Color
 
@@ -146,12 +142,8 @@ rounded button chrome. The active value uses darker bold type, an underline,
 and a leading chevron; inactive values remain muted. Every option owns its full
 pointing-hand hit target, hover may add a transient wash, and keyboard focus
 uses a square ink outline. Clicking an option or pressing Return sets that exact
-Python-validated value immediately and refreshes the list without replaying its
-entrance motion. Operational actions such as backup and setup do not masquerade
-as preferences.
-Those compact stacks use the shared quick section reveal, ordered from their
-top navigation or masthead through their final footer. Trainer uses the same
-treatment for its card sections.
+Python-validated value immediately and refreshes the list in place. Operational
+actions such as backup and setup do not masquerade as preferences.
 Every compact drill-in that returns to the root panel uses one navigation treatment:
 back chevron and display title on the same leading row, followed only by useful
 trailing context such as the Trainer ID. The back control remains first in the

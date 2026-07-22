@@ -29,6 +29,12 @@ encounters remain visible without constantly moving, and baseline idle motion
 does not regenerate image files. Reduce Motion selects one representative frame
 instead of playing the sequence.
 
+Terminal play and the native app stay in sync through local state-change
+notifications. A terminal-started battle should reach the buddy and an open
+dropdown within a fraction of a second; it does not wait for the current
+menu-bar animation to finish. Opening the dropdown also requests a fresh read,
+while a slower timer remains as recovery if a filesystem event is missed.
+
 Click the menu-bar sprite for the compact view. It shows the active Pokémon,
 level, visual XP meter, latest signal, and only the essential
 actions:
@@ -150,10 +156,12 @@ the current menu-bar panel when the screen has room, and leaves that panel
 visible while the terminal is in use. The origin is clamped to the panel's
 current display. iTerm2 and Terminal.app use exact scripted bounds. Ghostty
 starts one isolated 88-by-30 window with saved state, fullscreen, maximize, and
-close confirmation disabled, then runs BuddyMon directly as that window's first
-process. It never creates a provisional Ghostty window or closes one during
-frame verification, so a single handoff cannot fan out into an alert plus a
-second terminal. Ghostty's pixel dimensions may vary slightly with font metrics.
+close confirmation disabled. Its first process is the stable system shell,
+which receives the safely quoted BuddyMon command as startup input; the bundled
+Python runtime is never handed to Ghostty as a file to open. It never creates a
+provisional Ghostty window or closes one during frame verification, so a single
+handoff cannot fan out into an alert plus a second terminal. Ghostty's pixel
+dimensions may vary slightly with font metrics.
 
 ## Local and Shared
 

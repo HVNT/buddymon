@@ -70,6 +70,14 @@ Native child processes run asynchronously. The process executor drains both
 output streams and enforces timeout and cancellation behavior, so a slow or
 large Python response does not block the UI.
 
+The native shell watches the local state directory for `state.json` changes.
+It watches the directory because Python commits state with an atomic rename,
+then compares the state file's inode, size, and modification time so journal
+and lock traffic does not launch redundant status reads. A short debounce
+coalesces each save burst, and refresh requests share one passive task. Opening
+the dropdown requests fresh status immediately; the 30-second timer remains a
+recovery fallback rather than the normal synchronization path.
+
 The menu-bar payload has three layers: a looping baseline, unseen moment
 sequences, and one persistent attention state. Python returns stable sequence
 ids so the Swift player does not restart an animation every time status is

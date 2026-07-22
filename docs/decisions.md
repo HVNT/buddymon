@@ -109,6 +109,20 @@ The kernel remains the source of truth for ownership; the lock file does not
 store or trust a process id supplied by another process. A later app launch
 sends a local distributed notification so the running copy reopens its panel.
 
+## Native state synchronization is event driven
+
+**Decision:** Watch the local BuddyMon state directory for atomic `state.json`
+replacements, filter events by the state file's signature, debounce save
+bursts, and coalesce passive status reads. Opening the dropdown also requests a
+fresh read. Keep the 30-second poll only as a recovery fallback.
+
+**Why:** Terminal play, hooks, and the native app are separate local processes.
+Polling alone can leave a new battle invisible for most of a polling interval,
+while a one-second poll would repeatedly launch Python when nothing changed.
+Directory observation survives the atomic rename used by state saves, exact
+signature filtering ignores journal and lock writes, and menu-bar animation can
+remain an independent presentation concern.
+
 ## Native brand styles have one source of truth
 
 **Decision:** `BuddyMonBrand` is the sole source of visual truth for shipping
@@ -129,12 +143,11 @@ same change. Deterministic Brand Styles and compact-panel PNG renders provide
 visual-review evidence. The previews remain developer tooling and are not
 reachable from the production panel.
 
-Section entrances use one brand-owned stack treatment: compact screens reveal
-their arranged sections with a sequential opacity-only ease-in from top to
-bottom, at their final size and position, only when the panel opens or the user
-enters a different compact screen. Same-screen data refreshes do not replay the
-transition, and Reduce Motion bypasses it. This keeps new navigation feeling
-alive without geometry shifts or recurring movement during local-data updates.
+Compact screens do not animate into place. Opening the panel, navigating, and
+refreshing local data all render the complete view immediately, with the panel's
+window animation disabled. Motion is reserved for Pokémon state playback and
+small direct-control feedback that honors Reduce Motion; it must not gate page
+content or make navigation cadence depend on row count.
 
 ## Optional art requires explicit consent
 
@@ -262,7 +275,9 @@ one roughly 760-by-520 footprint beside the open panel, clamp it to the current
 screen, and do not dismiss the panel or its state. iTerm2 and Terminal.app use
 exact scripted bounds. Ghostty starts one isolated process with its position,
 88-by-30 grid, fixed BuddyMon title, disabled saved state, and non-fullscreen
-state supplied before launch; the menu command is its initial process. It does
+state supplied before launch. Its initial process is the stable system shell,
+and the safely quoted menu command arrives as startup input. This keeps the
+app-bundled Python runtime out of Ghostty's file-open confirmation path. It does
 not activate or resize an existing Ghostty window, create a provisional window,
 or close a live terminal during fallback. The launcher tries another terminal
 only when Ghostty rejects the launch request before accepting a window.
@@ -313,8 +328,8 @@ bottom anchor; Back and Escape remain available through shared navigation.
 Settings is the next compact drill-in. It presents every current preference
 directly in one 304-by-210 Field Guide view with the shared back-chevron/title row.
 Each row exposes every allowed value. Selecting an option sends that exact
-validated Python preference immediately, then refreshes the list in place
-without replaying entrance motion. Preference options are compact text controls
+validated Python preference immediately, then refreshes the list in place.
+Preference options are compact text controls
 rather than persistent filled buttons. Their resting state is transparent,
 every option uses a pointing-hand cursor, hover is transient, and keyboard focus
 retains a visible square outline. The active option is darker, bold, underlined,
@@ -358,6 +373,10 @@ code is their only rarity color, matching Last Catch.
 Trainer, Tokens, encounter, and result also share one leading back-chevron and
 display-title row; trailing context may follow, but a second Back or Return Home
 action may not duplicate it.
+The masthead or navigation row, Field Guide border, striped background,
+surrounding canvas, and content rows all render immediately. The panel shell
+disables window-level animation, and compact screens own no entrance timing or
+transition exceptions.
 On the root panel, Python supplies a complete waiting label and the shell folds
 that label, the wild sprite, and the encounter shortcut into one dark action;
 there is no duplicate field-message row.

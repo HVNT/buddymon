@@ -87,6 +87,13 @@ python3 buddymon.py collector install
 Install is explicit and safe to run again when runtime or repo paths changed.
 Use `collector uninstall` to remove the generated LaunchAgent.
 
+## BuddyMon.app shows old terminal state
+
+Opening the dropdown requests fresh local status, and saved terminal changes
+normally propagate automatically without waiting for a menu-bar animation. Use
+the dropdown's **Refresh** command if a filesystem notification was missed. The
+app also performs a recovery refresh every 30 seconds.
+
 ## SwiftBar shows stale output
 
 Restart SwiftBar:
@@ -122,9 +129,11 @@ Then choose a permanent **Menu launcher** in native Settings.
 Terminal handoffs request roughly a 760-by-520 footprint beside the open
 BuddyMon panel. Ghostty receives one direct isolated-window request with an
 88-by-30 grid, a fixed BuddyMon title, and saved-state/fullscreen behavior
-disabled. It does not need Accessibility access, create a provisional window,
-or close a live window before falling back. iTerm2 and Terminal.app apply exact
-bounds through their own scripting APIs.
+disabled. That window starts the system shell and safely injects BuddyMon as its
+startup command, so Ghostty does not treat the bundled Python runtime as a file
+that needs confirmation. It does not need Accessibility access, create a
+provisional window, or close a live window before falling back. iTerm2 and
+Terminal.app apply exact bounds through their own scripting APIs.
 
 ## SwiftBar opens extra terminal windows
 
