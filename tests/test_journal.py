@@ -235,9 +235,14 @@ def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
         "--window-position-y=80",
         "--window-width=88",
         "--window-height=30",
+        "--command=/bin/zsh",
     ]:
         assert option in args
-    assert args[args.index("-e") + 1:] == menu_launcher._menu_args("tokens")
+    assert "-e" not in args
+    assert (
+        f"--input=raw:exec {menu_launcher._run_text('tokens')}\\n"
+        in args
+    )
     assert "osascript" not in args
 
 
@@ -259,7 +264,11 @@ def test_open_showcase_menu_uses_targeted_ghostty_window(monkeypatch):
     assert len(spawned) == 1
     args = spawned[0]
     assert args[:3] == ["open", "-na", "Ghostty.app"]
-    assert args[args.index("-e") + 1:] == menu_launcher._menu_args("showcase")
+    assert "--command=/bin/zsh" in args
+    assert (
+        f"--input=raw:exec {menu_launcher._run_text('showcase')}\\n"
+        in args
+    )
     assert "osascript" not in args
 
 
@@ -368,12 +377,30 @@ def test_ghostty_launch_never_creates_a_provisional_applescript_window():
         window_frame=(420, 24, 760, 520),
     )
 
-    assert args.count("-e") == 1
+    assert "-e" not in args
     assert args[0] == "open"
     assert "osascript" not in args
     assert "--window-save-state=never" in args
     assert "--confirm-close-surface=false" in args
-    assert args[args.index("-e") + 1:] == menu_launcher._menu_args("party")
+    assert "--command=/bin/zsh" in args
+    assert (
+        f"--input=raw:exec {menu_launcher._run_text('party')}\\n"
+        in args
+    )
+
+
+def test_ghostty_launch_shell_quotes_bundled_runtime_paths(monkeypatch):
+    from lib import menu_launcher
+
+    python = "/Applications/BuddyMon Friend.app/Contents/Resources/python/bin/python3"
+    monkeypatch.setenv("BUDDYMON_PYTHON", python)
+
+    args = menu_launcher._ghostty_args("party")
+    startup = next(arg for arg in args if arg.startswith("--input="))
+
+    assert "-e" not in args
+    assert f"'{python}'" in startup
+    assert "buddymon.py menu party" in startup
 
 
 def test_open_menu_falls_through_when_ghostty_launch_request_fails(monkeypatch):

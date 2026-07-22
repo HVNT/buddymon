@@ -86,6 +86,10 @@ def _run_text(initial_screen=None):
     return " ".join(shlex.quote(arg) for arg in _menu_args(initial_screen))
 
 
+def _ghostty_startup_input(initial_screen=None):
+    return f"raw:exec {_run_text(initial_screen)}\\n"
+
+
 def normalize_window_frame(window_frame=None):
     if window_frame is None:
         return DEFAULT_WINDOW_FRAME
@@ -125,8 +129,8 @@ def _ghostty_args(initial_screen=None, window_frame=None):
         f"--window-position-y={y}",
         f"--window-width={GHOSTTY_WINDOW_COLUMNS}",
         f"--window-height={GHOSTTY_WINDOW_ROWS}",
-        "-e",
-        *_menu_args(initial_screen),
+        "--command=/bin/zsh",
+        f"--input={_ghostty_startup_input(initial_screen)}",
     ]
 
 
