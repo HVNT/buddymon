@@ -5,7 +5,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import data, sprites
-from tools import fetch_official as fo
 
 STARTER_FORMS = set(data.STARTERS) | {
     e for i in data.STARTERS.values() for e, _, _ in i["evolutions"]

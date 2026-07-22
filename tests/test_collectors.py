@@ -129,7 +129,9 @@ def test_tiny_is_one_plain_line(tmp_path, monkeypatch):
 
 
 def test_prune_anchors_drops_aged_out_files(tmp_path):
-    import os, time
+    import os
+    import time
+
     old = tmp_path / "old.jsonl"
     fresh = tmp_path / "fresh.jsonl"
     old.write_text("x")

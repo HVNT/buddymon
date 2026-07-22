@@ -18,10 +18,21 @@ CODEX_ROOT = Path.home() / ".codex" / "sessions"
 CLAUDE_ROOT = Path.home() / ".claude" / "projects"
 AUGMENT_ROOT = Path.home() / ".augment" / "sessions"
 GEMINI_ROOT = Path.home() / ".gemini" / "tmp"
-CLIENTS = ("Claude", "Codex", "Auggie", "Gemini", "Other")
-CACHE_VERSION = 3
+# These are product-supported local sources. Do not surface a catch-all bucket:
+# an unknown log shape should be ignored until BuddyMon supports it deliberately.
+SUPPORTED_TOOLS = (
+    ("Claude", "claude-code", "Claude Code"),
+    ("Codex", "codex", "Codex CLI"),
+    ("Auggie", "auggie", "Auggie"),
+    ("Gemini", "gemini-cli", "Gemini CLI"),
+)
+CLIENTS = tuple(client for client, _identifier, _label in SUPPORTED_TOOLS)
+TOOL_IDS = {client: identifier for client, identifier, _label in SUPPORTED_TOOLS}
+TOOL_LABELS = {client: label for client, _identifier, label in SUPPORTED_TOOLS}
+CACHE_VERSION = 4
 TIMELINE_LABEL_W = 16
 NUM_W = 8
+MIX_BAR_W = 14
 
 
 @dataclass(frozen=True)
@@ -102,11 +113,6 @@ def _codex_file_events(path):
                 yield TokenEvent("Codex", when, tokens)
 
 
-def _codex_events():
-    for path in sorted(CODEX_ROOT.glob("*/*/*/rollout-*.jsonl")):
-        yield from _codex_file_events(path)
-
-
 def _claude_file_events(path):
     try:
         rows = path.open("r", encoding="utf-8", errors="replace")
@@ -126,11 +132,6 @@ def _claude_file_events(path):
             event = _event_from_usage("Claude", when, usage)
             if event is not None:
                 yield event
-
-
-def _claude_events():
-    for path in sorted(CLAUDE_ROOT.glob("*/*.jsonl")):
-        yield from _claude_file_events(path)
 
 
 def _augment_nodes(node):
@@ -156,11 +157,6 @@ def _augment_file_events(path):
     yield from _augment_nodes(payload)
 
 
-def _augment_events():
-    for path in sorted(AUGMENT_ROOT.glob("*.json")):
-        yield from _augment_file_events(path)
-
-
 def _gemini_nodes(node, fallback_when=None):
     if isinstance(node, dict):
         usage = node.get("usageMetadata") or node.get("usage") or node.get("tokenUsage")
@@ -181,20 +177,6 @@ def _gemini_file_events(path):
     except (OSError, json.JSONDecodeError):
         return
     yield from _gemini_nodes(payload)
-
-
-def _gemini_events():
-    # Avoid account/auth files; Gemini's local chat snapshots, when present, are
-    # under tmp/*/chats/.
-    for path in sorted(GEMINI_ROOT.glob("*/chats/*.json")):
-        yield from _gemini_file_events(path)
-
-
-def collect_events():
-    events = []
-    for source in (_claude_events, _codex_events, _augment_events, _gemini_events):
-        events.extend(source())
-    return events
 
 
 def _cache_file():
@@ -240,8 +222,8 @@ def _empty_day_counts():
 def _events_to_days(events):
     days = defaultdict(_empty_day_counts)
     for event in events:
-        client = event.client if event.client in CLIENTS else "Other"
-        days[event.when.date().isoformat()][client] += event.tokens
+        if event.client in CLIENTS:
+            days[event.when.date().isoformat()][event.client] += event.tokens
     return {day: dict(vals) for day, vals in days.items()}
 
 
@@ -317,10 +299,6 @@ def _previous_month_start(dt):
     return start.replace(month=start.month - 1)
 
 
-def _fmt_dt(dt):
-    return dt.strftime("%b %-d %H:%M")
-
-
 def _fmt_short_day(dt):
     return dt.strftime("%b%-d")
 
@@ -342,10 +320,6 @@ def _fmt_compact(n):
         if value >= 10:
             return f"{value}{suffix}"
     return _fmt_n(n)
-
-
-def _sum(events, start, end):
-    return sum(e.tokens for e in events if start <= e.when < end)
 
 
 def _sum_days(rows, start, end):
@@ -378,41 +352,82 @@ def _total_tokens(vals):
 
 
 def _money_markers(total):
-    billions = int(total) // 1_000_000_000
-    hundred_millions = (int(total) % 1_000_000_000) // 100_000_000
-    return ("🤑" * billions) + ("💰" * hundred_millions)
+    hundred_millions = int(total) // 100_000_000
+    markers = "💰" * hundred_millions
+    return "\n".join(
+        markers[i:i + 10] for i in range(0, len(markers), 10)
+    )
 
 
-def _markers(total, weekly=False):
-    marks = []
+def _indent_marker_continuations(markers, marker_col):
+    return markers.replace("\n", "\n" + (" " * marker_col))
+
+
+def _markers(total, weekly=False, marker_col=0):
     money = _money_markers(total)
-    if money:
-        marks.append(money)
     if weekly:
-        marks.append("✨")
-    return f" {''.join(marks)}" if marks else ""
+        money = money + "✨" if money else "✨"
+    if not money:
+        return ""
+    return f" {_indent_marker_continuations(money, marker_col)}"
 
 
-def _summary_markers(label, total):
+def _summary_markers(label, total, marker_col=0):
     if label not in {"Today", "Yesterday", "This week"}:
         return ""
     markers = _money_markers(total)
-    return f" {markers}" if markers else ""
+    return f" {_indent_marker_continuations(markers, marker_col)}" if markers else ""
 
 
 def _summary_row(label, tokens):
-    return f"{label:<14}{_fmt_compact(tokens):>8}{_summary_markers(label, tokens)}"
+    prefix = f"{label:<14}{_fmt_compact(tokens):>8}"
+    return f"{prefix}{_summary_markers(label, tokens, len(prefix) + 1)}"
+
+
+def _share_bar(value, total, width=MIX_BAR_W):
+    if total <= 0 or value <= 0:
+        return "." * width
+    filled = int((value * width + total // 2) // total)
+    filled = max(1, min(width, filled))
+    return ("#" * filled) + ("." * (width - filled))
+
+
+def _fmt_pct(value, total):
+    if total <= 0 or value <= 0:
+        return "0%"
+    pct = int((value * 100 + total // 2) // total)
+    return f"{pct}%"
+
+
+def _client_mix_lines(title, vals):
+    total = _total_tokens(vals)
+    lines = [
+        title,
+        f"{'Tool':<12}{'Tokens':>8}  {'Share':<{MIX_BAR_W}} {'Pct':>4}",
+    ]
+    if not total:
+        lines.append("No usage recorded for this range.")
+        return lines
+    for client in CLIENTS:
+        tokens = int(vals.get(client) or 0)
+        if not tokens:
+            continue
+        lines.append(
+            f"{TOOL_LABELS[client]:<12}{_fmt_compact(tokens):>8}  "
+            f"{_share_bar(tokens, total)} {_fmt_pct(tokens, total):>4}"
+        )
+    return lines
 
 
 def _timeline_row(label, vals, weekly=False):
     total = _total_tokens(vals)
-    return (
+    prefix = (
         f"{label:<{TIMELINE_LABEL_W}}{_fmt_compact(total):>{NUM_W}}"
         f"{_fmt_compact(vals['Claude']):>{NUM_W}}"
         f"{_fmt_compact(vals['Codex']):>{NUM_W}}{_fmt_compact(vals['Auggie']):>{NUM_W}}"
-        f"{_fmt_compact(vals['Gemini']):>{NUM_W}}{_fmt_compact(vals['Other']):>{NUM_W}}"
-        f"{_markers(total, weekly)}"
+        f"{_fmt_compact(vals['Gemini']):>{NUM_W}}"
     )
+    return f"{prefix}{_markers(total, weekly, len(prefix) + 1)}"
 
 
 def _timeline_rule():
@@ -427,17 +442,6 @@ def _week_label(start, last_day, today):
     else:
         end = _fmt_short_day(last_day)
     return f"WEEK {_fmt_short_day(start)}-{end}"
-
-
-def _daily(events, start, end):
-    days = defaultdict(lambda: {client: 0 for client in CLIENTS})
-    for event in events:
-        if not (start <= event.when < end):
-            continue
-        key = event.when.date().isoformat()
-        client = event.client if event.client in CLIENTS else "Other"
-        days[key][client] += event.tokens
-    return days
 
 
 def _coerce_now(now=None):
@@ -462,6 +466,213 @@ def current_day_totals(now=None):
     }
 
 
+def _dashboard_tool(client, tokens, total=0):
+    return {
+        "id": TOOL_IDS[client],
+        "label": TOOL_LABELS[client],
+        "tokens": tokens,
+        "compact": compact_tokens(tokens),
+        "percent": int(round(tokens * 100 / total)) if total else 0,
+    }
+
+
+def _active_streak(daily):
+    streak = 0
+    for day in reversed(daily):
+        if day["tokens"] <= 0:
+            break
+        streak += 1
+    return streak
+
+
+def dashboard(now=None, days=7, history_days=28):
+    """Structured local usage for the native app's useful, supported-tool charts."""
+    now = _coerce_now(now)
+    days = max(2, int(days))
+    history_days = max(days, int(history_days))
+    today = _day_start(now)
+    current_start = today - timedelta(days=days - 1)
+    previous_start = current_start - timedelta(days=days)
+    history_start = today - timedelta(days=history_days - 1)
+    rows = cached_daily_counts(min(previous_start, history_start), now)
+
+    daily = []
+    for offset in range(days):
+        day = current_start + timedelta(days=offset)
+        values = rows.get(day.date().isoformat(), _empty_day_counts())
+        tokens = _total_tokens(values)
+        daily.append({
+            "date": day.date().isoformat(),
+            "label": day.strftime("%a"),
+            "date_label": f"{day.strftime('%b')} {day.day}",
+            "tokens": tokens,
+            "compact": compact_tokens(tokens),
+            "is_today": day.date() == today.date(),
+            "tools": [
+                _dashboard_tool(client, int(values.get(client) or 0), tokens)
+                for client in CLIENTS
+                if int(values.get(client) or 0)
+            ],
+        })
+
+    current_counts = _counts_days(rows, current_start, now)
+    previous_counts = _counts_days(rows, previous_start, current_start)
+    current_total = _total_tokens(current_counts)
+    previous_total = _total_tokens(previous_counts)
+    delta = current_total - previous_total
+    if previous_total:
+        change_percent = int(round(delta * 100 / previous_total))
+        trend_value = f"{change_percent:+d}%" if change_percent else "0%"
+    elif current_total:
+        change_percent = None
+        trend_value = "New"
+    else:
+        change_percent = 0
+        trend_value = "0%"
+    direction = "up" if delta > 0 else ("down" if delta < 0 else "flat")
+
+    clients = []
+    for client in CLIENTS:
+        tokens = int(current_counts.get(client) or 0)
+        if not tokens:
+            continue
+        clients.append(_dashboard_tool(client, tokens, current_total))
+    clients.sort(key=lambda item: (-item["tokens"], item["label"]))
+
+    peak = max(daily, key=lambda item: item["tokens"])
+    active_days = sum(1 for item in daily if item["tokens"])
+    average = int(round(current_total / days))
+    peak_name = "Today" if peak["is_today"] else peak["date_label"]
+    leader = clients[0] if clients else None
+
+    history = []
+    for offset in range(history_days):
+        day = history_start + timedelta(days=offset)
+        values = rows.get(day.date().isoformat(), _empty_day_counts())
+        tokens = _total_tokens(values)
+        history.append({
+            "date": day.date().isoformat(),
+            "label": day.strftime("%a"),
+            "date_label": f"{day.strftime('%b')} {day.day}",
+            "tokens": tokens,
+            "compact": compact_tokens(tokens),
+            "is_today": day.date() == today.date(),
+        })
+
+    weekly = []
+    for offset in range(0, history_days, 7):
+        start = history_start + timedelta(days=offset)
+        end = min(start + timedelta(days=7), now)
+        if start >= end:
+            continue
+        total = _sum_days(rows, start, end)
+        end_day = today if end.date() == today.date() else end - timedelta(days=1)
+        weekly.append({
+            "id": f"week-{offset // 7 + 1}",
+            "label": f"{start.strftime('%b')} {start.day}–{end_day.day}",
+            "tokens": total,
+            "compact": compact_tokens(total),
+        })
+
+    rhythm = []
+    for client in CLIENTS:
+        values = []
+        for point in daily:
+            row = rows.get(point["date"], _empty_day_counts())
+            values.append(int(row.get(client) or 0))
+        if any(values):
+            rhythm.append({
+                "id": TOOL_IDS[client],
+                "label": TOOL_LABELS[client],
+                "values": values,
+            })
+    tool_streak = _active_streak(history)
+
+    return {
+        "range": {
+            "days": days,
+            "label": f"Last {days} days",
+            "start": current_start.date().isoformat(),
+            "end": today.date().isoformat(),
+        },
+        "today": daily[-1],
+        "total": {
+            "tokens": current_total,
+            "compact": compact_tokens(current_total),
+        },
+        "daily": daily,
+        "history": history,
+        "weekly": weekly,
+        "tool_rhythm": {
+            "days": [point["label"] for point in daily],
+            "tools": rhythm,
+        },
+        "supported_tools": [
+            {"id": identifier, "label": label}
+            for _client, identifier, label in SUPPORTED_TOOLS
+        ],
+        "clients": clients,
+        "comparison": [
+            {
+                "id": "current",
+                "label": f"Last {days} days",
+                "tokens": current_total,
+                "compact": compact_tokens(current_total),
+            },
+            {
+                "id": "previous",
+                "label": f"Prior {days} days",
+                "tokens": previous_total,
+                "compact": compact_tokens(previous_total),
+            },
+        ],
+        "trend": {
+            "direction": direction,
+            "change_percent": change_percent,
+            "value": trend_value,
+            "detail": f"vs prior {days} days",
+        },
+        "insights": [
+            {
+                "id": "peak",
+                "label": "Busiest day",
+                "value": peak_name if peak["tokens"] else "No usage",
+                "detail": f"{peak['compact']} tokens" if peak["tokens"] else "Nothing recorded yet",
+            },
+            {
+                "id": "average",
+                "label": "Daily average",
+                "value": compact_tokens(average),
+                "detail": f"across {days} days",
+            },
+            {
+                "id": "active_days",
+                "label": "Active days",
+                "value": f"{active_days}/{days}",
+                "detail": "days with local usage",
+            },
+            {
+                "id": "top_client",
+                "label": "Top tool",
+                "value": leader["label"] if leader else "None",
+                "detail": f"{leader['percent']}% of usage" if leader else "No supported-tool activity",
+            },
+            {
+                "id": "active_streak",
+                "label": "Active streak",
+                "value": f"{tool_streak} day" if tool_streak == 1 else f"{tool_streak} days",
+                "detail": "consecutive days with local AI use",
+            },
+            {
+                "id": "tool_range",
+                "label": "Tool range",
+                "value": f"{len(clients)}/{len(CLIENTS)}",
+                "detail": "supported tools used this week",
+            },
+        ],
+    }
+
+
 def report_lines(now=None):
     now = _coerce_now(now)
 
@@ -478,10 +689,13 @@ def report_lines(now=None):
     week_tokens = _sum_days(rows, week, now)
     month_tokens = _sum_days(rows, month, now)
     last_month_tokens = _sum_days(rows, last_month, month)
+    month_client_tokens = _counts_days(rows, month, now)
 
     lines = [
-        f"{'Token Usage':<16}{now.strftime('%Y-%m-%d %H:%M %Z')}",
+        f"Token Usage · {now.strftime('%Y-%m-%d %H:%M %Z')}",
+        "💰 = 100M tokens · ✨ = weekly total",
         "",
+        "Summary",
         f"{'Range':<14}{'Tokens':>8}",
         _summary_row("Today", today_tokens),
         _summary_row("Yesterday", yesterday_tokens),
@@ -489,10 +703,12 @@ def report_lines(now=None):
         _summary_row("This month", month_tokens),
         _summary_row("Last month", last_month_tokens),
         "",
-        "Daily Timeline",
-        f"{'Date':<{TIMELINE_LABEL_W}}{'Total':>{NUM_W}}"
+        *_client_mix_lines("This month by supported tool", month_client_tokens),
+        "",
+        "Timeline",
+        f"{'Day / Week':<{TIMELINE_LABEL_W}}{'Total':>{NUM_W}}"
         f"{'Claude':>{NUM_W}}{'Codex':>{NUM_W}}{'Auggie':>{NUM_W}}"
-        f"{'Gemini':>{NUM_W}}{'Other':>{NUM_W}}",
+        f"{'Gemini':>{NUM_W}}",
     ]
 
     day = _day_start(now)
@@ -500,7 +716,7 @@ def report_lines(now=None):
         key = day.date().isoformat()
         vals = rows.get(key, _empty_day_counts())
         total = _total_tokens(vals)
-        if total or day >= last_month:
+        if total or day.date() == today.date():
             lines.append(_timeline_row(key, vals))
         week_start = day - timedelta(days=day.weekday())
         visible_week_start = max(week_start, timeline_start)
@@ -508,13 +724,15 @@ def report_lines(now=None):
             visible_last_day = min(week_start + timedelta(days=6), today)
             week_end = min(week_start + timedelta(days=7), now)
             weekly = _counts_days(rows, visible_week_start, week_end)
-            lines.append(_timeline_row(
-                _week_label(visible_week_start, visible_last_day, today),
-                weekly,
-                weekly=True,
-            ))
-            if day > timeline_start:
-                lines.append(_timeline_rule())
+            weekly_total = _total_tokens(weekly)
+            if weekly_total or visible_last_day.date() == today.date():
+                lines.append(_timeline_row(
+                    _week_label(visible_week_start, visible_last_day, today),
+                    weekly,
+                    weekly=True,
+                ))
+                if day > timeline_start:
+                    lines.append(_timeline_rule())
         day -= timedelta(days=1)
 
     if not any(sum(vals.get(client, 0) for client in CLIENTS) for vals in rows.values()):

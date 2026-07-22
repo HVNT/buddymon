@@ -15,6 +15,17 @@ a small pokemon-style statusline/menu-bar game.
   `~/.local/state/buddymon/`.
 - Do not fetch network assets unless the user explicitly asks for an asset
   setup command such as `/buddymon:official`.
+- Native UI must always use `BuddyMonBrand` from `BrandStyle.swift`. Do not add
+  local palettes, theme enums, direct font choices, one-off corner radii, or a
+  second spacing system. Read `docs/brand.md` before changing native UI and add
+  every new component or state to the Brand Styles preview in the same change.
+- Brand Styles preview components must use the same `BuddyMonBrand` factories
+  as shipping UI. Run `scripts/capture-brand-styles.sh` and
+  `scripts/capture-menu-panel.sh`; run the menu panel and menu-bar state
+  harness captures when their shipping states change. Inspect the relevant
+  PNGs whenever native visual behavior changes.
+- `StyleArchivePreview.swift` is historical and non-normative. Never copy its
+  local values into shipping UI.
 - Do not stage unrelated dirty files. This repo often has small local polish
   changes in progress.
 
@@ -44,6 +55,8 @@ a small pokemon-style statusline/menu-bar game.
 - Update `docs/architecture.md`, `docs/development.md`,
   `docs/troubleshooting.md`, `docs/assets.md`, or `commands/*.md` when code
   changes make those docs stale.
+- Update `docs/brand.md` whenever a native visual token, semantic color use,
+  shared treatment, component, or state changes.
 - Use local ignored `plans/` for scoped implementation gameplans that are likely
   to be built. Use local ignored `ideas/` for exploratory or optional product
   notes that should be kept out of the public tree until explicitly promoted.

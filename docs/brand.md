@@ -1,0 +1,269 @@
+# Brand Styles
+
+BuddyMon's native brand system is **BuddyMon Brand**. Its primary menu-bar
+expression is the **Field Guide** skin. The older **Redline Mono** explorations
+survive only in developer previews and the historical Style Archive. This
+document is normative.
+The single source of truth for implementation is
+`macos/BuddyMonApp/Sources/BuddyMonApp/BrandStyle.swift`.
+
+This contract governs the native macOS shell. Terminal, statusline, and
+SwiftBar surfaces follow the same semantic color restraint and product voice,
+but do not import AppKit tokens.
+
+`BrandStylesPreview.swift` is the living, scrollable reference for shared
+components. Product-specific shipping components use dedicated state harnesses;
+the compact dropdown is covered by `MenuPanelStateHarnessView.swift`.
+`StyleArchivePreview.swift` preserves the three older explorations for history
+only; archived values are never implementation tokens. Neither preview is
+reachable from the shipping menu-bar panel.
+
+## Foundation
+
+- Use the local FireRed/LeafGreen-inspired bitmap display face for major compact
+  labels: mastheads, Pokémon names, dialogue signals, section titles, and
+  action labels. It uses light one-pixel strokes, proportional glyph widths,
+  open tracking, and a restrained one-pixel shadow without requiring an
+  installed or downloaded font.
+- Use SF Mono for compact stats, metadata, token values, keyboard help, and
+  longer supporting copy.
+- Align content left. Keep one stable gutter and content column.
+- Use the `04 / 08 / 12 / 20 / 32 / 48 / 72` spacing rhythm. Major preview
+  sections use 72 points of vertical separation.
+- Use strong outlines, compact labels, mono type, and a stable left gutter.
+- Field Guide uses soft grouping and a few rounded tonal surfaces to echo
+  handheld-game dialogue and trainer-card layouts. Borders are exceptional,
+  not the default container treatment. Redline Mono's archived large-window
+  components remain square.
+- Terminal character comes from information density, concise labels, keyboard
+  syntax, and the reduced-motion-aware blinking block—not a black canvas or
+  ASCII decoration on every element.
+
+## Motion
+
+- Use `BuddyMonSectionRevealStackView` for vertically ordered cards or sections
+  that should enter together. Its default
+  `BuddyMonBrand.Motion.quickSectionReveal` style keeps every arranged view at
+  its final size and position, then fades rows in over 240 milliseconds,
+  staggered 55 milliseconds from top to bottom with an ease-in curve. Never
+  animate compact row geometry during entrance.
+- Compact screens reveal once when the dropdown opens or navigation presents a
+  different screen. A routine same-screen refresh must not replay the entrance.
+- Reduce Motion presents every section immediately. Animation never changes the
+  model-layer layout or final values, keeping static captures deterministic.
+
+## Color
+
+The Field Guide dropdown uses warm Pokémon off-white, charcoal ink, and neutral
+gray rules. It must remain readable without accent color.
+
+Color must communicate one of these approved meanings:
+
+- Charcoal: interface focus and primary encounter actions.
+- Pokemon red: urgent alerts or Fire Pokémon identity, never generic chrome.
+- Blue and green: Pokémon identity or the fixed rarity-code palette. Pikachu
+  yellow: Electric identity or the game's XP meter.
+- Pink: shiny, rare-Pokémon, or shiny-achievement signals only.
+- One-letter rarity markers use one fixed mapping: common neutral, uncommon
+  green, rare blue, legendary gold, mythic pink, and starter cyan.
+- Pokemon sprites and the selected emoji set may keep their native color.
+
+Do not color generic interface furniture, ordinary success states, or arbitrary
+categories. Views choose semantic tokens such as `focus`, `alert`,
+`xpProgress`, `dataProgress`, and `pokemonColor`; they do not choose colors by
+appearance.
+
+## Required Workflow
+
+All shipping native UI must use `BuddyMonBrand`. Never add a local palette,
+theme enum, hard-coded `NSColor`, direct font choice, one-off corner radius, or
+new spacing rhythm inside a view.
+
+When a native visual decision changes:
+
+1. Add or change the token or shared treatment in `BrandStyle.swift` first.
+2. Use that token from the shipping view.
+3. Add every relevant state and variation to the shared preview or the
+   product-specific shipping-component harness.
+4. Update this document and `docs/decisions.md` if the meaning changed.
+5. Update the native source tests so visual drift fails locally.
+
+Prefer `makeSurface`, `makeButton`, `makeField`, `makeControlLabel`,
+`pokemonColor`, and the semantic spacing roles before writing view-specific
+treatment code. Compact-dropdown work uses `BuddyMonBrand.Menu`, including its
+surface, action, progress, Pokémon-color, spacing, and geometry tokens. The
+visual harness must render the shipping component rather than a lookalike.
+
+`StyleArchivePreview.swift` is the only exception: it keeps old local colors
+and geometry as read-only historical evidence. No new UI may copy from it.
+
+The compact menu-bar panel is the primary everyday product expression of the
+system. Its Field Guide hierarchy is header, tonal buddy group, one-line field
+message, essential actions, compact utilities, then keyboard help. Recent-catch
+signals include the actual small Pokémon sprite. Compact encounter drill-ins
+use two sprite identities, optional HP bars, one dialogue line, one move row,
+and a single compact result. Keep Pokémon identity and the current signal ahead
+of setup or repair controls. No expanded native dashboard is part of the
+shipping product surface.
+
+The latest-catch row starts with its chevron at the content edge, then uses
+explicit spacing columns for the caught sprite, neutral-ink `LAST CATCH` label,
+Pokémon name, and rarity. Do not hide alignment inside spaces in one string.
+A single rarity code follows the Pokémon name: `C`, `U`, `R`, `L`, `M`, or `S`.
+Only that code uses the rarity's semantic color.
+Battle identity rows and encounter results use the same rule: Pokémon names and
+outcome copy stay neutral, with one adjacent rarity code carrying the color.
+
+The compact panel is 304 points wide. Root navigation uses six real accessible
+controls styled as links in a square 3-by-2 grid. Each link is 22 points tall,
+has no corner radius or resting button fill, and keeps one subtle neutral rule.
+Hover adds a quiet surface wash and one-point lift over 120 milliseconds;
+Reduce Motion keeps the link stationary. Primary and encounter actions retain
+the standard 32-point button treatment.
+The compact root, Token Usage, Settings, Battle, and Battle Result stacks sit
+inside the same 288-point striped Field Guide frame used by the Trainer Card,
+leaving an eight-point canvas reveal on each side. Their existing hierarchies
+stay intact; one shared border, surface, section rhythm, and dark display
+masthead provide the card-like structure without adding nested containers. The
+root view uses the shared six-point compact inset at its outer edge; drill-ins
+retain their ten-point content inset.
+Token Usage keeps the standard 304-by-210-point compact panel size while its
+local report loads, after it resolves, and if the report fails. Loading and
+failure render inside the Field Guide card; they never install a standalone
+Redline surface as an intermediate frame. Its resolved hierarchy is
+three headline measures, a seven-day pulse with proportional daily bars, one
+context line for daily average, peak day, and active streak, then supported-tool
+share. The pulse and context use the structured local dashboard payload; they do
+not parse or duplicate terminal report copy. Because Token Usage is read-only,
+it has no generic arrow/Return instruction footer; the supported-tool share is
+its final bottom-anchored row, while Back and Escape remain available through
+the shared navigation behavior.
+Settings uses that same 304-by-210 contract for loading, all-preferences, and
+unavailable states. All seven preferences appear directly in one list using a
+shared treatment with a leading label and every allowed value visible on the
+same 18-point row. Each value is an individual text control with no resting fill or
+rounded button chrome. The active value uses darker bold type, an underline,
+and a leading chevron; inactive values remain muted. Every option owns its full
+pointing-hand hit target, hover may add a transient wash, and keyboard focus
+uses a square ink outline. Clicking an option or pressing Return sets that exact
+Python-validated value immediately and refreshes the list without replaying its
+entrance motion. Operational actions such as backup and setup do not masquerade
+as preferences.
+Those compact stacks use the shared quick section reveal, ordered from their
+top navigation or masthead through their final footer. Trainer uses the same
+treatment for its card sections.
+Every compact drill-in that returns to the root panel uses one navigation treatment:
+back chevron and display title on the same leading row, followed only by useful
+trailing context such as the Trainer ID. The back control remains first in the
+keyboard order; separate bottom Back or oversized Return Home actions are not
+used.
+The Trainer drill-in uses a 288-by-192-point, 3:2 card inside that panel. Its
+striped Field Guide surface contains one header, four fact rows, the exact
+64-point FireRed/LeafGreen Red card pose, a four-star achievement summary, one
+compact trainer-status rail, and one badge rail. A monochrome built-in figure
+remains the missing-resource fallback. The status rail turns the former blank
+middle band into four current, trainer-owned readouts: encounter mode, activity
+streak, available balls, and owned shiny count. Battle mode reports unlimited
+balls instead of implying that Safari inventory is consumed. Its 26-point
+shared treatment uses equal-width cells on a quiet raised surface with subtle
+top and bottom rules; it adds no nested card or new accent color. The rail is
+the deliberate exception to the drill-in's ten-point content gutter: it spans
+the full 288-point card and meets the black border on both sides, while its four
+stat columns remain centered on the card.
+It uses the same shared surface, type, spacing, and badge treatments as the
+shipping view. Nine badges are represented before National completion. Shiny
+National is omitted, not shown as a locked teaser, until National is earned;
+the National-complete harness state shows the resulting tenth position. Badge
+symbols sit centered inside 28-point circular medallions; the ten-badge state
+uses 25-point medallions so every center remains on one even rail. Text glyphs
+receive the shared one-point optical lift so their visible shapes, not their
+font boxes, sit in the circle's center. Opening the card gives each medallion a
+short staggered stamp, hovering gives it a slight lift, and earned shiny badges
+carry a slow low-opacity glow. All three motions are disabled by macOS Reduce
+Motion.
+Each medallion is also a real keyboard and pointer control. Selecting it updates
+the rail header with its earned state or requirement; tooltips retain the full
+badge name and description. The fact grid uses fixed label and value columns;
+the stars occupy the same right-aligned value column directly below NAME, while
+the portrait owns one separate trailing column. The status rail occupies the
+space between those facts and the bottom-anchored badge rail; flexible space is
+used only as a compatibility fallback for older payloads that do not provide
+trainer stats, and never appears below the badge rail.
+Inside the buddy identity column, the level and XP percentage share the same
+right edge. The XP bar flexes to fill all space between its label and value.
+The active-buddy group is a full-width raised row inside the Field Guide frame.
+It has square edges, no outer left or right inset, and only low-opacity one-point
+rules on its top and bottom. One six-point inner padding layer keeps its
+54-point Pokémon sprite aligned with the three-row identity stack, producing a
+fixed 66-point row. Panel minimum-height slack must never stretch that bottom
+perimeter. There is no nested background or rounded sprite well.
+
+When a wild is waiting, its field message and primary action collapse into one
+dark clickable row with the wild sprite, shortcut, name, and waiting state. Do
+not repeat the encounter as a separate signal line above it.
+
+The root masthead stays visually subordinate and begins directly with the small
+FireRed/LeafGreen-style `BUDDYMON` wordmark—there is no decorative leading icon.
+A steady six-point semantic status dot follows it: green when the app has an
+active local status, red when local status is unavailable, and neutral only
+while status is starting or loading. It does not blink. The far-right side is the complete clickable
+token summary: Tokens, Today, and Yesterday on one right-aligned baseline with
+no background, no separate Open label, and no second token card. The Tokens
+label stays smaller than its values. Refresh and Quit render as tiny `⌘R` and
+`⌘Q` footer commands, never as raised action cards. The buddy card ends after
+XP; trainer totals do not consume a separate row.
+
+The status item comes before either panel. Its frame art may preserve Pokémon
+color, but its text and macOS interaction chrome remain system-native. It uses
+the shared `menuBarIconHeight` geometry token, never template-tints sprite art,
+and exposes an accessibility label for every frame. When local Gen 5 art is
+installed, the status item and panel use that same species-specific source;
+shared legacy menu icons never displace more recognizable art. Short motion may
+communicate work, progress, encounters, catches, and evolution; persistent
+states settle, and every sequence defines a Reduce Motion frame. Catch motion
+may show the wild Pokémon during the action, but its result settles back on the
+active buddy. The caught Pokémon remains identifiable in the compact panel's
+recent-catch signal. Attention states draw one integrated alert mark in the
+frame and do not repeat the same `!` as adjacent status-bar text. Working state
+is communicated by the buddy's quiet bob alone, without an adjacent bullet.
+When the dropdown opens, it snapshots the status item's screen-space anchor.
+Refreshes, animation frames, and compact drill-ins reuse that anchor until the
+panel closes; the next closed-to-open transition captures a fresh position.
+
+## Visual QA
+
+Capture the entire scrollable reference as a PNG:
+
+```bash
+scripts/capture-brand-styles.sh
+scripts/capture-menu-bar-states.sh
+scripts/capture-menu-panel.sh
+scripts/capture-menu-panel-states.sh
+```
+
+The outputs are `.build/brand-styles.png`,
+`.build/menu-bar-state-harness.png`, `.build/menu-panel.png`,
+and `.build/menu-panel-states.png`. The menu-bar harness uses
+the shipping local-first art path and deterministic state fixtures; the compact
+panel capture reads local `app-status`; the compact-panel harness covers no
+starter, ready, recent, encounter, shiny, long-value, unavailable, Tokens,
+all-preferences Settings and Settings loading, minimal battle, caught and ran-away battle
+results, Trainer, and National-complete Trainer states. None changes game
+state. The macOS test suite renders these surfaces twice and requires
+byte-identical output and their canonical dimensions. It also enforces the
+component inventory and contrast rules.
+
+## Review Checklist
+
+- The screen and every component are left aligned.
+- Section spacing follows the shared rhythm and remains comfortably scannable.
+- Default chrome stays neutral; every accent color must have an approved
+  identity, rarity, progress, or alert meaning.
+- Focus, error, loading, and destructive meaning is never communicated by
+  color alone; pair it with borders, symbols, copy, or motion.
+- Keyboard focus, disabled, loading, empty, error, selected, and destructive
+  states are represented where applicable.
+- Emojis, built-in pixel fellows, and optional local PNG sprites appear in a
+  common product context when the component needs Pokemon identity.
+- Motion honors Reduce Motion, and shortcuts use macOS keys rather than PC
+  function-key conventions.

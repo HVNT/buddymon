@@ -38,7 +38,50 @@ def _atomic_write_json(path, obj, indent=None):
         raise
 
 
-STATE_VERSION = 3
+STATE_VERSION = 4
+VALID_MODES = ("auto", "safari", "battle")
+DEFAULT_MODE = "auto"
+DEFAULT_PREFERENCES = {
+    "notifications": "on",
+    "menu_launcher": "auto",
+    "terminal_graphics": "auto",
+    "menu_replace": "on",
+    "share_reveal": "on",
+    "share_banner": "on",
+}
+PREFERENCE_VALUES = {
+    "notifications": ("on", "silent", "off"),
+    "menu_launcher": ("auto", "ghostty", "iterm", "terminal"),
+    "terminal_graphics": ("auto", "off"),
+    "menu_replace": ("on", "off"),
+    "share_reveal": ("on", "off"),
+    "share_banner": ("on", "off"),
+}
+
+
+def _validated_mode(value):
+    return value if value in VALID_MODES else DEFAULT_MODE
+
+
+def _validated_preferences(value):
+    prefs = dict(value) if isinstance(value, dict) else {}
+    out = dict(DEFAULT_PREFERENCES)
+    for key, allowed in PREFERENCE_VALUES.items():
+        if prefs.get(key) in allowed:
+            out[key] = prefs[key]
+    return out
+
+
+def preferences(state):
+    """Validated preference dict for an already-loaded state object."""
+    if not isinstance(state, dict):
+        return dict(DEFAULT_PREFERENCES)
+    state["preferences"] = _validated_preferences(state.get("preferences"))
+    return state["preferences"]
+
+
+def preference(state, key):
+    return preferences(state).get(key, DEFAULT_PREFERENCES.get(key))
 
 
 def default_state():
@@ -54,7 +97,8 @@ def default_state():
         "active": None,  # pokemon id
         "pokemon": [],  # {id, name, emoji, type, rarity, level, xp, shiny, caught_at}
         "xp_sessions": {},  # session_id -> {"last_uuid": str, "updated": epoch}
-        "mode": "auto",  # "auto" (Safari) or "battle" (weaken-then-catch)
+        "mode": DEFAULT_MODE,  # "auto" (Quick), "safari", or "battle"
+        "preferences": dict(DEFAULT_PREFERENCES),
     }
 
 
@@ -87,6 +131,11 @@ def _migrate(state):
                 p["level"] = level
             p["xp"] = max(int(p.get("xp") or 0), engine.xp_for_level(level))
         state["version"] = 3
+        version = 3
+    state["mode"] = _validated_mode(state.get("mode"))
+    state["preferences"] = _validated_preferences(state.get("preferences"))
+    if version < 4:
+        state["version"] = 4
     return state
 
 

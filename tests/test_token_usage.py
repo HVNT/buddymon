@@ -49,22 +49,56 @@ def test_compact_token_format_uses_four_digit_suffix_windows():
         assert token_usage._fmt_compact(value) == expected
 
 
-def test_money_markers_use_billions_then_remaining_hundred_millions():
+def test_money_markers_use_hundred_millions_wrapped_by_billions():
     assert token_usage._money_markers(99_999_999) == ""
     assert token_usage._money_markers(100_000_000) == "💰"
     assert token_usage._money_markers(999_999_999) == "💰" * 9
-    assert token_usage._money_markers(1_000_000_000) == "🤑"
-    assert token_usage._money_markers(1_200_000_000) == "🤑💰💰"
-    assert token_usage._money_markers(2_900_000_000) == "🤑🤑" + ("💰" * 9)
+    assert token_usage._money_markers(1_000_000_000) == "💰" * 10
+    assert token_usage._money_markers(1_200_000_000) == ("💰" * 10) + "\n💰💰"
+    assert token_usage._money_markers(2_900_000_000) == (
+        ("💰" * 10) + "\n" + ("💰" * 10) + "\n" + ("💰" * 9)
+    )
 
 
 def test_summary_row_marks_only_daily_and_weekly_ranges():
     assert token_usage._summary_row("This month", 999_999_999).endswith("999M")
     assert token_usage._summary_row("Today", 100_000_000).split()[-1] == "💰"
-    assert token_usage._summary_row("Yesterday", 1_200_000_000).split()[-1] == "🤑💰💰"
-    assert token_usage._summary_row("This week", 2_000_000_000).split()[-1] == "🤑🤑"
+    yesterday_prefix = "Yesterday        1.20B "
+    assert token_usage._summary_row("Yesterday", 1_200_000_000).splitlines()[-2:] == [
+        yesterday_prefix + ("💰" * 10),
+        (" " * len(yesterday_prefix)) + "💰💰",
+    ]
+    this_week_prefix = "This week        2.00B "
+    assert token_usage._summary_row("This week", 2_000_000_000).splitlines()[-2:] == [
+        this_week_prefix + ("💰" * 10),
+        (" " * len(this_week_prefix)) + ("💰" * 10),
+    ]
     assert token_usage._summary_row("This month", 1_000_000_000).split()[-1] == "1.00B"
     assert token_usage._summary_row("Last month", 4_300_000_000).split()[-1] == "4.30B"
+
+
+def test_timeline_marker_wrap_keeps_marker_column_indent():
+    vals = {client: 0 for client in token_usage.CLIENTS}
+    vals["Claude"] = 1_200_000_000
+
+    first, second = token_usage._timeline_row("2026-06-22", vals).splitlines()
+    marker_col = first.index("💰")
+
+    assert first.endswith(" " + ("💰" * 10))
+    assert second == (" " * marker_col) + "💰💰"
+
+
+def test_client_mix_lines_show_nonzero_sources_by_share():
+    vals = {client: 0 for client in token_usage.CLIENTS}
+    vals["Claude"] = 75
+    vals["Codex"] = 25
+
+    assert token_usage._client_mix_lines("This month by client", vals) == [
+        "This month by client",
+        "Tool          Tokens  Share           Pct",
+        "Claude Code       75  ###########...  75%",
+        "Codex CLI         25  ####..........  25%",
+    ]
 
 
 def test_current_day_totals_returns_today_and_yesterday(tmp_path, monkeypatch):
@@ -110,6 +144,117 @@ def test_current_day_totals_returns_today_and_yesterday(tmp_path, monkeypatch):
         "today": 375,
         "yesterday": 55,
     }
+
+
+def test_dashboard_builds_daily_mix_trend_and_insights(monkeypatch):
+    rows = {
+        "2026-06-10": {"Claude": 200},
+        "2026-06-12": {"Codex": 300},
+        "2026-06-16": {"Claude": 100},
+        "2026-06-17": {"Codex": 200},
+        "2026-06-19": {"Claude": 300},
+        "2026-06-21": {"Codex": 400},
+        "2026-06-22": {"Codex": 500},
+    }
+    monkeypatch.setattr(
+        token_usage,
+        "cached_daily_counts",
+        lambda _start, _end: rows,
+    )
+
+    now = datetime(2026, 6, 22, 12, tzinfo=token_usage.LOCAL_TZ)
+    dashboard = token_usage.dashboard(now)
+
+    assert dashboard["range"] == {
+        "days": 7,
+        "label": "Last 7 days",
+        "start": "2026-06-16",
+        "end": "2026-06-22",
+    }
+    assert [day["date"] for day in dashboard["daily"]] == [
+        "2026-06-16",
+        "2026-06-17",
+        "2026-06-18",
+        "2026-06-19",
+        "2026-06-20",
+        "2026-06-21",
+        "2026-06-22",
+    ]
+    assert dashboard["today"]["tokens"] == 500
+    assert dashboard["total"] == {"tokens": 1500, "compact": "1,500"}
+    assert dashboard["comparison"][1]["tokens"] == 500
+    assert dashboard["trend"] == {
+        "direction": "up",
+        "change_percent": 200,
+        "value": "+200%",
+        "detail": "vs prior 7 days",
+    }
+    assert dashboard["clients"][:2] == [
+        {
+            "id": "codex",
+            "label": "Codex CLI",
+            "tokens": 1100,
+            "compact": "1,100",
+            "percent": 73,
+        },
+        {
+            "id": "claude-code",
+            "label": "Claude Code",
+            "tokens": 400,
+            "compact": "400",
+            "percent": 27,
+        },
+    ]
+    assert dashboard["insights"] == [
+        {
+            "id": "peak",
+            "label": "Busiest day",
+            "value": "Today",
+            "detail": "500 tokens",
+        },
+        {
+            "id": "average",
+            "label": "Daily average",
+            "value": "214",
+            "detail": "across 7 days",
+        },
+        {
+            "id": "active_days",
+            "label": "Active days",
+            "value": "5/7",
+            "detail": "days with local usage",
+        },
+        {
+            "id": "top_client",
+            "label": "Top tool",
+            "value": "Codex CLI",
+            "detail": "73% of usage",
+        },
+        {
+            "id": "active_streak",
+            "label": "Active streak",
+            "value": "2 days",
+            "detail": "consecutive days with local AI use",
+        },
+        {
+            "id": "tool_range",
+            "label": "Tool range",
+            "value": "2/4",
+            "detail": "supported tools used this week",
+        },
+    ]
+    assert dashboard["supported_tools"] == [
+        {"id": "claude-code", "label": "Claude Code"},
+        {"id": "codex", "label": "Codex CLI"},
+        {"id": "auggie", "label": "Auggie"},
+        {"id": "gemini-cli", "label": "Gemini CLI"},
+    ]
+    assert dashboard["tool_rhythm"]["tools"] == [
+        {"id": "claude-code", "label": "Claude Code", "values": [100, 0, 0, 300, 0, 0, 0]},
+        {"id": "codex", "label": "Codex CLI", "values": [0, 200, 0, 0, 0, 400, 500]},
+    ]
+    assert len(dashboard["history"]) == 28
+    assert len(dashboard["weekly"]) == 4
 
 
 def test_token_report_groups_by_local_calendar_ranges(tmp_path, monkeypatch):
@@ -171,6 +316,12 @@ def test_token_report_groups_by_local_calendar_ranges(tmp_path, monkeypatch):
     now = datetime(2026, 6, 22, 12, tzinfo=token_usage.LOCAL_TZ)
     lines = token_usage.report_lines(now)
 
+    assert lines[:4] == [
+        "Token Usage · 2026-06-22 12:00 PDT",
+        "💰 = 100M tokens · ✨ = weekly total",
+        "",
+        "Summary",
+    ]
     assert line_starting(lines, "Range").split() == ["Range", "Tokens"]
     assert line_starting(lines, "Today").split() == [
         "Today", "2,300",
@@ -187,26 +338,31 @@ def test_token_report_groups_by_local_calendar_ranges(tmp_path, monkeypatch):
     assert line_starting(lines, "Last month").split() == [
         "Last", "month", "1.00B",
     ]
+    assert "This month by supported tool" in lines
+    assert line_starting(lines, "Claude Code").split()[:3] == ["Claude", "Code", "1,150"]
+    assert line_starting(lines, "Codex CLI").split()[:3] == ["Codex", "CLI", "1,725"]
+    assert "Timeline" in lines
     assert line_starting(lines, "2026-06-22").split() == [
-        "2026-06-22", "2,300", "575", "1,725", "0", "0", "0",
+        "2026-06-22", "2,300", "575", "1,725", "0", "0",
     ]
     assert line_starting(lines, "WEEK Jun22-now").split() == [
-        "WEEK", "Jun22-now", "2,300", "575", "1,725", "0", "0", "0", "✨",
+        "WEEK", "Jun22-now", "2,300", "575", "1,725", "0", "0", "✨",
     ]
     week_i = lines.index(line_starting(lines, "WEEK Jun22-now"))
     assert set(lines[week_i + 1]) == {"-"}
     assert line_starting(lines, "WEEK Jun15-21").split() == [
-        "WEEK", "Jun15-21", "575", "575", "0", "0", "0", "0", "✨",
+        "WEEK", "Jun15-21", "575", "575", "0", "0", "0", "✨",
     ]
     assert line_starting(lines, "2026-06-01").split() == [
-        "2026-06-01", "575", "0", "0", "575", "0", "0",
+        "2026-06-01", "575", "0", "0", "575", "0",
     ]
+    assert not any(line.startswith("2026-06-20") for line in lines)
     assert line_starting(lines, "2026-05-31").split() == [
-        "2026-05-31", "1.00B", "0", "0", "0", "1.00B", "0", "🤑",
+        "2026-05-31", "1.00B", "0", "0", "0", "1.00B", "💰" * 10,
     ]
     assert line_starting(lines, "WEEK May25-31").split() == [
-        "WEEK", "May25-31", "1.00B", "0", "0", "0", "1.00B", "0",
-        "🤑✨",
+        "WEEK", "May25-31", "1.00B", "0", "0", "0", "1.00B",
+        ("💰" * 10) + "✨",
     ]
 
 

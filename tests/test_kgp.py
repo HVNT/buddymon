@@ -139,6 +139,31 @@ def test_draw_places_images_by_visible_column_not_ansi_string_index():
     assert "\x1b[1;7H\x1b_Ga=T" in out
 
 
+def test_draw_places_second_same_row_image_after_prior_reserved_cells():
+    try:
+        tui._GRAPHICS = True
+        tui._frame_images[:] = [
+            (b"\x89PNG\r\n\x1a\n", 24, 10),
+            (b"\x89PNG\r\n\x1a\n", 24, 10),
+        ]
+        frame = "  |   \x01IMG0\x02                  |   |   \x01IMG1\x02                  |"
+
+        buf = io.StringIO()
+        real = sys.stdout
+        sys.stdout = buf
+        try:
+            tui._draw(frame)
+        finally:
+            sys.stdout = real
+        out = buf.getvalue()
+    finally:
+        tui._GRAPHICS = False
+        tui._frame_images.clear()
+
+    assert "\x1b[1;7H\x1b_Ga=T" in out
+    assert "\x1b[1;39H\x1b_Ga=T" in out
+
+
 def test_sprite_card_graphics_mode_uses_terminal_row_budget():
     old_cell = tui._CELL_PX
     try:

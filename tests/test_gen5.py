@@ -1,5 +1,4 @@
 """Animated Gen 5 pack: GIF coalesce/subsample/quantize + loader fallback."""
-import io
 import json
 import sys
 from pathlib import Path
@@ -38,6 +37,27 @@ def test_frames_pack_subsamples_and_aligns(tmp_path):
     for grid, palette in frames:
         chars = {c for row in grid for c in row} - {"."}
         assert chars <= set(palette)
+
+
+def test_gen5_installer_uses_xdg_aware_pack_root(tmp_path, monkeypatch):
+    from lib import paths
+    from tools import fetch_gen5
+
+    state_dir = tmp_path / "xdg-state" / "buddymon"
+    monkeypatch.setattr(paths, "STATE_DIR", state_dir)
+    monkeypatch.setattr(fetch_gen5, "MAX_DEX", 1)
+    monkeypatch.setattr(fetch_gen5, "dex_names", lambda: {1: "Pikachu"})
+    monkeypatch.setattr(fetch_gen5, "fetch", lambda _url: b"local fixture")
+    monkeypatch.setattr(
+        fetch_gen5,
+        "frames_pack",
+        lambda _blob: [(["a"], {"a": "#ffff00"})],
+    )
+
+    fetch_gen5.main()
+
+    output = state_dir / "packs" / "gen5" / "pikachu.json"
+    assert json.loads(output.read_text(encoding="utf-8"))["frames"]
 
 
 def _entry(c="#111111"):

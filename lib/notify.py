@@ -13,6 +13,7 @@ import shutil
 import subprocess
 
 from . import menu_launcher
+from . import state as st
 
 
 def open_menu_cmd(initial_screen=None):
@@ -21,26 +22,64 @@ def open_menu_cmd(initial_screen=None):
     return menu_launcher.open_menu_cmd(initial_screen)
 
 
-def open_menu(initial_screen=None):
+def open_menu(
+    initial_screen=None,
+    launcher="auto",
+    replace_owned=True,
+    window_frame=None,
+):
     try:
-        menu_launcher.open_menu(initial_screen)
+        return bool(
+            menu_launcher.open_menu(
+                initial_screen,
+                launcher=launcher,
+                replace_owned=replace_owned,
+                window_frame=window_frame,
+            )
+        )
     except Exception:
-        pass
+        return False
 
 
-def notify(title, text):
+def _notification_mode(state=None, notifications=None):
+    if notifications in st.PREFERENCE_VALUES["notifications"]:
+        return notifications
+    if isinstance(state, dict):
+        return st.preference(state, "notifications")
+    return st.DEFAULT_PREFERENCES["notifications"]
+
+
+def notify(title, text, state=None, notifications=None):
+    mode = _notification_mode(state, notifications)
+    if mode == "off":
+        return
     tn = shutil.which("terminal-notifier")
     if tn:
         try:
+            args = [tn, "-title", title, "-message", text]
+            if mode == "on":
+                args += ["-sound", "Glass"]
+            args += ["-execute", open_menu_cmd()]
             subprocess.run(
-                [tn, "-title", title, "-message", text,
-                 "-sound", "Glass", "-execute", open_menu_cmd()],
+                args,
                 capture_output=True, timeout=3)
             return
         except Exception:
             pass
-    script = (f'display notification "{_esc(text)}" '
-              f'with title "{_esc(title)}" sound name "Glass"')
+    script = f'display notification "{_esc(text)}" with title "{_esc(title)}"'
+    if mode == "on":
+        script += ' sound name "Glass"'
+    try:
+        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=3)
+    except Exception:
+        pass
+
+
+def banner(title, text, sound=False):
+    """Best-effort one-way banner for explicit user actions."""
+    script = f'display notification "{_esc(text)}" with title "{_esc(title)}"'
+    if sound:
+        script += ' sound name "Glass"'
     try:
         subprocess.run(["osascript", "-e", script], capture_output=True, timeout=3)
     except Exception:

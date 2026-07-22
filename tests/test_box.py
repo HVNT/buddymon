@@ -1,5 +1,4 @@
 """Box (PokéSprite 40x30 unique) pack: quantizer + loader fallback."""
-import io
 import json
 import sys
 from pathlib import Path

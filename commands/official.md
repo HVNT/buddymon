@@ -1,9 +1,14 @@
 ---
-description: Download the official Gen 2 menu icons (one-time, network)
+description: Download the nicer local sprite packs (one-time, network)
 ---
 
-Tell the user this downloads Nintendo sprite assets (Gen 2 menu icons from the pret/pokecrystal disassembly + PokéSprite palettes) from GitHub into `~/.local/state/buddymon/packs/` — local only, never committed. If they confirm, run:
+Tell the user this downloads Nintendo sprite assets from GitHub into BuddyMon's
+local XDG state directory (normally `~/.local/state/buddymon/packs/`) and never
+commits them. If they confirm, run:
 
-`uv run --with pillow --no-project python3 "${CLAUDE_PLUGIN_ROOT}/tools/fetch_official.py"`
+`python3 "${CLAUDE_PLUGIN_ROOT}/buddymon.py" install-assets`
 
-and show the summary line. The statusline switches to the official icons automatically on the next render.
+and show the summary lines. This installs only missing packs. Use `--refresh`
+only when the user explicitly asks to refresh every pack; `--force` is a
+compatibility alias. BuddyMon switches to the nicer local art automatically on
+the next render.

@@ -1,9 +1,8 @@
 """Sprite pack loading. Packs are generated JSON under state (see
 tools/fetch_official.py) — runtime stays stdlib-only and network-free."""
 import json
-import re
 
-from . import paths, sprites
+from . import paths, species, sprites
 
 _cache = {}  # also holds gen5 lazy state under "__gen5_species__"/"__gen5_mono__"
 
@@ -25,7 +24,7 @@ def load(name="gen2"):
 
 
 def _gen5_slug(name):
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return species.slug(name)
 
 
 def _gen5_entry(name):
@@ -118,3 +117,16 @@ def gen5_frames(name, ptype="Normal", shiny=False):
         key = "shiny_frames" if shiny and entry.get("shiny_frames") else "frames"
         return [tuple(fr) for fr in entry[key]]
     return box_frames(name, ptype, shiny)
+
+
+def menu_bar_frames(name, ptype="Normal", shiny=False):
+    """Compact species art for the native status item.
+
+    Prefer the same recognizable Gen 5 source used by native Pokemon panels,
+    then inherit its box > Gen 2 > built-in fallback chain. Every frame is fit
+    to the status compositor without changing its palette.
+    """
+    return [
+        (_fit_compact(grid), palette)
+        for grid, palette in gen5_frames(name, ptype, shiny)
+    ]

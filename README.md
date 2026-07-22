@@ -1,181 +1,146 @@
 # BuddyMon
 
-A tiny pixel buddy for your AI coding sessions.
+BuddyMon turns local AI coding activity into a small Pokémon-style companion. It
+runs as a Claude Code plugin, a terminal game, or a local macOS app.
 
-BuddyMon tracks your local coding activity, levels up, evolves, and catches
-wild Pokemon while you work.
+![BuddyMon battle screen](docs/screenshots/buddymon-main.png)
 
-![BuddyMon preview](docs/screenshots/buddymon-main.png)
+## Install
 
-## ⚡ Install
+### macOS app
 
-Clone BuddyMon:
+Build and install the self-contained friend version:
 
-```sh
-git clone https://github.com/HVNT/buddymon.git ~/buddymon
+```bash
+scripts/build-macos-app.sh --friend --install --open
 ```
 
-Install it:
+The app includes its own Python runtime and lives in the menu bar without a
+Dock icon or standalone app window. Launching it starts the buddy without
+opening UI. On first run, click the egg to open **First Signal** and choose a
+starter. Built-in fallback art works immediately. Optional art is downloaded
+only when you explicitly run `/buddymon:official` or `install-assets`.
 
-```sh
+Click the menu-bar buddy for the compact everyday dropdown. A waiting wild
+Pokémon becomes its first action; otherwise the panel stays focused on your
+buddy, progress, latest catch, compact Token Usage, native Trainer Card, six
+quick links, Refresh, and Quit. There is no separate expanded native dashboard.
+The Trainer Card includes live mode, streak, ball inventory, shiny count, and
+collection-backed achievement badges without inventing a trainer level.
+Recent catches show their small pixel sprite plus one colored rarity letter.
+Waiting encounters, their minimal move buttons, and results stay inside the
+same dropdown; arrow keys move and Return or Space selects. Tokens, Today, and
+Yesterday form one right-aligned, backgroundless masthead control. Major labels
+use the local FireRed/LeafGreen-style pixel face; Refresh and Quit are quiet
+`⌘R` and `⌘Q` footer commands.
+
+Trainer opens a native 3:2 card with local collection facts and selectable
+achievement medallions. Selecting a badge shows its earned state or unlock
+requirement; its subtle motion honors Reduce Motion. Settings opens one native
+compact list with all seven preferences. Every allowed option is visible, the
+active one is marked, and every change applies immediately. Party, Box, Pokédex,
+and Activity remain explicit terminal shortcuts for people who want them.
+
+The menu-bar buddy is a real game surface, not a static launcher icon. It rests,
+works, gains XP, levels, reacts to encounters, catches Pokémon, and plays short
+evolution moments. These states use installed local sprite art when available
+and the built-in pixel pack otherwise. Reduce Motion shows a representative
+static frame.
+
+The current app is unsigned and not notarized, so macOS may ask you to approve
+it the first time.
+
+### Claude Code plugin
+
+```bash
+git clone https://github.com/HVNT/buddymon.git ~/buddymon
+cd ~/buddymon
+claude
+```
+
+Then run:
+
+```text
 /plugin marketplace add ~/buddymon
 /plugin install buddymon@buddymon
-```
-
-Restart your coding app, then choose a starter:
-
-```sh
-/buddymon:choose pikachu
-```
-
-Other starters:
-
-```sh
-/buddymon:choose charmander
 /buddymon:choose bulbasaur
-/buddymon:choose squirtle
-/buddymon:choose eevee
 ```
 
-That is it. Your buddy is now alive.
+Other starters: `charmander`, `squirtle`, `pikachu`, and `eevee`.
 
-## ✨ What It Does
+## What It Does
 
-- 🐣 Gives you a starter Pokemon
-- 📈 Levels up as you work
-- 🌱 Evolves over time
-- 🐾 Finds wild Pokemon
-- ⭐ Lets you favorite and switch buddies
-- 📦 Keeps every Pokemon you catch
-- 📖 Saves your journey history
-- 🪙 Shows local token usage
-- 💤 Reacts when you are idle
-- ⚔️ Has optional Battle Mode
+- Converts local token use into XP and levels.
+- Starts wild encounters while you work.
+- Supports Quick, Safari, and Battle encounter modes.
+- Tracks a party, storage box, Pokédex, journal, and token totals.
+- Includes a curated Showcase with local PNG sharing.
+- Keeps preferences, progress, and history on your machine.
 
-## 🖼 Screenshots
-
-### Statusline
-
-![Statusline](docs/screenshots/statusline.png)
-
-### Menu Bar
-
-![Menu bar](docs/screenshots/menu-bar.png)
-
-### Terminal Menu
+![BuddyMon Showcase](docs/screenshots/showcase.png)
 
 ![Terminal menu](docs/screenshots/terminal-menu.png)
 
-### Wild Encounter
-
-![Wild encounter](docs/screenshots/encounter.png)
-
-### Token Report
-
 ![Token report](docs/screenshots/token-report.png)
 
-## 🧩 Works With
+## Works With
 
-| App | Supported |
-|---|---|
-| Claude Code | Yes |
-| Codex | Yes |
-| Auggie | Yes |
-| Gemini | Limited |
-| Cursor | Limited |
+| Client | Progress | Token report |
+| --- | --- | --- |
+| Claude Code | Yes | Yes |
+| Codex CLI | Yes | Yes |
+| Auggie | Yes | Yes |
+| Gemini CLI | No | Yes |
 
-## 🔒 Privacy
+Token Usage is intentionally limited to those four local tools. It does not
+guess at unknown sources or show model names unless their local records expose
+them reliably.
 
-**BuddyMon does not edit your AI tool settings.**
+## Privacy
 
-**BuddyMon does not send your game state anywhere.**
+Normal play reads local transcripts and local BuddyMon state. It does not upload
+game state, rewrite AI-tool settings, or require a BuddyMon account.
 
-**BuddyMon only uses the network if you manually run the optional sprite download command.**
+Network access happens only when you explicitly install or refresh optional art.
+The friend build may also download its private Python runtime while packaging.
+Persistent background collection is opt-in through `collector install`.
 
-BuddyMon installs through its own plugin files and saves its game data locally.
+## Common Commands
 
-## 🎮 Common Commands
+| Command | Purpose |
+| --- | --- |
+| `/buddymon:status` | Show the current buddy and encounter |
+| `/buddymon:dex` | Open the Pokédex |
+| `/buddymon:history` | Show the journey journal |
+| `/buddymon:switch <name>` | Change the active buddy |
+| `/buddymon:mode <quick\|safari\|battle>` | Change encounter mode |
+| `/buddymon:official` | Install optional art |
+| `python3 buddymon.py menu` | Open the terminal menu |
+| `python3 buddymon.py tokens` | Show local token totals |
+| `python3 buddymon.py install-assets [--refresh]` | Install optional art |
+| `python3 buddymon.py collector install\|status\|uninstall` | Manage background collection |
 
-| Command | What it does |
-|---|---|
-| `/buddymon:status` | Show your buddy |
-| `/buddymon:dex` | Show your Pokedex |
-| `/buddymon:history` | Show recent catches and evolutions |
-| `/buddymon:switch pikachu` | Switch active buddy |
-| `/buddymon:mode battle` | Turn on Battle Mode |
-| `/buddymon:official` | Download optional official-style sprites |
+The collector command creates a per-user LaunchAgent only when you ask for it.
+Manual `collect` runs immediately; app and background collection share a
+locked five-minute schedule gate.
 
-## 🧭 Full Menu
+## Local Data
 
-Open the full BuddyMon menu:
+State, journal history, and optional asset packs live under
+`$XDG_STATE_HOME/buddymon`, or `~/.local/state/buddymon` when
+`XDG_STATE_HOME` is unset.
 
-```sh
-python3 buddymon.py menu
-```
+## Docs
 
-Open the token report:
-
-```sh
-python3 buddymon.py tokens
-```
-
-The full menu includes your party, box, Pokedex, journal, settings, token
-reports, and any waiting encounter. It looks best in Ghostty because Ghostty can
-render real inline images. iTerm2 is also supported. Plain terminals fall back
-to text-safe pixel art.
-
-## 🎨 Optional Sprite Pack
-
-BuddyMon works out of the box.
-
-For nicer official-style icons:
-
-```sh
-/buddymon:official
-```
-
-These assets are saved locally and are not committed to the repo.
-
-## 🧰 Details
-
-BuddyMon saves your game locally here:
-
-```sh
-~/.local/state/buddymon/state.json
-```
-
-Journey history is saved here:
-
-```sh
-~/.local/state/buddymon/journal.jsonl
-```
-
-State is shared across supported local tools, so one buddy follows your local
-AI coding sessions.
-
-More docs:
-
-- [docs/architecture.md](docs/architecture.md)
-- [docs/development.md](docs/development.md)
-- [docs/assets.md](docs/assets.md)
-- [docs/troubleshooting.md](docs/troubleshooting.md)
-- [docs/decisions.md](docs/decisions.md)
-- [CHANGELOG.md](CHANGELOG.md)
-
-## 🧪 Development
-
-Run tests:
-
-```sh
-uv run --with pytest --with pillow --no-project python3 -m pytest tests/ -q
-```
-
-Art QA:
-
-```sh
-python3 buddymon.py preview
-```
+- [Brand styles](docs/brand.md)
+- [macOS app](docs/macos-app.md)
+- [Assets](docs/assets.md)
+- [Architecture](docs/architecture.md)
+- [Development](docs/development.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Decisions](docs/decisions.md)
+- [Changelog](CHANGELOG.md)
 
 ## License
 
-MIT licensed.
+MIT. Pokémon names and artwork belong to their respective owners.

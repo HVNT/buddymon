@@ -17,14 +17,21 @@ def append(kind, text, data=None):
     return entry
 
 
-def tail(n=20):
-    """Most recent n entries, or the whole journal when n is None."""
+def tail(n=20, newest_first=False):
+    """Most recent n entries, or the whole journal when n is None.
+
+    By default, entries stay in file order for callers that need append order.
+    Pass newest_first=True for user-facing history views.
+    """
     try:
         lines = paths.JOURNAL_FILE.read_text(encoding="utf-8").splitlines()
     except OSError:
         return []
     entries = []
-    for line in (lines if n is None else lines[-n:]):
+    selected = lines if n is None else lines[-n:]
+    if newest_first:
+        selected = reversed(selected)
+    for line in selected:
         try:
             entries.append(json.loads(line))
         except json.JSONDecodeError:
@@ -90,11 +97,11 @@ def latest_evolution(within_secs, now=None):
 
 
 def is_rare(entry):
-    """Worth interrupting the user for: evolutions, shinies, rare appearances."""
+    """Worth interrupting the user for: evolutions, shinies, waiting wilds."""
     if entry["kind"] == "evolved":
         return True
     if entry.get("shiny"):
         return True
-    if entry["kind"] == "appeared":  # interactive spawns are always rare/legendary
+    if entry["kind"] == "appeared":  # an interactive encounter is waiting
         return True
     return entry["kind"] in ("caught", "fled", "no_balls") and entry.get("rarity") == "legendary"

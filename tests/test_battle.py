@@ -1,13 +1,12 @@
 """Battle Mode: combat state machine, mode gating, scene HP + throw render."""
 import base64
-import random
 import struct
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import battle, data, engine, packs, png, scene, state
+from lib import battle, data, engine, png, scene, state
 
 
 class SeqRandom:
@@ -48,6 +47,13 @@ def test_start_uses_spawn_level_and_clamps_to_species_stage():
     p = battle.start({**spawn(name="Charizard", ptype="Fire"), "level": 20}, buddy)
     assert p["wild_level"] == 36
     assert p["level"] == 36
+
+
+def test_start_caps_random_battle_spawn_level():
+    buddy = {"level": 100}
+    p = battle.start({**spawn(name="Absol", ptype="Dark"), "level": 99}, buddy)
+    assert p["wild_level"] == engine.WILD_LEVEL_CAP
+    assert p["level"] == engine.WILD_LEVEL_CAP
 
 
 def test_attack_lowers_wild_and_can_ko():
@@ -257,6 +263,25 @@ def test_recent_evolution_notice_persists_after_animation(tmp_path, monkeypatch)
     assert buddymon.EVENT_NOTICE_COLOR == "#1e3a8a"
 
 
+def test_swiftbar_waiting_encounter_bar_names_the_wild(monkeypatch):
+    import buddymon
+    s = fresh()
+    buddy = state.active_pokemon(s)
+    s["pending_encounter"] = {
+        "name": "Sawk",
+        "type": "Fighting",
+        "emoji": "🥋",
+        "rarity": "rare",
+        "shiny": False,
+    }
+    monkeypatch.setattr(buddymon.journal, "latest_evolution", lambda *a, **k: None)
+    monkeypatch.setattr(buddymon.journal, "latest_encounter", lambda *a, **k: None)
+
+    bar = buddymon._bar_line(s, buddy, [], 0)
+
+    assert bar.startswith("❗ Sawk | image=")
+
+
 def test_switch_submenu_lists_favorites_without_png():
     # The submenu is now the favorites shortlist. Per-row base64 PNGs made
     # SwiftBar hoard ~90 images and leak >1GB RAM, so child rows stay PNG-free.
@@ -305,7 +330,7 @@ def test_switch_submenu_caps_rows_and_links_to_party_menu():
     assert "terminal=false" in lines[-1]
 
 
-def test_swiftbar_dropdown_action_order_is_menu_tokens_then_switch_without_dex(monkeypatch):
+def test_swiftbar_dropdown_action_order_is_menu_showcase_tokens_then_switch_without_dex(monkeypatch):
     import buddymon
     monkeypatch.setattr(
         buddymon.token_usage,
@@ -319,14 +344,19 @@ def test_swiftbar_dropdown_action_order_is_menu_tokens_then_switch_without_dex(m
     lines = buddymon._dropdown_lines(s, buddy)
 
     open_i = next(i for i, line in enumerate(lines) if line.startswith("Open menu"))
+    showcase_i = next(i for i, line in enumerate(lines) if line.startswith("Showcase"))
     tokens_i = next(i for i, line in enumerate(lines) if line.startswith("Token Usage"))
     switch_i = next(i for i, line in enumerate(lines) if line.startswith("Switch buddy"))
     stats_i = next(i for i, line in enumerate(lines) if line.startswith("streak"))
     assert stats_i == open_i - 1
-    assert open_i < tokens_i < switch_i
+    assert open_i < showcase_i < tokens_i < switch_i
     assert "sfimage=gearshape" in lines[open_i]
     assert "param2=open-menu" in lines[open_i]
     assert "terminal=false" in lines[open_i]
+    assert "sfimage=rosette" in lines[showcase_i]
+    assert "param2=open-menu" in lines[showcase_i]
+    assert "param3=showcase" in lines[showcase_i]
+    assert "terminal=false" in lines[showcase_i]
     assert "sfimage=chart.bar" in lines[tokens_i]
     assert lines[tokens_i].startswith(
         "Token Usage · Today 208M · Yesterday 201M"
@@ -335,6 +365,7 @@ def test_swiftbar_dropdown_action_order_is_menu_tokens_then_switch_without_dex(m
     assert "param3=tokens" in lines[tokens_i]
     assert "terminal=false" in lines[tokens_i]
     assert not any(line.startswith("Pokédex") for line in lines)
+    assert not any(line.startswith("Share Showcase") for line in lines)
     assert not any(line.startswith("Tokens used") for line in lines)
     assert not any(line.startswith("SwiftBar") for line in lines)
 

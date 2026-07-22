@@ -136,13 +136,6 @@ def scale_grid(grid, factor):
     return out
 
 
-def pad_vertical(grid, top=2, bottom=2):
-    """Transparent breathing room: the menu bar scales images to fit its
-    height, so padding shrinks the visible sprite proportionally."""
-    blank = "." * len(grid[0])
-    return [blank] * top + list(grid) + [blank] * bottom
-
-
 THROW_SECS = 4  # phases 0..3: throw -> jiggle -> jiggle -> result
 
 
@@ -397,7 +390,6 @@ EVO_SHOCK = range(0, 3)
 EVO_FLASH = range(3, 6)
 EVO_MORPH = range(6, 9)
 EVO_REVEAL = range(9, 11)
-EVO_CELEBRATE = range(11, EVOLUTION_SECS)
 
 
 def silhouette(frame, color="#f8f8f8"):

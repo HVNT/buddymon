@@ -18,8 +18,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import paths, scene  # noqa: E402
-from tools.fetch_official import dex_species, pokesprite_slug, POKESPRITE_RAW  # noqa: E402
+from lib import assets, scene, species  # noqa: E402
+from tools.fetch_official import POKESPRITE_RAW  # noqa: E402
 
 # Reuse the compositor's char pool; '.' stays reserved for transparency.
 _POOL = scene._CHAR_POOL.replace(".", "")
@@ -33,7 +33,6 @@ def fetch(url):
 
 def quantize(img):
     """RGBA PokéSprite -> (grid, palette), cropped to content, '.' transparent."""
-    from PIL import Image
     img = img.convert("RGBA")
     bbox = img.getbbox()
     if bbox:
@@ -61,35 +60,36 @@ def quantize(img):
     return grid, palette
 
 
-def main():
+def main(pack_root=None):
     from PIL import Image
 
     pack = {}
-    for name in dex_species():
-        slug = pokesprite_slug(name)
+    for name in species.ALL_SPECIES:
+        slug = species.slug(name)
         entry = {}
-        for kind, key in (("regular", "palette_grid"), ("shiny", "shiny")):
+        for kind in ("regular", "shiny"):
             try:
                 png = fetch(f"{POKESPRITE_RAW}/icons/pokemon/{kind}/{slug}.png")
                 grid, palette = quantize(Image.open(io.BytesIO(png)))
             except Exception as e:
                 if kind == "regular":
-                    print(f"  MISS {name} ({slug}): {e}")
+                    raise RuntimeError(
+                        f"missing regular sprite for {name} ({slug}): {e}"
+                    ) from e
                 continue
             if kind == "regular":
                 entry["grid"], entry["palette"] = grid, palette
             else:
                 entry["shiny_grid"], entry["palette_shiny"] = grid, palette
-        if "grid" in entry:
-            pack[name] = entry
-            print(f"  {name:14} {len(entry['grid'][0])}x{len(entry['grid'])}"
-                  f"  {len(entry['palette'])} colors")
+        pack[name] = entry
+        print(f"  {name:14} {len(entry['grid'][0])}x{len(entry['grid'])}"
+              f"  {len(entry['palette'])} colors")
 
-    out = paths.STATE_DIR / "packs"
+    out = Path(pack_root) if pack_root is not None else assets.pack_root()
     out.mkdir(parents=True, exist_ok=True)
     (out / "box.json").write_text(json.dumps(pack), encoding="utf-8")
     print(f"\nwrote {out / 'box.json'} — {len(pack)} species")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(assets.installer_cli("box"))

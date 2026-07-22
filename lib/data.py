@@ -11,11 +11,10 @@ STARTERS = {
 
 # Eevee branches at level 25: engine picks one at random.
 EEVEE_BRANCHES = [("Vaporeon", "💧"), ("Jolteon", "⚡"), ("Flareon", "🔥")]
-EEVEE_EVOLVE_LEVEL = 25
 
 # Wild encounter pool: name -> (type, emoji, rarity). The full 649-species
 # National Dex, generated from PokéAPI by tools/gen_dex.py.
-from .dex_roster import DEX_NUMBERS, WILDS  # noqa: E402
+from .dex_roster import DEX_NUMBERS, WILDS  # noqa: E402, F401 - public re-export
 from .evolutions import EVOLUTIONS  # noqa: E402
 
 
@@ -53,11 +52,44 @@ PRE_EVOLUTION = _pre_evolution()
 
 RARITY_WEIGHTS = [("common", 70), ("uncommon", 20), ("rare", 8), ("legendary", 2)]
 
-# Safari Zone: rare/legendary spawns become interactive minigames instead of
-# auto-resolving. Tuning per rarity — base_c is the starting catch rate (0-255,
-# Gen 1 scale), flee_base the per-turn neutral flee probability.
+# BuddyMon fixed levels for legendary + mythical species. The roster currently
+# folds mythicals into the "legendary" rarity; these are representative static
+# encounter levels, capped to BuddyMon's wild-spawn ceiling.
+LEGENDARY_LEVELS = {
+    # Kanto
+    "Articuno": 50, "Zapdos": 50, "Moltres": 50,
+    "Mewtwo": 55, "Mew": 30,
+    # Johto
+    "Raikou": 40, "Entei": 40, "Suicune": 40,
+    "Lugia": 40, "Ho-Oh": 40, "Celebi": 30,
+    # Hoenn
+    "Regirock": 40, "Regice": 40, "Registeel": 40,
+    "Latias": 40, "Latios": 40,
+    "Kyogre": 45, "Groudon": 45, "Rayquaza": 55,
+    "Jirachi": 30, "Deoxys": 30,
+    # Sinnoh
+    "Uxie": 50, "Mesprit": 50, "Azelf": 50,
+    "Dialga": 47, "Palkia": 47,
+    "Heatran": 55, "Regigigas": 55, "Giratina": 47,
+    "Cresselia": 50,
+    "Phione": 30, "Manaphy": 30, "Darkrai": 50,
+    "Shaymin": 30, "Arceus": 55,
+    # Unova
+    "Victini": 30,
+    "Cobalion": 42, "Terrakion": 42, "Virizion": 42,
+    "Tornadus": 40, "Thundurus": 40,
+    "Reshiram": 50, "Zekrom": 50,
+    "Landorus": 55, "Kyurem": 55,
+    "Keldeo": 30, "Meloetta": 30, "Genesect": 30,
+}
+
+# Safari Zone: rare/legendary spawns are interactive in Quick mode; every rarity
+# is interactive in Safari mode. Tuning per rarity — base_c is the starting
+# catch rate (0-255, Gen 1 scale), flee_base the neutral per-turn flee chance.
 INTERACTIVE_RARITIES = {"rare", "legendary"}
 SAFARI = {
+    "common": {"base_c": 210, "flee_base": 0.04},
+    "uncommon": {"base_c": 150, "flee_base": 0.07},
     "rare": {"base_c": 90, "flee_base": 0.10},
     "legendary": {"base_c": 45, "flee_base": 0.18},
 }

@@ -1,4 +1,4 @@
-"""Gen 1 Safari Zone state machine for rare/legendary encounters.
+"""Gen 1 Safari Zone state machine for interactive wild encounters.
 
 Faithful to the originals: a per-encounter catch rate C plus mutually-exclusive
 angry/eating counters. Rock doubles C and angers (2x flee); bait halves C and
@@ -13,11 +13,12 @@ from . import data, engine, journal, notify
 def start(encounter):
     """Build a pending-encounter dict from a roll_encounter spawn."""
     base_c = data.SAFARI[encounter["rarity"]]["base_c"]
+    level = engine.clamp_wild_level(encounter["name"], encounter.get("level") or 1)
     return {
         "name": encounter["name"], "type": encounter["type"],
         "emoji": encounter["emoji"], "rarity": encounter["rarity"],
         "shiny": bool(encounter.get("shiny")),
-        "level": int(encounter.get("level") or 1),
+        "level": level,
         "c": base_c, "base_c": base_c,
         "angry": 0, "eating": 0, "balls_thrown": 0, "moves": 0,
         "last_msg": f"A wild {encounter['name']} appeared!",
@@ -85,7 +86,9 @@ def throw_ball(pending, trainer, rng):
         return {"done": False, "caught": False, "fled": False, "no_balls": True}
     trainer["balls"] -= 1
     pending["balls_thrown"] += 1
-    if rng.random() < _catch_probability(pending):
+    caught = rng.random() < _catch_probability(pending)
+    pending["last_throw"] = {"caught": caught, "ts": time.time()}
+    if caught:
         pending["last_msg"] = f"Gotcha! {pending['name']} was caught!"
         return {"done": True, "caught": True, "fled": False}
     fled = _end_turn(pending, rng)
@@ -143,7 +146,7 @@ def _resolve(s, pending, outcome):
     if enc:
         for entry in journal.log_outcomes(None, enc, "safari"):
             if journal.is_rare(entry):
-                notify.notify("buddymon", entry["text"])
+                notify.notify("buddymon", entry["text"], state=s)
     s.pop("pending_encounter", None)
 
 

@@ -19,6 +19,8 @@ def fresh_state(starter="Charmander"):
 
 def test_level_curve_monotonic():
     xs = [engine.xp_for_level(n) for n in range(1, engine.LEVEL_CAP + 1)]
+    assert engine.LEVEL_CAP == 100
+    assert engine.WILD_LEVEL_CAP == 55
     assert xs == sorted(xs) and len(set(xs)) == len(xs)
     assert engine.xp_for_level(1) == 0
 
@@ -31,7 +33,7 @@ def test_level_from_xp_inverts_curve():
 
 def test_xp_from_tokens_tiers():
     totals = {"output": 250, "input": 3000, "cache_write": 1000, "cache_read": 10000}
-    assert engine.xp_from_tokens(totals) == 3 + 6 + 4 + 10
+    assert engine.xp_from_tokens(totals) == 5 + 12 + 8 + 20
 
 
 def test_token_total_sums_raw_usage_tiers():
@@ -117,6 +119,37 @@ def test_encounter_chance_is_tuned_for_visible_cadence():
     assert data.ENCOUNTER_CHANCE == 0.35
 
 
+def test_encounter_resolution_routes_each_mode_by_rarity():
+    rarities = ("common", "uncommon", "rare", "legendary")
+    expected = {
+        "auto": ("auto", "auto", "safari", "safari"),
+        "safari": ("safari", "safari", "safari", "safari"),
+        "battle": ("battle", "battle", "battle", "battle"),
+    }
+
+    for mode, resolutions in expected.items():
+        assert tuple(engine.encounter_resolution(mode, rarity)
+                     for rarity in rarities) == resolutions
+    assert tuple(engine.encounter_resolution("invalid", rarity)
+                 for rarity in rarities) == expected["auto"]
+
+
+def test_pending_wild_blocks_new_encounters_across_mode_switches():
+    cases = (
+        ("pending_encounter", "battle"),
+        ("pending_battle", "auto"),
+    )
+    for pending_key, selected_mode in cases:
+        s = fresh_state()
+        s["mode"] = selected_mode
+        s[pending_key] = {"name": "Beldum", "sentinel": pending_key}
+        before = json.dumps(s, sort_keys=True)
+
+        assert engine.roll_encounter(s, None) is None
+        assert json.dumps(s, sort_keys=True) == before
+        assert sum(key in s for key in ("pending_encounter", "pending_battle")) == 1
+
+
 def test_summary_hides_plain_progress_without_another_event():
     result = {
         "xp": 2138, "old_level": 20, "new_level": 20,
@@ -186,10 +219,36 @@ def test_evolution_stage_level_bounds():
     assert engine.evolution_level_bounds("Absol") == (1, engine.LEVEL_CAP)
 
 
+def test_wild_level_bounds_cap_random_spawns_at_55():
+    assert engine.wild_level_bounds("Charmander") == (1, 15)
+    assert engine.wild_level_bounds("Charizard") == (36, engine.WILD_LEVEL_CAP)
+    assert engine.wild_level_bounds("Absol") == (1, engine.WILD_LEVEL_CAP)
+    assert engine.wild_level_bounds("Hydreigon") == (
+        engine.WILD_LEVEL_CAP,
+        engine.WILD_LEVEL_CAP,
+    )
+
+
+def test_legendary_wild_levels_are_fixed_constants():
+    legends = {name for name, value in data.WILDS.items() if value[2] == "legendary"}
+
+    assert set(data.LEGENDARY_LEVELS) == legends
+    assert all(1 <= level <= engine.WILD_LEVEL_CAP
+               for level in data.LEGENDARY_LEVELS.values())
+    assert engine.fixed_wild_level("Mewtwo") == 55
+    assert engine.fixed_wild_level("Lugia") == 40
+    assert engine.fixed_wild_level("Victini") == 30
+    assert engine.fixed_wild_level("Pidgey") is None
+
+
 def test_wild_level_uses_bounded_normal_distribution():
     assert engine.wild_level_for("Charmeleon", FixedGauss([25.2])) == 25
     assert engine.wild_level_for("Charmeleon", FixedGauss([5] * 8)) == 16
     assert engine.wild_level_for("Charmeleon", FixedGauss([99] * 8)) == 35
+    assert engine.wild_level_for("Absol", FixedGauss([99] * 8)) == engine.WILD_LEVEL_CAP
+    assert engine.wild_level_for("Hydreigon", FixedGauss([99] * 8)) == engine.WILD_LEVEL_CAP
+    assert engine.wild_level_for("Mewtwo", FixedGauss([1] * 8)) == 55
+    assert engine.wild_level_for("Mewtwo", FixedGauss([99] * 8)) == 55
 
 
 def test_roll_encounter_persists_spawn_level_on_auto_catch(monkeypatch):
@@ -262,10 +321,51 @@ def test_state_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
     monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
     s = fresh_state()
+    s["mode"] = "safari"
     state.save(s)
     assert state.load() == s
     state.record_event("sess1", "tool", "Bash")
     assert state.read_event("sess1")["detail"] == "Bash"
+
+
+def test_default_state_includes_valid_preferences():
+    s = state.default_state()
+
+    assert s["version"] == state.STATE_VERSION
+    assert s["mode"] == "auto"
+    assert state.VALID_MODES == ("auto", "safari", "battle")
+    assert s["preferences"] == {
+        "notifications": "on",
+        "menu_launcher": "auto",
+        "terminal_graphics": "auto",
+        "menu_replace": "on",
+        "share_reveal": "on",
+        "share_banner": "on",
+    }
+
+
+def test_mode_cli_cycles_presets_and_accepts_quick_alias(tmp_path, monkeypatch):
+    from lib import paths
+    import buddymon
+
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    state.save(state.default_state())
+
+    assert buddymon.mode([]).startswith("encounter mode: Safari")
+    assert state.load()["mode"] == "safari"
+    assert buddymon.mode([]).startswith("encounter mode: Battle")
+    assert state.load()["mode"] == "battle"
+    assert buddymon.mode([]).startswith("encounter mode: Quick")
+    assert state.load()["mode"] == "auto"
+
+    assert buddymon.mode(["safari"]).startswith("encounter mode: Safari")
+    assert state.load()["mode"] == "safari"
+    assert buddymon.mode(["quick"]).startswith("encounter mode: Quick")
+    assert state.load()["mode"] == "auto"
+    assert buddymon.mode(["surprise"]) == "Usage: mode quick|auto|safari|battle"
+    assert state.load()["mode"] == "auto"
 
 
 def test_status_card_shows_tokens_and_level_progress():
@@ -332,11 +432,13 @@ def test_v1_state_migrates_without_level_loss(tmp_path, monkeypatch):
 
     migrated = state.load()
     buddy = state.active_pokemon(migrated)
-    assert migrated["version"] == 3
+    assert migrated["version"] == state.STATE_VERSION
     assert buddy["level"] == 21
     assert buddy["xp"] == engine.xp_for_level(21)  # snapped to new floor
     assert engine.level_from_xp(buddy["xp"]) == 21
     assert migrated["trainer"]["total_tokens"] == 0
+    assert migrated["mode"] == "auto"
+    assert migrated["preferences"] == state.DEFAULT_PREFERENCES
 
 
 def test_v2_state_migrates_evolved_forms_up_to_stage_floor(tmp_path, monkeypatch):
@@ -361,10 +463,71 @@ def test_v2_state_migrates_evolved_forms_up_to_stage_floor(tmp_path, monkeypatch
     haunter = state.active_pokemon(migrated)
     charmander = next(p for p in migrated["pokemon"] if p["id"] == "c")
 
-    assert migrated["version"] == 3
+    assert migrated["version"] == state.STATE_VERSION
     assert haunter["level"] == 25
     assert haunter["xp"] == engine.xp_for_level(25)
     assert charmander["level"] == 20
+
+
+def test_v3_state_migrates_preferences_without_touching_gameplay(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    v3 = state.default_state()
+    v3["version"] = 3
+    v3["mode"] = "battle"
+    v3["preferences"] = {
+        "notifications": "silent",
+        "menu_launcher": "bogus",
+        "terminal_graphics": "off",
+        "menu_replace": "off",
+        "share_reveal": "off",
+        "share_banner": "off",
+        "extra": "ignored",
+    }
+    v3["trainer"]["balls"] = 7
+    v3["xp_sessions"] = {"s1": {"last_uuid": "u1", "updated": 123}}
+    state.save(v3)
+
+    migrated = state.load()
+
+    assert migrated["version"] == state.STATE_VERSION
+    assert migrated["mode"] == "battle"
+    assert migrated["preferences"] == {
+        "notifications": "silent",
+        "menu_launcher": "auto",
+        "terminal_graphics": "off",
+        "menu_replace": "off",
+        "share_reveal": "off",
+        "share_banner": "off",
+    }
+    assert migrated["trainer"]["balls"] == 7
+    assert migrated["xp_sessions"] == {"s1": {"last_uuid": "u1", "updated": 123}}
+
+
+def test_invalid_mode_and_preferences_fall_back_to_defaults(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    broken = state.default_state()
+    broken["version"] = 4
+    broken["mode"] = "surprise"
+    broken["preferences"] = {
+        "notifications": "loud",
+        "menu_launcher": "warp",
+        "terminal_graphics": "sparkles",
+        "menu_replace": "sometimes",
+        "share_reveal": "maybe",
+        "share_banner": "toast",
+    }
+    state.save(broken)
+
+    migrated = state.load()
+
+    assert migrated["mode"] == "auto"
+    assert migrated["preferences"] == state.DEFAULT_PREFERENCES
 
 
 def test_milestone_balls_accrue_with_lifetime_xp():

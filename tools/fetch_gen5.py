@@ -7,7 +7,7 @@ Dev tool, run manually (network):
 The BW idle animations (~50 frames, 96x96) are subsampled to a few keyframes
 that flip on the menu bar's ~1s stream tick. Image surfaces only (the menu bar
 compresses them); terminal surfaces keep the compact box/gen2 packs. Output is
-local-only: ~/.local/state/buddymon/packs/gen5.json. Nintendo's pixels,
+local-only under ~/.local/state/buddymon/packs/gen5/. Nintendo's pixels,
 preserved by PokeAPI; never committed.
 """
 import io
@@ -18,12 +18,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import scene  # noqa: E402
+from lib import assets, scene, species  # noqa: E402
 
 SPRITES = ("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/"
            "pokemon/versions/generation-v/black-white/animated")
-CSV = "https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv"
-MAX_DEX = 649
+MAX_DEX = species.NATIONAL_DEX_MAX
 KEYFRAMES = 3
 MAX_COLORS = 32
 _POOL = scene._CHAR_POOL.replace(".", "")
@@ -36,16 +35,17 @@ def fetch(url):
 
 
 def dex_names():
-    """id -> display name, 1..MAX_DEX, via gen_dex's naming."""
-    import csv
-    from tools.gen_dex import display_name
-    rows = list(csv.reader(io.StringIO(fetch(f"{CSV}/pokemon_species.csv").decode())))
-    return {int(r[0]): display_name(r[1]) for r in rows[1:] if int(r[0]) <= MAX_DEX}
+    """Return the repo's canonical local id -> display-name roster."""
+    return {
+        species.DEX_NUMBERS[name]: name
+        for name in species.ALL_SPECIES
+        if species.DEX_NUMBERS[name] <= MAX_DEX
+    }
 
 
 def coalesce_frames(gif):
     """Composite GIF frames over each other (resolve disposal) -> list[RGBA]."""
-    from PIL import Image, ImageSequence
+    from PIL import ImageSequence
     frames, base = [], None
     for fr in ImageSequence.Iterator(gif):
         rgba = fr.convert("RGBA")
@@ -108,13 +108,13 @@ def frames_pack(gif_bytes):
 
 
 def _slug(name):
-    import re
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return species.slug(name)
 
 
-def main():
+def main(pack_root=None):
     names = dex_names()
-    out = Path.home() / ".local" / "state" / "buddymon" / "packs" / "gen5"
+    root = Path(pack_root) if pack_root is not None else assets.pack_root()
+    out = root / "gen5"
     out.mkdir(parents=True, exist_ok=True)
     written = 0
     for sid in range(1, MAX_DEX + 1):
@@ -125,8 +125,9 @@ def main():
         try:
             entry["frames"] = frames_pack(fetch(f"{SPRITES}/{sid}.gif"))
         except Exception as e:
-            print(f"  MISS {sid} {name}: {e}")
-            continue
+            raise RuntimeError(
+                f"missing regular sprite for #{sid} {name}: {e}"
+            ) from e
         try:
             entry["shiny_frames"] = frames_pack(fetch(f"{SPRITES}/shiny/{sid}.gif"))
         except Exception:
@@ -147,4 +148,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(assets.installer_cli("gen5"))

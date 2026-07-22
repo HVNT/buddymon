@@ -64,6 +64,13 @@ def test_eating_lowers_flee_angry_raises_it():
     assert neutral == rare
 
 
+def test_safari_tuning_covers_every_rarity():
+    rarities = ("common", "uncommon", "rare", "legendary")
+    assert set(data.SAFARI) == set(rarities)
+    assert [data.SAFARI[r]["base_c"] for r in rarities] == [210, 150, 90, 45]
+    assert [data.SAFARI[r]["flee_base"] for r in rarities] == [0.04, 0.07, 0.10, 0.18]
+
+
 def test_opening_odds_hint_shows_first_move_protection_and_future_flee():
     p = safari.start(spawn())
     hint = safari.odds_hint(p)
@@ -106,6 +113,12 @@ def test_start_carries_spawn_level():
     assert "Lv.44" in safari.status_text(p)
 
 
+def test_start_caps_random_safari_spawn_level():
+    p = safari.start({**spawn(name="Absol"), "level": 99})
+    assert p["level"] == engine.WILD_LEVEL_CAP
+    assert f"Lv.{engine.WILD_LEVEL_CAP}" in safari.status_text(p)
+
+
 def test_take_turn_catches_at_pending_level(tmp_path, monkeypatch):
     from lib import notify, paths
     monkeypatch.setattr(paths, "JOURNAL_FILE", tmp_path / "journal.jsonl")
@@ -133,12 +146,7 @@ def test_roll_encounter_creates_pending_for_rare(monkeypatch):
     s = state.default_state()
     engine.create_starter(s, "Charmander")
     state.active_pokemon(s)["level"] = 25
-    # force a legendary-tier roll
-    rng = SeqRandom(
-        randoms=[0.0,        # spawn passes ENCOUNTER_CHANCE
-                 ],
-    )
-    # easier: monkeypatch rarity path via a real Random seed that yields rare/legendary
+    # Use a real Random seed that yields a Quick-mode Safari rarity.
     import random as _r
     found = False
     for seed in range(200):
@@ -168,6 +176,24 @@ def test_roll_encounter_auto_resolves_common():
             assert "pending_encounter" not in s
             return
     raise AssertionError("no common encounter found")
+
+
+def test_safari_mode_makes_every_rarity_interactive(monkeypatch):
+    monkeypatch.setattr(data, "ENCOUNTER_CHANCE", 1.0)
+    for rarity in ("common", "uncommon", "rare", "legendary"):
+        monkeypatch.setattr(data, "RARITY_WEIGHTS", [(rarity, 100)])
+        s = state.default_state()
+        engine.create_starter(s, "Charmander")
+        state.active_pokemon(s)["level"] = 25
+        s["mode"] = "safari"
+
+        result = engine.roll_encounter(s, random.Random(4))
+
+        assert result["outcome"] == "appeared"
+        assert result["rarity"] == rarity
+        assert s["pending_encounter"]["rarity"] == rarity
+        assert s["pending_encounter"]["base_c"] == data.SAFARI[rarity]["base_c"]
+        assert "pending_battle" not in s
 
 
 def test_first_move_never_flees():

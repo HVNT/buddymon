@@ -16,7 +16,8 @@ import select
 import shutil
 import sys
 
-from . import battle as bt, box, data, favorites, journal, kgp, packs, pixels, png, render, safari as sf
+from . import backups, battle as bt, box, data, favorites, journal, kgp, packs, pixels, png, render, safari as sf
+from . import showcase, showcase_export
 from . import state as st
 from . import token_usage
 
@@ -41,7 +42,15 @@ SELECT_POKEMON_MAX_COLS = 14
 SELECT_POKEMON_MAX_ROWS = 7
 SELECT_CARD_INNER_W = SELECT_POKEMON_MAX_COLS * SELECT_CARD_WIDTH_FACTOR
 SELECT_CARD_INNER_ROWS = SELECT_POKEMON_MAX_ROWS * SELECT_CARD_HEIGHT_FACTOR
-SELECT_CARD_INNER_H = SELECT_CARD_INNER_ROWS * 2
+SHOWCASE_CARD_INNER_W = 30
+SHOWCASE_CARD_BODY_ROWS = 10
+SHOWCASE_CARD_W = SHOWCASE_CARD_INNER_W + 4
+SHOWCASE_CARD_ROWS = SHOWCASE_CARD_BODY_ROWS + 5
+SHOWCASE_GAP = 3
+SHOWCASE_MAX_COLUMNS = 2
+SHOWCASE_ART_W = 24
+SHOWCASE_SPRITE_W = 22
+SHOWCASE_SPRITE_ROWS = 8
 
 # MTG-style one-letter rarity codes keep every list row a constant width, so the
 # layout never reflows as the selection moves. starter→S; M reserved for mythic.
@@ -56,6 +65,8 @@ PARTY_SORT_LABEL = {
     "dex": "dex #",
     "caught": "date caught",
 }
+BOX_SORT_FIELDS = PARTY_SORT_FIELDS
+BOX_SORT_LABEL = PARTY_SORT_LABEL
 PARTY_RARITY_ORDER = {
     "common": 0,
     "uncommon": 1,
@@ -64,6 +75,19 @@ PARTY_RARITY_ORDER = {
     "mythic": 4,
     "starter": 5,
 }
+DEX_SORT_FIELDS = ("dex", "name", "rarity", "caught")
+DEX_SORT_LABEL = {
+    "dex": "dex #",
+    "name": "name",
+    "rarity": "rarity",
+}
+DEX_FILTER_MODES = ("all", "caught", "missing")
+DEX_FILTER_LABEL = {
+    "all": "all species",
+    "caught": "caught",
+    "missing": "missing",
+}
+SEARCH_HINT = "/ search"
 
 # Two-column screens (list left, sprite right) fall back to the old stacked
 # layout below this terminal width. Left columns are fixed-width so the sprite
@@ -72,9 +96,9 @@ TWO_COL_MIN_WIDTH = 56
 PARTY_LIST_W = 26  # +1 vs the old 25 for the favorite (♥) marker slot
 DEX_LIST_W = 28
 BOX_LIST_W = 32  # party row + favorite slot + a copy "n/m" slot
-DEX_CHROME = 7  # header (5 lines) + blank + footer; rows shown = height - DEX_CHROME
+DEX_CHROME = 8  # header (6 lines) + blank + footer; rows shown = height - DEX_CHROME
 
-# Inline-image rendering (Ghostty/kitty). When active, sprite "lines" are
+# Inline-image rendering (Ghostty/iTerm2/kitty). When active, sprite "lines" are
 # invisible markers that _draw replaces with real PNGs placed over the reserved
 # cells; otherwise the same calls return half-block art. Set in run().
 _GRAPHICS = False
@@ -82,7 +106,7 @@ _frame_images = []  # per-frame [(png_bytes, cols, rows)]; marker carries the in
 _IMG_RE = re.compile("\x01IMG(\\d+)\x02")
 _CELL_PX = None  # (width, height) of one terminal cell in pixels, queried at startup
 _FALLBACK_BOX_PX = 768  # if the cell size is unknown, render big enough to force downscaling
-PREVIEW_TARGET_PX = 210  # on-screen sprite height (Ghostty); letterboxed, never stretched
+PREVIEW_TARGET_PX = 210  # on-screen sprite height; letterboxed, never stretched
 MIN_IMAGE_COLS = 6  # keep inline-image marker text narrower than its reserved cell
 
 MENU = [
@@ -91,6 +115,7 @@ MENU = [
     ("Journal", "journal"),
     ("Status", "status"),
     ("Box", "box"),
+    ("Showcase", "showcase"),
     ("Token Usage", "tokens"),
     ("Settings", "settings"),
     ("Quit", "quit"),
@@ -101,6 +126,7 @@ MENU_ICON = {
     "journal": "📜",
     "status": "📊",
     "box": "📦",
+    "showcase": "🏆",
     "tokens": "🪙",
     "settings": "🔧",
     "quit": "🚪",
@@ -112,10 +138,84 @@ MENU_HINT = {
     "journal": "recent journey log",
     "status": "progress and streaks",
     "box": "all catches",
+    "showcase": "curated podium display",
     "tokens": "daily local usage",
     "settings": "preferences",
     "quit": "leave the menu",
     "encounter": "wild encounter waiting",
+}
+SETTINGS_CYCLES = {
+    "mode": st.VALID_MODES,
+    "notifications": st.PREFERENCE_VALUES["notifications"],
+    "menu_launcher": st.PREFERENCE_VALUES["menu_launcher"],
+    "terminal_graphics": st.PREFERENCE_VALUES["terminal_graphics"],
+    "menu_replace": st.PREFERENCE_VALUES["menu_replace"],
+    "share_reveal": st.PREFERENCE_VALUES["share_reveal"],
+    "share_banner": st.PREFERENCE_VALUES["share_banner"],
+}
+SETTINGS_LABEL = {
+    "mode": "Encounter mode",
+    "notifications": "Notifications",
+    "menu_launcher": "Menu launcher",
+    "menu_replace": "Replace menus",
+    "share_reveal": "Reveal shares",
+    "share_banner": "Share banners",
+    "terminal_graphics": "Terminal graphics",
+    "terminal_support": "Terminal support",
+}
+SETTINGS_HELP = {
+    "notifications": "rare-event banners",
+    "menu_launcher": "menu app preference",
+    "menu_replace": "close prior BuddyMon Ghostty menu",
+    "share_reveal": "open Finder after export",
+    "share_banner": "show share result banner",
+    "terminal_graphics": "inline image preference",
+    "terminal_support": "current terminal support",
+}
+ENCOUNTER_MODE_HELP = {
+    "auto": "common quick · rare Safari",
+    "safari": "every wild: rock · bait · ball",
+    "battle": "every wild: fight · ball · run",
+}
+SETTINGS_VALUE_LABELS = {
+    "mode": {
+        "auto": "Quick",
+        "safari": "Safari",
+        "battle": "Battle",
+    },
+    "notifications": {
+        "on": "On",
+        "silent": "Silent",
+        "off": "Off",
+    },
+    "menu_launcher": {
+        "auto": "Auto",
+        "ghostty": "Ghostty",
+        "iterm": "iTerm2",
+        "terminal": "Terminal.app",
+    },
+    "terminal_graphics": {
+        "auto": "Auto",
+        "off": "Off",
+    },
+    "menu_replace": {
+        "on": "On",
+        "off": "Off",
+    },
+    "share_reveal": {
+        "on": "On",
+        "off": "Off",
+    },
+    "share_banner": {
+        "on": "On",
+        "off": "Off",
+    },
+    "terminal_support": {
+        "inline PNGs": "inline PNGs",
+        "text fallback": "text fallback",
+        "off by env": "off by env",
+        "off": "off",
+    },
 }
 
 # Action options per encounter kind: (label shown, action verb passed to take_turn)
@@ -193,8 +293,10 @@ def _fit_ansi(line, width):
 
 def _marker_col(line, marker_start):
     """Terminal column for an image marker. String indexes include invisible
-    ANSI color escapes; terminal placement needs visible cells before marker."""
-    return _visible_width(_IMG_RE.sub("", line[:marker_start])) + 1
+    ANSI color escapes; terminal placement needs visible cells before marker.
+    Earlier markers on the same row reserve blank cells, so keep their width."""
+    prefix = _IMG_RE.sub(lambda m: " " * len(m.group(0)), line[:marker_start])
+    return _visible_width(prefix) + 1
 
 
 def _pair_line(left, right, width=31):
@@ -227,6 +329,138 @@ def _next_party_sort(sort_key):
     return PARTY_SORT_FIELDS[(PARTY_SORT_FIELDS.index(sort_key) + 1) % len(PARTY_SORT_FIELDS)]
 
 
+def _box_sort_label(sort_key, descending):
+    label = BOX_SORT_LABEL.get(sort_key, sort_key)
+    return f"{label} {'desc' if descending else 'asc'}"
+
+
+def _next_box_sort(sort_key):
+    if sort_key not in BOX_SORT_FIELDS:
+        return BOX_SORT_FIELDS[0]
+    return BOX_SORT_FIELDS[(BOX_SORT_FIELDS.index(sort_key) + 1) % len(BOX_SORT_FIELDS)]
+
+
+def _dex_sort_label(sort_key, descending):
+    if sort_key == "caught":
+        return "caught first" if descending else "missing first"
+    label = DEX_SORT_LABEL.get(sort_key, sort_key)
+    return f"{label} {'desc' if descending else 'asc'}"
+
+
+def _next_dex_sort(sort_key):
+    if sort_key not in DEX_SORT_FIELDS:
+        return DEX_SORT_FIELDS[0]
+    return DEX_SORT_FIELDS[(DEX_SORT_FIELDS.index(sort_key) + 1) % len(DEX_SORT_FIELDS)]
+
+
+def _next_dex_filter(filter_mode):
+    if filter_mode not in DEX_FILTER_MODES:
+        return DEX_FILTER_MODES[0]
+    return DEX_FILTER_MODES[(DEX_FILTER_MODES.index(filter_mode) + 1) % len(DEX_FILTER_MODES)]
+
+
+def _query_terms(query):
+    return [term.casefold() for term in str(query or "").split() if term]
+
+
+def _query_matches(query, *values):
+    terms = _query_terms(query)
+    if not terms:
+        return True
+    haystack = " ".join(str(value or "") for value in values).casefold()
+    return all(term in haystack for term in terms)
+
+
+def _pokemon_query_values(pokemon):
+    values = [
+        pokemon.get("name"),
+        pokemon.get("type"),
+        pokemon.get("rarity"),
+        f"Lv.{pokemon.get('level')}" if pokemon.get("level") else "",
+    ]
+    if pokemon.get("name") in data.DEX_NUMBERS:
+        number = data.DEX_NUMBERS[pokemon["name"]]
+        values += [str(number), f"#{number:03d}", f"{number:03d}"]
+    if pokemon.get("shiny"):
+        values.append("shiny")
+    if pokemon.get("favorite"):
+        values.append("favorite")
+    return values
+
+
+def _filter_pokemon_query(mons, query):
+    return [p for p in mons if _query_matches(query, *_pokemon_query_values(p))]
+
+
+def _dex_query_values(entry):
+    values = [
+        entry.get("name"),
+        entry.get("type"),
+        entry.get("rarity"),
+        "caught" if entry.get("caught") else "missing",
+        str(entry.get("dex_no") or entry.get("idx") or ""),
+        f"#{entry.get('dex_no', 0):03d}" if entry.get("dex_no") else "",
+    ]
+    pokemon = entry.get("pokemon")
+    if pokemon:
+        values += _pokemon_query_values(pokemon)
+    return values
+
+
+def _filter_dex_query(entries, query):
+    return [e for e in entries if _query_matches(query, *_dex_query_values(e))]
+
+
+def _journal_query_values(entry):
+    return [
+        entry.get("text"),
+        entry.get("kind"),
+        entry.get("name"),
+        entry.get("rarity"),
+        "shiny" if entry.get("shiny") else "",
+    ]
+
+
+def _filter_journal_query(entries, query):
+    return [e for e in entries if _query_matches(query, *_journal_query_values(e))]
+
+
+def _search_status(query, active=False):
+    if query or active:
+        cursor = "▌" if active else ""
+        return f"search: {query}{cursor}"
+    return SEARCH_HINT
+
+
+def _search_hint(base_hint, query="", active=False):
+    if active:
+        return "type search · backspace edit · enter done · esc clear"
+    if query:
+        return f"{base_hint} · / edit search"
+    return f"{base_hint} · {SEARCH_HINT}"
+
+
+def _search_key(key, query, active):
+    """Update transient search input. Returns (query, active, handled)."""
+    if active:
+        if key == "enter":
+            return query, False, True
+        if key == "esc":
+            return "", False, True
+        if key in ("\x7f", "\b", "delete"):
+            return query[:-1], True, True
+        if key == "space":
+            return query + " ", True, True
+        if len(key) == 1 and key.isprintable():
+            return query + key, True, True
+        return query, True, True
+    if key == "/":
+        return query, True, True
+    if key == "esc" and query:
+        return "", False, True
+    return query, active, False
+
+
 def _two_col(left_lines, right_lines, width):
     """Compose two columns line-by-line, padding the shorter to equal height. The
     left column is fixed-width (so the right sprite keeps a constant margin); the
@@ -234,7 +468,10 @@ def _two_col(left_lines, right_lines, width):
     height = max(len(left_lines), len(right_lines))
     left = list(left_lines) + [""] * (height - len(left_lines))
     right = list(right_lines) + [""] * (height - len(right_lines))
-    return [_pair_line(l, r, width=width) for l, r in zip(left, right)]
+    return [
+        _pair_line(left_line, right_line, width=width)
+        for left_line, right_line in zip(left, right)
+    ]
 
 
 def _detail_two_col_min_width(left_width):
@@ -285,18 +522,45 @@ def _image_geometry(src_w, src_h, max_cols, max_rows):
     return cols, max_rows, src_w * scale, src_h * scale
 
 
-def _pad_grid_center(grid, w, h):
+def _pad_grid_center(grid, w, h, x_bias=0):
     """Center a char grid inside a w x h canvas, padding with transparent '.'
     (any char absent from the palette renders transparent in grid_to_png)."""
     cur_h = len(grid)
     cur_w = len(grid[0]) if grid else 0
-    left = max(0, (w - cur_w) // 2)
+    left = max(0, (w - cur_w) // 2 + x_bias)
+    left = min(max(0, w - cur_w), left)
     top = max(0, (h - cur_h) // 2)
     blank = "." * w
     out = [blank] * h
     for i, row in enumerate(grid[:h]):
         seg = row[:w]
         out[top + i] = ("." * left + seg).ljust(w, ".")[:w]
+    return out
+
+
+def _pad_grid_alpha_center(grid, palette, w, h):
+    """Center visible sprite bounds inside a fixed transparent grid."""
+    xs = [
+        x
+        for row in grid
+        for x, ch in enumerate(row)
+        if ch in palette
+    ]
+    if not xs:
+        return _pad_grid_center(grid, w, h)
+    bounds_center = (min(xs) + max(xs)) / 2
+    target = (w - 1) / 2
+    left = round(target - bounds_center)
+    left = max(0, min(max(0, w - (len(grid[0]) if grid else 0)), left))
+    top = max(0, (h - len(grid)) // 2)
+    blank = "." * w
+    out = [blank] * h
+    for i, row in enumerate(grid[:h]):
+        target_row = top + i
+        if target_row >= h:
+            break
+        seg = row[:w]
+        out[target_row] = ("." * left + seg).ljust(w, ".")[:w]
     return out
 
 
@@ -316,6 +580,32 @@ def _image_block(grid, palette, max_cols, max_rows):
         fit_h = max(1, round(src_h * scale))
         art = grid if (fit_w, fit_h) == (src_w, src_h) else pixels.nearest(grid, fit_w, fit_h)
         png_bytes = png.grid_to_png(_pad_grid_center(art, png_w, png_h), palette, 1)
+    idx = len(_frame_images)
+    _frame_images.append((png_bytes, cols, rows))
+    token = "\x01IMG%d\x02" % idx
+    blank = " " * cols
+    return [token.ljust(cols)] + [blank] * (rows - 1)
+
+
+def _fixed_image_block(grid, palette, cols, rows, max_sprite_cols=None,
+                       max_sprite_rows=None):
+    """Register a sprite centered inside an exact terminal-cell image box."""
+    src_h, src_w = len(grid), len(grid[0])
+    if _CELL_PX:
+        cw, ch = _CELL_PX
+        png_w, png_h = cols * cw, rows * ch
+        max_sprite_w = (max_sprite_cols or cols) * cw
+        max_sprite_h = (max_sprite_rows or rows) * ch
+    else:
+        scale = max(2, -(-_FALLBACK_BOX_PX // max(src_w, src_h)))
+        png_w, png_h = cols * scale, rows * scale * 2
+        max_sprite_w = (max_sprite_cols or cols) * scale
+        max_sprite_h = (max_sprite_rows or rows) * scale * 2
+    scale = min(max_sprite_w / src_w, max_sprite_h / src_h)
+    fit_w = max(1, round(src_w * scale))
+    fit_h = max(1, round(src_h * scale))
+    art = grid if (fit_w, fit_h) == (src_w, src_h) else pixels.nearest(grid, fit_w, fit_h)
+    png_bytes = png.grid_to_png(_pad_grid_alpha_center(art, palette, png_w, png_h), palette, 1)
     idx = len(_frame_images)
     _frame_images.append((png_bytes, cols, rows))
     token = "\x01IMG%d\x02" % idx
@@ -362,10 +652,25 @@ def _sprite_card_body(art, art_w, art_rows, inner_w, inner_rows):
     return body
 
 
+def _sprite_card_body_at(art, art_w, art_rows, inner_w, inner_rows, left):
+    blank = " " * inner_w
+    top = max(0, (inner_rows - art_rows) // 2)
+    left = max(0, min(max(0, inner_w - art_w), left))
+    body = [blank for _ in range(inner_rows)]
+    for i, line in enumerate(art[:inner_rows]):
+        row = top + i
+        if row >= inner_rows:
+            break
+        segment = _pad_ansi(_fit_ansi(line, art_w), art_w)
+        right = max(0, inner_w - left - _visible_width(segment))
+        body[row] = " " * left + segment + " " * right
+    return body
+
+
 def _sprite_lines(pokemon, max_h=SELECT_ART_H, silhouette=False):
     """Preview art for party/dex/status. Uses the detailed Gen 5 source (same
-    art the menu bar renders). On Ghostty/kitty it renders as a real PNG; on
-    plain terminals it area-averages down to half blocks, so species stay
+    art the menu bar renders). On Ghostty/iTerm2/kitty it renders as a real PNG;
+    on plain terminals it area-averages down to half blocks, so species stay
     distinct instead of collapsing into a ~16px blob. max_h lets crowded
     screens trade preview height for more list rows. silhouette recolors every
     pixel to one shade (transparency preserved) for the classic uncaught-dex
@@ -491,19 +796,13 @@ def _encounter_sprite_lines(pokemon):
                                 pad_to=(ENCOUNTER_ART_W, ENCOUNTER_ART_H))
 
 
-def _paired_sprite_lines(left_pokemon, right_pokemon, width=24):
-    left = _sprite_lines(left_pokemon)
-    right = _sprite_lines(right_pokemon)
-    h = max(len(left), len(right))
-    left += [""] * (h - len(left))
-    right += [""] * (h - len(right))
-    return [_pair_line(l, r, width=width) for l, r in zip(left, right)]
-
-
 def _paired_encounter_sprite_lines(left_pokemon, right_pokemon, width=31):
     left = _encounter_sprite_lines(left_pokemon)
     right = _encounter_sprite_lines(right_pokemon)
-    return [_pair_line(l, r, width=width) for l, r in zip(left, right)]
+    return [
+        _pair_line(left_line, right_line, width=width)
+        for left_line, right_line in zip(left, right)
+    ]
 
 
 def _menu_frame(items, selected):
@@ -579,12 +878,18 @@ def _fav_mark(p):
     return f"{MAGENTA}♥{RESET}" if p.get("favorite") else " "
 
 
+def _list_name(p, width=12):
+    name = p["name"][:width]
+    if p.get("shiny"):
+        name = p["name"][:max(0, width - 1)] + f"{YELLOW}*{RESET}"
+    return _pad_ansi(name, width)
+
+
 def _party_row(p, selected, active_id):
     """One fixed-width party row (no per-row emoji — the preview is the art)."""
     cursor = f"{GREEN}▶{RESET}" if selected else " "
-    star = f"{YELLOW}*{RESET}" if p.get("shiny") else " "
     tag = f" {GREEN}●{RESET}" if p["id"] == active_id else "  "
-    return (f"{cursor} {_fav_mark(p)}{star}{p['name'][:12]:<12} Lv.{p['level']:<2} "
+    return (f"{cursor} {_fav_mark(p)} {_list_name(p)} Lv.{p['level']:<2} "
             f"{_rarity_code(p['rarity'])}{tag}")
 
 
@@ -598,7 +903,8 @@ def _party_header_row():
 
 
 def _party_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=80,
-                 sort_key="name", descending=False, fav_only=False):
+                 sort_key="name", descending=False, fav_only=False,
+                 query="", search_active=False):
     _frame_images.clear()
     pinned, rest = _party_split(s, sort_key, descending)
     mons = pinned + rest
@@ -606,16 +912,23 @@ def _party_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width
     if fav_only:
         mons = [p for p in mons if p.get("favorite")]
         boundary = None
+    if query:
+        mons = _filter_pokemon_query(mons, query)
+        boundary = None
     selected = max(0, min(selected, len(mons) - 1)) if mons else 0
     active = s.get("active")
     scope = (f"{MAGENTA}♥ favorites{RESET}" if fav_only
              else f"team pinned · rest by {_party_sort_label(sort_key, descending)}")
     lines = ["", _header("party"),
-             f"  {DIM}{scope} · s sort · r reverse · f ♥ · F faves{RESET}",
+             _fit_ansi(f"  {DIM}{scope} · {_search_status(query, search_active)}{RESET}", width),
              ""]
-    if fav_only and not mons:
-        lines += [f"  {DIM}No favorites yet — press f to ♥ one, or browse the Box.{RESET}",
-                  "", _footer("F all · ⏎ active · esc back")]
+    if not mons:
+        msg = (f"No Pokemon match '{query}'."
+               if query else "No favorites yet — press f to ♥ one, or browse the Box."
+               if fav_only else "No Pokemon to show.")
+        lines += [f"  {DIM}{msg}{RESET}",
+                  "", _fit_ansi(_footer(_search_hint("F all · ⏎ active · esc back",
+                                                     query, search_active)), width)]
         return "\n".join(lines)
     if list_height is None:
         visible = list(enumerate(mons))
@@ -639,7 +952,11 @@ def _party_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width
         lines += ["  " + r for r in rows]
         if panel:
             lines += [""] + ["  " + r for r in panel]
-    lines += ["", _footer("↑/↓ or wheel move · PgUp/PgDn page · s sort · r reverse · ⏎ active · esc back")]
+    lines += ["", _fit_ansi(
+        _footer(_search_hint("↑/↓ move · PgUp/PgDn · s sort · r reverse · ⏎ active · esc back",
+                             query, search_active)),
+        width,
+    )]
     return "\n".join(lines)
 
 
@@ -647,11 +964,10 @@ def _box_row(p, selected, active_id):
     """One fixed-width box row: a single caught individual, with an n/m copy slot
     so duplicates of the same species are distinguishable in the list."""
     cursor = f"{GREEN}▶{RESET}" if selected else " "
-    star = f"{YELLOW}*{RESET}" if p.get("shiny") else " "
     tag = f" {GREEN}●{RESET}" if p["id"] == active_id else "  "
     copy = (f"{p.get('copy_index', 1)}/{p.get('copy_total', 1)}"
             if p.get("copy_total", 1) > 1 else "")
-    return (f"{cursor} {_fav_mark(p)}{star}{p['name'][:12]:<12} Lv.{p['level']:<2} "
+    return (f"{cursor} {_fav_mark(p)} {_list_name(p)} Lv.{p['level']:<2} "
             f"{_rarity_code(p['rarity'])} {copy:>5}{tag}")
 
 
@@ -660,26 +976,39 @@ def _box_header_row():
 
 
 def _box_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=80,
-               fav_only=False):
+               sort_key="name", descending=False, fav_only=False,
+               query="", search_active=False):
     """Box browser: every caught individual (no per-species collapse), with a
     detail panel for the selected copy. Mirrors the two-column party layout."""
     import time
     _frame_images.clear()
     caught = s.get("pokemon", [])
-    mons = box.expand(caught)
-    if fav_only:
-        mons = [p for p in mons if p.get("favorite")]
+    mons = _box(s, sort_key, descending, fav_only=fav_only)
+    if query:
+        mons = _filter_pokemon_query(mons, query)
     active = s.get("active")
     selected = max(0, min(selected, len(mons) - 1)) if mons else 0
     species = len(box.group_by_species(caught))
-    scope = (f"{MAGENTA}♥ favorites{RESET}" if fav_only
-             else f"{box.total_copies(caught)} caught · {species} species")
+    if fav_only:
+        scope = f"{MAGENTA}♥ favorites{RESET}"
+    else:
+        scope = (
+            f"{box.total_copies(caught)} caught · {species} species · "
+            f"by {_box_sort_label(sort_key, descending)}"
+        )
+    status = f"  {DIM}{scope} · {_search_status(query, search_active)}{RESET}"
     lines = ["", _header("box"),
-             f"  {DIM}{scope} · f ♥ · F faves{RESET}",
+             _fit_ansi(status, width),
              ""]
-    if fav_only and not mons:
-        lines += [f"  {DIM}No favorites yet — press f to ♥ one.{RESET}",
-                  "", _footer("F all · ⏎ active · esc back")]
+    if not mons:
+        msg = (f"No Pokemon match '{query}'."
+               if query else "No favorites yet — press f to ♥ one.")
+        lines += [f"  {DIM}{msg}{RESET}",
+                  "", _fit_ansi(
+                      _footer(_search_hint("F all · s sort · r reverse · ⏎ active · esc back",
+                                           query, search_active)),
+                      width,
+                  )]
         return "\n".join(lines)
     if list_height is None:
         visible = list(enumerate(mons))
@@ -704,8 +1033,346 @@ def _box_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=8
         lines += ["  " + r for r in rows]
         if panel:
             lines += [""] + ["  " + r for r in panel]
-    lines += ["", _footer("↑/↓ or wheel move · PgUp/PgDn page · ⏎ make active · esc back")]
+    lines += ["", _fit_ansi(
+        _footer(_search_hint("↑/↓ move · PgUp/PgDn · s sort · r reverse · ⏎ active · esc back",
+                             query, search_active)),
+        width,
+    )]
     return "\n".join(lines)
+
+
+def _showcase_card_art(pokemon):
+    grid, palette = packs.gen5_frames(
+        pokemon["name"], pokemon.get("type", "Normal"), pokemon.get("shiny"))[0]
+    grid = _crop_grid_to_content(grid, palette)
+    if _GRAPHICS:
+        img_idx = len(_frame_images)
+        art = _fixed_image_block(
+            grid,
+            palette,
+            SHOWCASE_ART_W,
+            SHOWCASE_CARD_BODY_ROWS,
+            SHOWCASE_SPRITE_W,
+            SHOWCASE_SPRITE_ROWS,
+        )
+        _, art_w, art_rows = _frame_images[img_idx]
+        x_offset = 0
+    else:
+        art = pixels.render_scaled(
+            grid,
+            palette,
+            SHOWCASE_SPRITE_W,
+            SHOWCASE_SPRITE_ROWS * 2,
+        )
+        art_w = max((_visible_width(line) for line in art), default=0)
+        art_rows = len(art)
+        x_offset = 0
+    left = (SHOWCASE_CARD_INNER_W - art_w) // 2 + x_offset
+    return _sprite_card_body_at(
+        art,
+        art_w,
+        art_rows,
+        SHOWCASE_CARD_INNER_W,
+        SHOWCASE_CARD_BODY_ROWS,
+        left,
+    )
+
+
+def _showcase_debug_body(pokemon):
+    grid, palette = packs.gen5_frames(
+        pokemon["name"], pokemon.get("type", "Normal"), pokemon.get("shiny"))[0]
+    grid = _crop_grid_to_content(grid, palette)
+    src_h, src_w = len(grid), len(grid[0])
+    cell_w, cell_h = _CELL_PX or (10, 20)
+    canvas_w = SHOWCASE_ART_W * cell_w
+    canvas_h = SHOWCASE_CARD_BODY_ROWS * cell_h
+    max_sprite_w = SHOWCASE_SPRITE_W * cell_w
+    max_sprite_h = SHOWCASE_SPRITE_ROWS * cell_h
+    scale = min(max_sprite_w / src_w, max_sprite_h / src_h)
+    fit_w = max(1, round(src_w * scale))
+    fit_h = max(1, round(src_h * scale))
+    art = grid if (fit_w, fit_h) == (src_w, src_h) else pixels.nearest(grid, fit_w, fit_h)
+    centered = _pad_grid_alpha_center(art, palette, canvas_w, canvas_h)
+    xs = [
+        x
+        for row in centered
+        for x, ch in enumerate(row)
+        if ch in palette
+    ]
+    center_col = SHOWCASE_CARD_INNER_W // 2
+    art_left = (SHOWCASE_CARD_INNER_W - SHOWCASE_ART_W) // 2
+    art_right = art_left + SHOWCASE_ART_W - 1
+    if xs:
+        bbox_left = art_left + round(min(xs) / cell_w)
+        bbox_right = art_left + round(max(xs) / cell_w)
+        centroid = art_left + round((sum(xs) / len(xs)) / cell_w)
+    else:
+        bbox_left = bbox_right = centroid = center_col
+
+    rows = []
+    ruler = ["·"] * SHOWCASE_CARD_INNER_W
+    for i in range(0, SHOWCASE_CARD_INNER_W, 5):
+        ruler[i] = "+"
+    ruler[center_col] = "|"
+    rows.append("".join(ruler))
+
+    aperture = [" "] * SHOWCASE_CARD_INNER_W
+    aperture[art_left] = "["
+    aperture[art_right] = "]"
+    aperture[center_col] = "|"
+    rows.append("".join(aperture))
+
+    bounds = [" "] * SHOWCASE_CARD_INNER_W
+    for i in range(max(0, bbox_left), min(SHOWCASE_CARD_INNER_W, bbox_right + 1)):
+        bounds[i] = "-"
+    bounds[max(0, min(SHOWCASE_CARD_INNER_W - 1, bbox_left))] = "["
+    bounds[max(0, min(SHOWCASE_CARD_INNER_W - 1, bbox_right))] = "]"
+    bounds[max(0, min(SHOWCASE_CARD_INNER_W - 1, centroid))] = "C"
+    bounds[center_col] = "|" if bounds[center_col] == " " else bounds[center_col]
+    rows.append("".join(bounds))
+
+    rows.extend([
+        _center_ansi(f"src {src_w}x{src_h}", SHOWCASE_CARD_INNER_W),
+        _center_ansi(f"fit {fit_w}x{fit_h}", SHOWCASE_CARD_INNER_W),
+        _center_ansi(f"bbox {bbox_left}-{bbox_right}", SHOWCASE_CARD_INNER_W),
+        _center_ansi(f"mass {centroid} center {center_col}", SHOWCASE_CARD_INNER_W),
+    ])
+    while len(rows) < SHOWCASE_CARD_BODY_ROWS:
+        rows.append(" " * SHOWCASE_CARD_INNER_W)
+    return rows[:SHOWCASE_CARD_BODY_ROWS]
+
+
+def _showcase_empty_body(label="empty"):
+    lines = [" " * SHOWCASE_CARD_INNER_W] * SHOWCASE_CARD_BODY_ROWS
+    center = SHOWCASE_CARD_BODY_ROWS // 2
+    lines[center - 1] = _center_ansi(f"{DIM}{label}{RESET}", SHOWCASE_CARD_INNER_W)
+    lines[center] = _center_ansi(f"{DIM}podium{RESET}", SHOWCASE_CARD_INNER_W)
+    return lines
+
+
+def _showcase_card_lines(entry, selected=False, can_choose=True):
+    pokemon = entry.get("pokemon")
+    missing = entry.get("missing")
+    edge = "+" + "-" * (SHOWCASE_CARD_INNER_W + 2) + "+"
+    if pokemon:
+        body = (_showcase_debug_body(pokemon)
+                if os.environ.get("BUDDYMON_SHOWCASE_DEBUG")
+                else _showcase_card_art(pokemon))
+        title = _dex_label(pokemon["name"])
+        meta = " · ".join(x for x in (
+            pokemon["name"],
+            f"Lv.{pokemon.get('level')}" if pokemon.get("level") else "",
+        ) if x)
+    else:
+        body = _showcase_empty_body("missing" if missing else "empty")
+        title = "open slot"
+        if missing:
+            meta = "replace or clear"
+        elif can_choose:
+            meta = "choose from Box"
+        else:
+            meta = "catch first"
+
+    lines = [
+        edge,
+        *[f"| {line} |" for line in body],
+        edge,
+        f"| {_center_ansi(title, SHOWCASE_CARD_INNER_W)} |",
+        f"| {_center_ansi(meta, SHOWCASE_CARD_INNER_W)} |",
+        edge,
+    ]
+    if selected:
+        return [f"{GREEN}{line}{RESET}" for line in lines]
+    return lines
+
+
+def _showcase_columns(width):
+    return max(1, min(SHOWCASE_MAX_COLUMNS,
+                      (max(1, width) + SHOWCASE_GAP) // (SHOWCASE_CARD_W + SHOWCASE_GAP)))
+
+
+def _showcase_row_indent(width, columns):
+    row_w = columns * SHOWCASE_CARD_W + max(0, columns - 1) * SHOWCASE_GAP
+    return max(0, (width - row_w) // 2)
+
+
+def _showcase_center_lines(lines, height):
+    spare = height - len(lines)
+    if spare <= 0:
+        return lines
+    return [""] * (spare // 2) + lines
+
+
+def _showcase_page_window(total_slots, selected, columns, max_rows):
+    total_rows = (total_slots + columns - 1) // columns if total_slots else 0
+    if total_rows == 0:
+        return 0, 0, 0, 0, 0
+    max_rows = max(1, min(max_rows, total_rows))
+    selected_row = max(0, min(selected, total_slots - 1)) // columns
+    start_row = min(max(0, selected_row - max_rows + 1),
+                    max(0, total_rows - max_rows))
+    end_row = min(total_rows, start_row + max_rows)
+    start = start_row * columns
+    end = min(total_slots, end_row * columns)
+    return start, end, start_row, end_row, total_rows
+
+
+def _showcase_rows_that_fit(available, total_rows):
+    if total_rows <= 0 or available < SHOWCASE_CARD_ROWS:
+        return 0
+    return min(total_rows, 1 + max(0, (available - SHOWCASE_CARD_ROWS) //
+                                   (SHOWCASE_CARD_ROWS + 1)))
+
+
+def _showcase_entry_detail(entry, selected, caught):
+    if not caught:
+        return "No Pokemon caught yet."
+    if entry and entry.get("pokemon"):
+        p = entry["pokemon"]
+        return f"slot {selected + 1}: {_detail_title(p)} · {_pokemon_meta(p)}"
+    if entry and entry.get("missing"):
+        return f"slot {selected + 1}: assigned Pokemon is missing"
+    return f"slot {selected + 1}: empty podium"
+
+
+def _showcase_compact_label(entry, can_choose):
+    slot = entry["slot"] + 1
+    pokemon = entry.get("pokemon")
+    if pokemon:
+        return f"{slot}. {_detail_title(pokemon)} · {_pokemon_meta(pokemon)}"
+    if entry.get("missing"):
+        return f"{slot}. missing · replace or clear"
+    action = "choose from Box" if can_choose else "catch first"
+    return f"{slot}. empty podium · {action}"
+
+
+def _showcase_compact_lines(entries, selected, width, max_lines, can_choose):
+    if max_lines <= 0 or not entries:
+        return []
+    visible_count = min(len(entries), max_lines)
+    start = min(max(0, selected - visible_count // 2),
+                max(0, len(entries) - visible_count))
+    out = []
+    for index in range(start, start + visible_count):
+        marker = ">" if index == selected else " "
+        label = _showcase_compact_label(entries[index], can_choose)
+        out.append(_fit_ansi(f"  {marker} {label}", width))
+    return out
+
+
+def _showcase_frame(s, selected=0, width=80, height=24,
+                    slot_count=showcase.DEFAULT_SLOT_COUNT, notice=None):
+    _frame_images.clear()
+    entries = showcase.showcase_entries(s, slot_count)
+    selected = max(0, min(selected, len(entries) - 1)) if entries else 0
+    caught = len(s.get("pokemon", []))
+    filled = sum(1 for e in entries if e.get("pokemon"))
+    stale = sum(1 for e in entries if e.get("missing"))
+    status = f"{filled}/{slot_count} podiums filled" if caught else "empty trophy room"
+    if stale:
+        status += f" · {stale} missing"
+    hint = ("arrows move · enter choose · s Share Showcase · x clear · esc back"
+            if caught else "s Share Showcase · catch Pokemon first · esc back")
+    lines = [
+        "",
+        _header("showcase"),
+    ]
+
+    cols = _showcase_columns(width)
+    cards = [_showcase_card_lines(entry, i == selected, can_choose=bool(caught))
+             for i, entry in enumerate(entries)]
+    grid_indent = _showcase_row_indent(width, min(cols, len(cards)))
+    current = entries[selected] if entries else None
+    detail = _showcase_entry_detail(current, selected, caught)
+    footer_lines = 3 + (1 if notice else 0)
+    available = max(0, height - len(lines) - 2 - footer_lines)
+    total_rows = (len(entries) + cols - 1) // cols if entries else 0
+    visible_rows = _showcase_rows_that_fit(available, total_rows)
+
+    if visible_rows:
+        start, end, _start_row, _end_row, _total_rows = _showcase_page_window(
+            len(cards), selected, cols, visible_rows,
+        )
+        if start != 0 or end != len(cards):
+            status += f" · showing {start + 1}-{end} of {len(cards)}"
+        lines += [_fit_ansi(f"  {DIM}{status}{RESET}", width), ""]
+        for row_start in range(start, end, cols):
+            row_cards = cards[row_start:row_start + cols]
+            indent = " " * _showcase_row_indent(width, len(row_cards))
+            for parts in zip(*row_cards):
+                lines.append(indent + (" " * SHOWCASE_GAP).join(parts))
+            if row_start + cols < end:
+                lines.append("")
+    else:
+        compact_height = max(0, height - len(lines) - 2 - footer_lines)
+        status += " · compact view"
+        lines += [_fit_ansi(f"  {DIM}{status}{RESET}", width), ""]
+        compact = _showcase_compact_lines(
+            entries, selected, width, compact_height, bool(caught),
+        )
+        if compact:
+            lines += compact
+        else:
+            lines.append(_fit_ansi(f"  {DIM}{detail}{RESET}", width))
+
+    lines.append(_fit_ansi((" " * grid_indent) + detail, width))
+    if notice:
+        lines.append(_fit_ansi((" " * grid_indent) + f"{GREEN}{notice}{RESET}", width))
+    lines += ["", _fit_ansi((" " * grid_indent) + _footer(hint), width)]
+    return "\n".join(_showcase_center_lines(lines, height))
+
+
+def _showcase_choose_frame(s, selected=0, top=0, list_height=None, width=80,
+                           current_id=None, query="", search_active=False):
+    _frame_images.clear()
+    mons = _box(s, "name", False)
+    if query:
+        mons = _filter_pokemon_query(mons, query)
+    selected = max(0, min(selected, len(mons) - 1)) if mons else 0
+    lines = [
+        "",
+        _header("choose display"),
+        _fit_ansi(f"  {DIM}pick one caught Pokemon for this podium · "
+                  f"{_search_status(query, search_active)}{RESET}", width),
+        "",
+    ]
+    if not mons:
+        msg = f"No Pokemon match '{query}'." if query else "No Pokemon caught yet."
+        lines += [
+            f"  {DIM}{msg}{RESET}",
+            "",
+            _fit_ansi(_footer(_search_hint("esc back", query, search_active)), width),
+        ]
+        return "\n".join(lines)
+    if list_height is None:
+        visible = list(enumerate(mons))
+    else:
+        top = max(0, min(top, max(0, len(mons) - list_height)))
+        visible = list(enumerate(mons[top:top + list_height], start=top))
+        if len(mons) > list_height:
+            lines.append(f"  {DIM}showing {top + 1}-{top + len(visible)} of {len(mons)}{RESET}")
+    rows = [_box_header_row()]
+    for i, p in visible:
+        row = _box_row(p, i == selected, s.get("active"))
+        if p.get("id") == current_id:
+            row = f"{CYAN}{row}{RESET}"
+        rows.append(row)
+    lines += ["  " + row for row in rows]
+    lines += ["", _fit_ansi(
+        _footer(_search_hint("↑/↓ move · PgUp/PgDn · ⏎ assign · esc cancel",
+                             query, search_active)),
+        width,
+    )]
+    return "\n".join(lines)
+
+
+def _fresh_showcase_selection_id(mons, selected_id):
+    if selected_id is None:
+        return None
+    for p in mons:
+        if p.get("id") == selected_id:
+            return p["id"]
+    return None
 
 
 def _status_lines(s):
@@ -740,6 +1407,187 @@ def _status_lines(s):
 def _scroll_frame(title, body_lines, top, height, hint="↑/↓ scroll · esc back"):
     view = body_lines[top:top + height]
     return "\n".join(["", _header(title), ""] + view + ["", _footer(hint)])
+
+
+def _terminal_graphics_status(s=None):
+    if os.environ.get("BUDDYMON_NO_GRAPHICS"):
+        return "off by env"
+    if s is not None and st.preference(s, "terminal_graphics") == "off":
+        return "off"
+    return "inline PNGs" if kgp.supported() else "text fallback"
+
+
+def _graphics_enabled(s):
+    return st.preference(s, "terminal_graphics") != "off" and kgp.supported()
+
+
+def _settings_mode(s):
+    mode = s.get("mode", st.DEFAULT_MODE)
+    return mode if mode in st.VALID_MODES else st.DEFAULT_MODE
+
+
+def _settings_rows(s):
+    prefs = st.preferences(s)
+    return [
+        {
+            "group": "Gameplay",
+            "key": "mode",
+            "label": SETTINGS_LABEL["mode"],
+            "value": _settings_mode(s),
+            "help": ENCOUNTER_MODE_HELP[_settings_mode(s)],
+            "writable": True,
+        },
+        {
+            "group": "Notifications",
+            "key": "notifications",
+            "label": SETTINGS_LABEL["notifications"],
+            "value": prefs["notifications"],
+            "help": SETTINGS_HELP["notifications"],
+            "writable": True,
+        },
+        {
+            "group": "Display",
+            "key": "menu_launcher",
+            "label": SETTINGS_LABEL["menu_launcher"],
+            "value": prefs["menu_launcher"],
+            "help": SETTINGS_HELP["menu_launcher"],
+            "writable": True,
+        },
+        {
+            "group": "Display",
+            "key": "menu_replace",
+            "label": SETTINGS_LABEL["menu_replace"],
+            "value": prefs["menu_replace"],
+            "help": SETTINGS_HELP["menu_replace"],
+            "writable": True,
+        },
+        {
+            "group": "Display",
+            "key": "terminal_graphics",
+            "label": SETTINGS_LABEL["terminal_graphics"],
+            "value": prefs["terminal_graphics"],
+            "help": SETTINGS_HELP["terminal_graphics"],
+            "writable": True,
+        },
+        {
+            "group": "Display",
+            "key": "terminal_support",
+            "label": SETTINGS_LABEL["terminal_support"],
+            "value": _terminal_graphics_status(s),
+            "help": SETTINGS_HELP["terminal_support"],
+            "writable": False,
+        },
+        {
+            "group": "Sharing",
+            "key": "share_reveal",
+            "label": SETTINGS_LABEL["share_reveal"],
+            "value": prefs["share_reveal"],
+            "help": SETTINGS_HELP["share_reveal"],
+            "writable": True,
+        },
+        {
+            "group": "Your data",
+            "key": "backup",
+            "label": "Back up my data",
+            "value": "Now",
+            "help": "copy state, journal, and art to Documents",
+            "writable": True,
+            "action": "backup",
+        },
+        {
+            "group": "Sharing",
+            "key": "share_banner",
+            "label": SETTINGS_LABEL["share_banner"],
+            "value": prefs["share_banner"],
+            "help": SETTINGS_HELP["share_banner"],
+            "writable": True,
+        },
+    ]
+
+
+def _settings_selectable_indexes(rows):
+    return [i for i, row in enumerate(rows) if row.get("writable")]
+
+
+def _settings_select(rows, selected, delta=0):
+    selectable = _settings_selectable_indexes(rows)
+    if not selectable:
+        return 0
+    if selected not in selectable:
+        return selectable[0]
+    if not delta:
+        return selected
+    pos = selectable.index(selected)
+    return selectable[(pos + delta) % len(selectable)]
+
+
+def _settings_cycle(s, key):
+    values = SETTINGS_CYCLES.get(key)
+    if not values:
+        return False
+    if key == "mode":
+        current = _settings_mode(s)
+        s["mode"] = values[(values.index(current) + 1) % len(values)]
+        return True
+    prefs = st.preferences(s)
+    current = prefs.get(key)
+    if current not in values:
+        current = values[0]
+    prefs[key] = values[(values.index(current) + 1) % len(values)]
+    return True
+
+
+def _mutate_fresh_state(mutate, *args):
+    """Apply one short TUI mutation to current state under the shared lock."""
+    with st.lock():
+        fresh = st.load()
+        if not mutate(fresh, *args):
+            return False
+        st.save(fresh)
+    return True
+
+
+def _toggle_favorite(s, copy_id):
+    return favorites.toggle(s, copy_id) is not None
+
+
+def _activate_pokemon_copy(s, copy_id):
+    for pokemon in s.get("pokemon", []):
+        if pokemon.get("id") == copy_id:
+            s["active"] = copy_id
+            favorites.set_favorite(pokemon, True)
+            return True
+    return False
+
+
+def _settings_display_value(row):
+    value = str(row["value"])
+    return SETTINGS_VALUE_LABELS.get(row["key"], {}).get(value, value)
+
+
+def _settings_frame(s, selected=0, width=80, notice=None):
+    _frame_images.clear()
+    rows = _settings_rows(s)
+    selected = _settings_select(rows, selected)
+    lines = ["", _header("settings"), ""]
+    group = None
+    for i, row in enumerate(rows):
+        if row["group"] != group:
+            group = row["group"]
+            lines.append(f"  {DIM}{group}{RESET}")
+        cursor = f"{GREEN}▶{RESET}" if i == selected else " "
+        value = _settings_display_value(row)
+        if i == selected:
+            value = f"{BOLD}{value}{RESET}"
+        label = f"{row['label']:<18}"
+        ro = f" {DIM}read-only{RESET}" if not row["writable"] else ""
+        line = f"  {cursor} {label} {value:<14} {DIM}{row['help']}{RESET}{ro}"
+        lines.append(_fit_ansi(line, width))
+        lines.append("")
+    if notice:
+        lines.append(_fit_ansi(f"  {GREEN}✓{RESET} {notice}", width))
+    hint = "↑/↓ move · ⏎/space change or back up · esc back"
+    return "\n".join(lines + [_footer(hint)])
 
 
 def _dex_entries(s):
@@ -788,9 +1636,15 @@ def _dex_row(entry, selected, width):
     return f"{DIM}{_pad_ansi(_fit_ansi(text, width), width)}{RESET}"
 
 
-def _dex_frame(entries, selected, top, height, width):
+def _dex_frame(entries, selected, top, height, width, sort_key="dex",
+               descending=False, filter_mode="all", total_entries=None,
+               total_caught=None, query="", search_active=False):
     _frame_images.clear()
-    caught = sum(1 for e in entries if e["caught"])
+    total = total_entries if total_entries is not None else len(entries)
+    caught = (
+        total_caught if total_caught is not None
+        else sum(1 for e in entries if e["caught"])
+    )
     selected = max(0, min(selected, len(entries) - 1)) if entries else 0
     current = entries[selected] if entries else None
     if current:
@@ -799,21 +1653,30 @@ def _dex_frame(entries, selected, top, height, width):
     else:
         detail = "empty"
     bar_w = min(24, max(8, width - 32))
-    filled = round(caught * bar_w / len(entries)) if entries else 0
+    filled = round(caught * bar_w / total) if total else 0
+    controls = (
+        f"  {DIM}{DEX_FILTER_LABEL.get(filter_mode, filter_mode)} · "
+        f"by {_dex_sort_label(sort_key, descending)} · {_search_status(query, search_active)}{RESET}"
+    )
     header = [
         "",
         _header("pokédex"),
-        f"  {CYAN}{'▰' * filled}{'▱' * (bar_w - filled)}{RESET} {caught}/{len(entries)} species",
+        f"  {CYAN}{'▰' * filled}{'▱' * (bar_w - filled)}{RESET} {caught}/{total} species",
+        controls,
         f"  {detail}",
         "",
     ]
-    hint = "↑/↓ or wheel move · PgUp/PgDn/space page · Home/End · esc back"
+    hint = _search_hint("↑/↓ move · PgUp/PgDn · s sort · r reverse · c filter · esc back",
+                        query, search_active)
     body_h = max(1, height - len(header) - 2)
     rows = [_dex_row(e, top + i == selected, DEX_LIST_W)
             for i, e in enumerate(entries[top:top + body_h])]
+    if not rows:
+        empty = _pad_ansi(_fit_ansi("No matching species.", DEX_LIST_W), DEX_LIST_W)
+        rows = [f"{DIM}{empty}{RESET}"]
     # Sprite sits to the right of the list, sized to the body height so the frame
     # never overflows. Uncaught species show the classic black-shadow silhouette
-    # of their real shape (recolored PNG on Ghostty, recolored half-blocks else).
+    # of their real shape (recolored PNG where supported, recolored half-blocks else).
     art_lines = min(SELECT_ART_H // 2, body_h)
     if current and current["pokemon"]:
         preview = _sprite_lines(current["pokemon"], art_lines * 2)
@@ -880,16 +1743,20 @@ def _journal_qualifier(entries, shiny_only, rare_only):
     return keep
 
 
-def _journal_lines(limit=200, shiny_only=False, rare_only=False):
-    filtering = shiny_only or rare_only
+def _journal_lines(limit=200, shiny_only=False, rare_only=False, newest_first=True, query=""):
+    filtering = shiny_only or rare_only or bool(query)
     # Highlights are sparse, so when filtering we scan the whole journal, not a
     # recent window — "every log with any pokemon that qualifies".
-    entries = journal.tail(None if filtering else limit)
-    if filtering:
+    entries = journal.tail(None if filtering else limit, newest_first=newest_first)
+    if shiny_only or rare_only:
         keep = _journal_qualifier(entries, shiny_only, rare_only)
         entries = [e for e in entries if keep(e)]
+    if query:
+        entries = _filter_journal_query(entries, query)
     if not entries:
-        if not filtering:
+        if query:
+            msg = f"No journal logs match '{query}'."
+        elif not filtering:
             msg = "No journal yet — your story starts with the next turn."
         else:
             what = ("shiny or legendary/mythic" if shiny_only and rare_only
@@ -910,20 +1777,25 @@ def _journal_lines(limit=200, shiny_only=False, rare_only=False):
     return out
 
 
-def _journal_filter_status(shiny_only, rare_only):
+def _journal_filter_status(shiny_only, rare_only, newest_first=True, query="", search_active=False):
     active = []
     if shiny_only:
         active.append(f"{YELLOW}✨ shiny{RESET}")
     if rare_only:
         active.append(f"{CYAN}legendary/mythic{RESET}")
+    search = _search_status(query, search_active)
+    order = "newest first" if newest_first else "oldest first"
     if active:
-        return f"  {DIM}showing only:{RESET} " + f" {DIM}+{RESET} ".join(active)
-    return f"  {DIM}showing all entries{RESET}"
+        filters = f" {DIM}+{RESET} ".join(active)
+        return f"  {DIM}showing only:{RESET} {filters} {DIM}· {order} · {search}{RESET}"
+    return f"  {DIM}showing all entries · {order} · {search}{RESET}"
 
 
-def _sort_party(mons, sort_key, descending):
-    """Order a list of party rows by the chosen field (used for 'the rest')."""
-    name_key = lambda p: (p["name"].casefold(), p["name"])
+def _sort_pokemon(mons, sort_key, descending):
+    """Order pokemon rows by the chosen field, preserving input order for ties."""
+    def name_key(pokemon):
+        return pokemon["name"].casefold(), pokemon["name"]
+
     if sort_key == "rarity":
         def key(p):
             rank = PARTY_RARITY_ORDER.get(p.get("rarity"), len(PARTY_RARITY_ORDER))
@@ -943,28 +1815,79 @@ def _sort_party(mons, sort_key, descending):
     return sorted(mons, key=name_key, reverse=descending)
 
 
+def _sort_party(mons, sort_key, descending):
+    """Order a list of party rows by the chosen field (used for 'the rest')."""
+    return _sort_pokemon(mons, sort_key, descending)
+
+
 def _party_split(s, sort_key="name", descending=False):
-    """Best (highest-level) instance per species, partitioned into a pinned block
-    (active buddy first, then favorites) and the sortable rest. Only the rest
-    responds to the sort controls — your team stays put at the top."""
-    best = {}
-    for p in s["pokemon"]:
-        if p["name"] not in best or p["level"] > best[p["name"]]["level"]:
-            best[p["name"]] = p
-    mons = list(best.values())
+    """Pinned individuals first, then best unpinned species as sortable rest.
+
+    Favorites are per individual, so choose the pinned team before collapsing
+    the rest to one row per species.
+    """
+    mons = list(s["pokemon"])
     active_id = s.get("active")
     active_row = [p for p in mons if p["id"] == active_id]
     favs = sorted([p for p in mons if p.get("favorite") and p["id"] != active_id],
                   key=lambda p: (-(p.get("level") or 0), p["name"].casefold()))
+    pinned = active_row + favs
+    pinned_species = {p["name"] for p in pinned}
+    best = {}
+    for p in mons:
+        if p["name"] in pinned_species:
+            continue
+        if p["name"] not in best or p["level"] > best[p["name"]]["level"]:
+            best[p["name"]] = p
     rest = _sort_party(
-        [p for p in mons if not p.get("favorite") and p["id"] != active_id],
+        list(best.values()),
         sort_key, descending)
-    return active_row + favs, rest
+    return pinned, rest
 
 
 def _party(s, sort_key="name", descending=False):
     pinned, rest = _party_split(s, sort_key, descending)
     return pinned + rest
+
+
+def _box(s, sort_key="name", descending=False, fav_only=False):
+    mons = _sort_pokemon(box.expand(s.get("pokemon", [])), sort_key, descending)
+    if fav_only:
+        mons = [p for p in mons if p.get("favorite")]
+    return mons
+
+
+def _sort_dex_entries(entries, sort_key="dex", descending=False):
+    if sort_key == "name":
+        return sorted(entries, key=lambda e: (e["name"].casefold(), e["name"]), reverse=descending)
+    if sort_key == "rarity":
+        def key(e):
+            rank = PARTY_RARITY_ORDER.get(e.get("rarity"), len(PARTY_RARITY_ORDER))
+            return (-rank if descending else rank, e["dex_no"])
+        return sorted(entries, key=key)
+    if sort_key == "caught":
+        def key(e):
+            rank = 1 if e.get("caught") else 0
+            return (-rank if descending else rank, e["dex_no"])
+        return sorted(entries, key=key)
+    # default / "dex"
+    def key(e):
+        number = e["dex_no"]
+        return -number if descending else number
+    return sorted(entries, key=key)
+
+
+def _filter_dex_entries(entries, filter_mode="all"):
+    if filter_mode == "caught":
+        return [e for e in entries if e.get("caught")]
+    if filter_mode == "missing":
+        return [e for e in entries if not e.get("caught")]
+    return list(entries)
+
+
+def _dex_view_entries(entries, sort_key="dex", descending=False, filter_mode="all", query=""):
+    filtered = _filter_dex_entries(_sort_dex_entries(entries, sort_key, descending), filter_mode)
+    return _filter_dex_query(filtered, query)
 
 
 # ── tty plumbing ─────────────────────────────────────────────────────────────
@@ -1130,17 +2053,36 @@ def _scroll_screen(title, lines):
 def _journal_screen():
     shiny_only = False
     rare_only = False
+    newest_first = True
+    query = ""
+    search_active = False
     top = 0
     while True:
         # Highlights (shiny/legendary) are sparse, so scan deeper when filtering.
-        limit = 2000 if (shiny_only or rare_only) else 200
-        lines = _journal_lines(limit=limit, shiny_only=shiny_only, rare_only=rare_only)
-        body = [_journal_filter_status(shiny_only, rare_only), ""] + lines
+        limit = 2000 if (shiny_only or rare_only or query) else 200
+        lines = _journal_lines(
+            limit=limit,
+            shiny_only=shiny_only,
+            rare_only=rare_only,
+            newest_first=newest_first,
+            query=query,
+        )
+        body = [
+            _journal_filter_status(shiny_only, rare_only, newest_first, query, search_active),
+            "",
+        ] + lines
         height = max(4, shutil.get_terminal_size((80, 24)).lines - 5)
         top = max(0, min(top, max(0, len(body) - height)))
-        hint = "↑/↓ scroll · s shiny · l legendary/mythic · a all · esc back"
-        _draw(_scroll_frame("journal", body, top, height, hint))
+        hint = (
+            "↑/↓ scroll · s shiny · l legendary/mythic · "
+            "r reverse · a all · esc back"
+        )
+        _draw(_scroll_frame("journal", body, top, height, _search_hint(hint, query, search_active)))
         key = _read_key()
+        query, search_active, handled = _search_key(key, query, search_active)
+        if handled:
+            top = 0
+            continue
         if key in ("esc", "q"):
             return
         if key == "s":
@@ -1148,6 +2090,9 @@ def _journal_screen():
             top = 0
         elif key == "l":
             rare_only = not rare_only
+            top = 0
+        elif key == "r":
+            newest_first = not newest_first
             top = 0
         elif key == "a":
             shiny_only = rare_only = False
@@ -1173,44 +2118,97 @@ def _journal_screen():
 def _dex_screen():
     selected = None
     top = 0
+    sort_key = "dex"
+    descending = False
+    filter_mode = "all"
+    query = ""
+    search_active = False
     while True:
         s = st.load()
-        entries = _dex_entries(s)
-        if not entries:
+        all_entries = _dex_entries(s)
+        entries = _dex_view_entries(all_entries, sort_key, descending, filter_mode, query)
+        if not all_entries:
             _scroll_screen("pokédex", [f"{DIM}No dex entries available.{RESET}"])
             return
-        if selected is None:
+        if selected is None and entries:
             selected = next((i for i, e in enumerate(entries) if e["active"]), None)
             if selected is None:
                 selected = next((i for i, e in enumerate(entries) if e["caught"]), 0)
         height = max(8, shutil.get_terminal_size((80, 24)).lines - 1)
         width = shutil.get_terminal_size((80, 24)).columns
         body_h = max(1, height - DEX_CHROME)
-        selected = max(0, min(selected, len(entries) - 1))
-        if selected < top:
-            top = selected
-        elif selected >= top + body_h:
-            top = selected - body_h + 1
-        top = max(0, min(top, max(0, len(entries) - body_h)))
-        _draw(_dex_frame(entries, selected, top, height, width))
+        if entries:
+            selected = max(0, min(selected or 0, len(entries) - 1))
+            if selected < top:
+                top = selected
+            elif selected >= top + body_h:
+                top = selected - body_h + 1
+            top = max(0, min(top, max(0, len(entries) - body_h)))
+        else:
+            selected = 0
+            top = 0
+        _draw(_dex_frame(
+            entries, selected, top, height, width,
+            sort_key=sort_key,
+            descending=descending,
+            filter_mode=filter_mode,
+            total_entries=len(all_entries),
+            total_caught=sum(1 for e in all_entries if e["caught"]),
+            query=query,
+            search_active=search_active,
+        ))
         key = _read_key()
+        selected_name = entries[selected]["name"] if entries else None
+        query, search_active, handled = _search_key(key, query, search_active)
+        if handled:
+            entries = _dex_view_entries(all_entries, sort_key, descending, filter_mode, query)
+            selected = next((i for i, e in enumerate(entries) if e["name"] == selected_name), 0)
+            top = 0
+            continue
         if key in ("esc", "q"):
             return
-        if key in ("up", "k"):
+        if key == "s":
+            selected_name = entries[selected]["name"] if entries else None
+            sort_key = _next_dex_sort(sort_key)
+            entries = _dex_view_entries(all_entries, sort_key, descending, filter_mode, query)
+            selected = next(
+                (i for i, e in enumerate(entries) if e["name"] == selected_name),
+                0,
+            )
+            top = 0
+        elif key == "r":
+            selected_name = entries[selected]["name"] if entries else None
+            descending = not descending
+            entries = _dex_view_entries(all_entries, sort_key, descending, filter_mode, query)
+            selected = next(
+                (i for i, e in enumerate(entries) if e["name"] == selected_name),
+                0,
+            )
+            top = 0
+        elif key == "c":
+            selected_name = entries[selected]["name"] if entries else None
+            filter_mode = _next_dex_filter(filter_mode)
+            entries = _dex_view_entries(all_entries, sort_key, descending, filter_mode, query)
+            selected = next(
+                (i for i, e in enumerate(entries) if e["name"] == selected_name),
+                0,
+            )
+            top = 0
+        elif key in ("up", "k") and entries:
             selected -= 1
-        elif key in ("down", "j"):
+        elif key in ("down", "j") and entries:
             selected += 1
-        elif key == "wheel_up":
+        elif key == "wheel_up" and entries:
             selected -= 3
-        elif key == "wheel_down":
+        elif key == "wheel_down" and entries:
             selected += 3
-        elif key in ("page_up", "left", "b"):
+        elif key in ("page_up", "left", "b") and entries:
             selected -= body_h
-        elif key in ("page_down", "right", "space", "f"):
+        elif key in ("page_down", "right", "space", "f") and entries:
             selected += body_h
-        elif key in ("home", "g"):
+        elif key in ("home", "g") and entries:
             selected = 0
-        elif key in ("end", "G"):
+        elif key in ("end", "G") and entries:
             selected = len(entries) - 1
 
 
@@ -1220,12 +2218,17 @@ def _party_screen():
     sort_key = "name"
     descending = False
     fav_only = False
+    query = ""
+    search_active = False
     while True:
         s = st.load()
-        mons = _party(s, sort_key, descending)
+        base_mons = _party(s, sort_key, descending)
+        mons = list(base_mons)
         if fav_only:
             mons = [p for p in mons if p.get("favorite")]
-        if not mons and not fav_only:
+        if query:
+            mons = _filter_pokemon_query(mons, query)
+        if not base_mons:
             _scroll_screen("party", [f"{DIM}No pokémon yet.{RESET}"])
             return
         height = max(12, shutil.get_terminal_size((80, 24)).lines - 1)
@@ -1243,8 +2246,20 @@ def _party_screen():
         top = max(0, min(top, max(0, len(mons) - list_h)))
         _draw(_party_frame(
             s, sel, top, list_h, art_h=art_rows * 2, width=width,
-            sort_key=sort_key, descending=descending, fav_only=fav_only))
+            sort_key=sort_key, descending=descending, fav_only=fav_only,
+            query=query, search_active=search_active))
         key = _read_key()
+        selected_id = mons[sel]["id"] if mons else None
+        query, search_active, handled = _search_key(key, query, search_active)
+        if handled:
+            mons = _party(s, sort_key, descending)
+            if fav_only:
+                mons = [p for p in mons if p.get("favorite")]
+            if query:
+                mons = _filter_pokemon_query(mons, query)
+            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+            top = 0
+            continue
         if key in ("esc", "q"):
             return
         if key in ("up", "k"):
@@ -1264,15 +2279,25 @@ def _party_screen():
         elif key in ("end", "G"):
             sel = len(mons) - 1
         elif key == "F":
+            selected_id = mons[sel]["id"] if mons else None
             fav_only = not fav_only
-            sel = top = 0
+            mons = _party(s, sort_key, descending)
+            if fav_only:
+                mons = [p for p in mons if p.get("favorite")]
+            if query:
+                mons = _filter_pokemon_query(mons, query)
+            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+            top = 0
         elif key == "f" and mons:
-            favorites.toggle(s, mons[sel]["id"])
-            st.save(s)
+            _mutate_fresh_state(_toggle_favorite, mons[sel]["id"])
         elif key == "s":
             selected_id = mons[sel]["id"] if mons else None
             sort_key = _next_party_sort(sort_key)
             mons = _party(s, sort_key, descending)
+            if fav_only:
+                mons = [p for p in mons if p.get("favorite")]
+            if query:
+                mons = _filter_pokemon_query(mons, query)
             sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
         elif key == "r":
             selected_id = mons[sel]["id"] if mons else None
@@ -1280,23 +2305,30 @@ def _party_screen():
                 sort_key = PARTY_SORT_FIELDS[0]
             descending = not descending
             mons = _party(s, sort_key, descending)
+            if fav_only:
+                mons = [p for p in mons if p.get("favorite")]
+            if query:
+                mons = _filter_pokemon_query(mons, query)
             sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
         elif key == "enter" and mons:
-            s["active"] = mons[sel]["id"]
-            favorites.set_favorite(mons[sel], True)  # your active buddy is always a favorite
-            st.save(s)
+            _mutate_fresh_state(_activate_pokemon_copy, mons[sel]["id"])
 
 
 def _box_screen():
     sel = 0
     top = 0
+    sort_key = "name"
+    descending = False
     fav_only = False
+    query = ""
+    search_active = False
     while True:
         s = st.load()
-        mons = box.expand(s.get("pokemon", []))
-        if fav_only:
-            mons = [p for p in mons if p.get("favorite")]
-        if not mons and not fav_only:
+        base_mons = _box(s, sort_key, descending, fav_only=fav_only)
+        mons = list(base_mons)
+        if query:
+            mons = _filter_pokemon_query(mons, query)
+        if not s.get("pokemon") and not fav_only:
             _scroll_screen("box", [f"{DIM}No pokémon in your box yet.{RESET}"])
             return
         height = max(12, shutil.get_terminal_size((80, 24)).lines - 1)
@@ -1310,8 +2342,18 @@ def _box_screen():
             top = sel - list_h + 1
         top = max(0, min(top, max(0, len(mons) - list_h)))
         _draw(_box_frame(s, sel, top, list_h, art_h=art_rows * 2, width=width,
-                         fav_only=fav_only))
+                         sort_key=sort_key, descending=descending, fav_only=fav_only,
+                         query=query, search_active=search_active))
         key = _read_key()
+        selected_id = mons[sel]["id"] if mons else None
+        query, search_active, handled = _search_key(key, query, search_active)
+        if handled:
+            mons = _box(s, sort_key, descending, fav_only=fav_only)
+            if query:
+                mons = _filter_pokemon_query(mons, query)
+            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+            top = 0
+            continue
         if key in ("esc", "q"):
             return
         if key in ("up", "k"):
@@ -1331,38 +2373,180 @@ def _box_screen():
         elif key in ("end", "G"):
             sel = len(mons) - 1
         elif key == "F":
+            selected_id = mons[sel]["id"] if mons else None
             fav_only = not fav_only
-            sel = top = 0
+            mons = _box(s, sort_key, descending, fav_only=fav_only)
+            if query:
+                mons = _filter_pokemon_query(mons, query)
+            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+            top = 0
         elif key == "f" and mons:
-            favorites.toggle(s, mons[sel]["id"])  # toggle on the real entry by id
-            st.save(s)
+            _mutate_fresh_state(_toggle_favorite, mons[sel]["id"])
+        elif key == "s":
+            selected_id = mons[sel]["id"] if mons else None
+            sort_key = _next_box_sort(sort_key)
+            mons = _box(s, sort_key, descending, fav_only=fav_only)
+            if query:
+                mons = _filter_pokemon_query(mons, query)
+            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+        elif key == "r":
+            selected_id = mons[sel]["id"] if mons else None
+            descending = not descending
+            mons = _box(s, sort_key, descending, fav_only=fav_only)
+            if query:
+                mons = _filter_pokemon_query(mons, query)
+            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
         elif key == "enter" and mons:
             cid = mons[sel]["id"]  # activate THIS specific copy
-            s["active"] = cid
-            for p in s["pokemon"]:
-                if p["id"] == cid:
-                    favorites.set_favorite(p, True)  # active buddy is always a favorite
-            st.save(s)
+            _mutate_fresh_state(_activate_pokemon_copy, cid)
 
 
-def _settings_screen():
+def _showcase_choose_screen(slot_index, current_id=None):
+    sel = 0
+    top = 0
+    query = ""
+    search_active = False
     while True:
         s = st.load()
-        mode = s.get("mode", "auto")
-        on = mode == "battle"
-        body = [
-            f"  Encounter mode: {BOLD}{'BATTLE' if on else 'AUTO'}{RESET}",
-            "",
-            f"  {DIM}AUTO{RESET}   commons auto-catch; rare/legendary use Safari",
-            f"  {DIM}BATTLE{RESET} every wild is a weaken-then-catch fight",
-        ]
-        _draw(_scroll_frame("settings", body, 0, 12, "⏎ toggle mode · esc back"))
+        mons = _box(s, "name", False)
+        if query:
+            mons = _filter_pokemon_query(mons, query)
+        if current_id is not None and mons:
+            sel = next((i for i, p in enumerate(mons) if p.get("id") == current_id), sel)
+            current_id = None
+        height = max(10, shutil.get_terminal_size((80, 24)).lines - 1)
+        width = shutil.get_terminal_size((80, 24)).columns
+        list_h = max(4, height - 7)
+        sel = max(0, min(sel, len(mons) - 1)) if mons else 0
+        if sel < top:
+            top = sel
+        elif sel >= top + list_h:
+            top = sel - list_h + 1
+        top = max(0, min(top, max(0, len(mons) - list_h)))
+        _draw(_showcase_choose_frame(
+            s, sel, top, list_h, width=width,
+            current_id=showcase.showcase_slots(s)[slot_index],
+            query=query,
+            search_active=search_active,
+        ))
+        key = _read_key()
+        selected_id = mons[sel]["id"] if mons else None
+        query, search_active, handled = _search_key(key, query, search_active)
+        if handled:
+            mons = _box(s, "name", False)
+            if query:
+                mons = _filter_pokemon_query(mons, query)
+            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+            top = 0
+            continue
+        if key in ("esc", "q"):
+            return False
+        if key in ("up", "k"):
+            sel -= 1
+        elif key in ("down", "j"):
+            sel += 1
+        elif key == "wheel_up":
+            sel -= 3
+        elif key == "wheel_down":
+            sel += 3
+        elif key in ("page_up", "left", "b"):
+            sel -= list_h
+        elif key in ("page_down", "right", "space"):
+            sel += list_h
+        elif key in ("home", "g"):
+            sel = 0
+        elif key in ("end", "G"):
+            sel = len(mons) - 1
+        elif key == "enter" and mons:
+            with st.lock():
+                fresh = st.load()
+                fresh_mons = _box(fresh, "name", False)
+                if query:
+                    fresh_mons = _filter_pokemon_query(fresh_mons, query)
+                chosen_id = _fresh_showcase_selection_id(fresh_mons, selected_id)
+                if chosen_id:
+                    showcase.set_showcase_slot(fresh, slot_index, chosen_id)
+                    st.save(fresh)
+                    return True
+
+
+def _showcase_screen():
+    sel = 0
+    notice = None
+    while True:
+        s = st.load()
+        entries = showcase.showcase_entries(s)
+        height = max(14, shutil.get_terminal_size((80, 24)).lines - 1)
+        width = shutil.get_terminal_size((80, 24)).columns
+        sel = max(0, min(sel, len(entries) - 1)) if entries else 0
+        _draw(_showcase_frame(s, sel, width=width, height=height, notice=notice))
         key = _read_key()
         if key in ("esc", "q"):
             return
-        if key == "enter":
-            s["mode"] = "auto" if on else "battle"
-            st.save(s)
+        cols = _showcase_columns(width)
+        if key in ("left", "h"):
+            sel -= 1
+            notice = None
+        elif key in ("right", "l"):
+            sel += 1
+            notice = None
+        elif key in ("up", "k"):
+            sel -= cols
+            notice = None
+        elif key in ("down", "j"):
+            sel += cols
+            notice = None
+        elif key in ("home", "g"):
+            sel = 0
+            notice = None
+        elif key in ("end", "G"):
+            sel = len(entries) - 1
+            notice = None
+        elif key == "s":
+            try:
+                path = showcase_export.save_showcase_image(s)
+                notice = f"saved to {path}"
+            except OSError as exc:
+                notice = f"share failed: {exc}"
+        elif key == "x":
+            with st.lock():
+                fresh = st.load()
+                showcase.clear_showcase_slot(fresh, sel)
+                st.save(fresh)
+            notice = None
+        elif key == "enter" and s.get("pokemon"):
+            current = entries[sel].get("pokemon_id") if entries else None
+            _showcase_choose_screen(sel, current)
+            notice = None
+
+
+def _settings_screen():
+    sel = 0
+    notice = None
+    while True:
+        s = st.load()
+        rows = _settings_rows(s)
+        sel = _settings_select(rows, sel)
+        width = shutil.get_terminal_size((80, 24)).columns
+        _draw(_settings_frame(s, sel, width=width, notice=notice))
+        key = _read_key()
+        if key in ("esc", "q"):
+            return
+        if key in ("up", "k"):
+            sel = _settings_select(rows, sel, -1)
+            notice = None
+        elif key in ("down", "j"):
+            sel = _settings_select(rows, sel, 1)
+            notice = None
+        elif key in ("enter", "space") and rows[sel].get("writable"):
+            if rows[sel].get("action") == "backup":
+                try:
+                    notice = f"backup saved to {backups.create_backup()}"
+                except OSError as exc:
+                    notice = f"backup failed: {exc}"
+            else:
+                _mutate_fresh_state(_settings_cycle, rows[sel]["key"])
+                notice = None
 
 
 def _encounter_screen():
@@ -1407,6 +2591,8 @@ def _open(screen):
         _dex_screen()
     elif screen == "box":
         _box_screen()
+    elif screen == "showcase":
+        _showcase_screen()
     elif screen == "journal":
         _journal_screen()
     elif screen == "status":
@@ -1428,7 +2614,8 @@ def run(initial_screen=None):
     import termios
     import tty
     global _GRAPHICS, _CELL_PX
-    _GRAPHICS = kgp.supported()
+    s = st.load()
+    _GRAPHICS = _graphics_enabled(s)
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     sel = 0
@@ -1437,7 +2624,7 @@ def run(initial_screen=None):
         if _GRAPHICS:
             _CELL_PX = _query_cell_px()  # size PNGs to the box so it downscales, not up
         sys.stdout.write(ALT_SCREEN + HIDE_CURSOR + MOUSE_ON)
-        if initial_screen in {"party", "dex", "box", "journal", "status", "tokens", "settings"}:
+        if initial_screen in {"party", "dex", "box", "showcase", "journal", "status", "tokens", "settings"}:
             _open(initial_screen)
             return
         if _encounter_kind(st.load()):  # a wild is waiting — jump straight in

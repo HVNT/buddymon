@@ -10,9 +10,10 @@ from datetime import date
 from . import data, favorites
 
 # Tokens per 1 progress point, by usage tier.
-XP_TIERS = {"output": 75, "input": 500, "cache_write": 250, "cache_read": 1000}
+XP_TIERS = {"output": 50, "input": 250, "cache_write": 125, "cache_read": 500}
 
-LEVEL_CAP = 60
+LEVEL_CAP = 100
+WILD_LEVEL_CAP = 55
 BALLS_PER_LEVEL = 3
 BALL_MILESTONE_XP = 5000  # +1 ball per this much lifetime XP
 STREAK_STEP = 0.02  # +2% XP per consecutive day, capped at 30 days
@@ -21,7 +22,8 @@ STREAK_STEP = 0.02  # +2% XP per consecutive day, capped at 30 days
 def xp_for_level(level):
     """Total XP required to reach a level. Cubic, like the real games'
     growth curves: at heavy daily use (~20k XP/day), first evolution lands
-    after ~a week, Lv.36 after ~3 months, the cap after a year-plus."""
+    after ~a week, Lv.36 after ~3 months, Lv.60 after a year-plus, and
+    Lv.100 as a multi-year long tail."""
     return 40 * (level - 1) ** 3
 
 
@@ -79,11 +81,11 @@ def new_pokemon(name, ptype, emoji, rarity, shiny=False, level=1):
 
 
 def evolution_level_bounds(name):
-    """Legal wild-level band for this evolution stage.
+    """Evolution-stage level band for a species.
 
     A species starts at the level its previous form evolves into it, and stops
     one level before it would evolve onward. Standalone species use the full
-    playable level range.
+    playable level range before wild-spawn caps are applied.
     """
     lower = 1
     prev = data.PRE_EVOLUTION.get(name)
@@ -100,9 +102,23 @@ def evolution_level_bounds(name):
     return lower, upper
 
 
-def clamp_species_level(name, level):
+def wild_level_bounds(name):
     lower, upper = evolution_level_bounds(name)
+    upper = min(upper, WILD_LEVEL_CAP)
+    lower = min(lower, upper)
+    return lower, upper
+
+
+def clamp_wild_level(name, level):
+    lower, upper = wild_level_bounds(name)
     return max(lower, min(upper, int(level)))
+
+
+def fixed_wild_level(name):
+    level = data.LEGENDARY_LEVELS.get(name)
+    if level is None:
+        return None
+    return clamp_wild_level(name, level)
 
 
 def _normal_level_between(lower, upper, rng):
@@ -125,7 +141,10 @@ def _normal_level_between(lower, upper, rng):
 
 
 def wild_level_for(name, rng):
-    lower, upper = evolution_level_bounds(name)
+    fixed = fixed_wild_level(name)
+    if fixed is not None:
+        return fixed
+    lower, upper = wild_level_bounds(name)
     return _normal_level_between(lower, upper, rng)
 
 
@@ -187,11 +206,28 @@ def award_xp(state, base_xp, rng):
     }
 
 
+def encounter_resolution(mode, rarity):
+    """Return the mechanic used by one mode/rarity pair.
+
+    The stored ``auto`` value is the player-facing Quick mode: common and
+    uncommon spawns resolve immediately, while rare and legendary spawns use
+    Safari. Explicit Safari and Battle modes make every wild interactive.
+    """
+    if mode == "battle":
+        return "battle"
+    if mode == "safari" or rarity in data.INTERACTIVE_RARITIES:
+        return "safari"
+    return "auto"
+
+
 def roll_encounter(state, rng):
-    """Maybe spawn a wild pokemon. Common/uncommon auto-resolve (caught/fled/
-    no_balls); rare/legendary become an interactive Safari encounter
-    ("appeared"). Returns a result dict or None."""
+    """Maybe spawn and resolve a wild according to the encounter mode."""
     from . import state as st
+
+    # A mode switch must not create competing Safari and Battle encounters.
+    # While any wild is waiting, finish it before rolling another encounter.
+    if state.get("pending_encounter") or state.get("pending_battle"):
+        return None
 
     buddy = st.active_pokemon(state)
     if buddy is None or rng.random() > data.ENCOUNTER_CHANCE:
@@ -217,18 +253,13 @@ def roll_encounter(state, rng):
         "shiny": shiny, "level": level,
     }
 
-    # Battle Mode: EVERY wild becomes a weaken-then-catch battle (one at a time).
-    if state.get("mode") == "battle":
-        if state.get("pending_battle"):
-            return None
+    resolution = encounter_resolution(state.get("mode"), rarity)
+    if resolution == "battle":
         from . import battle
         state["pending_battle"] = battle.start(spawn, buddy)
         return {**spawn, "outcome": "appeared"}
 
-    # Auto Mode: rare/legendary become interactive Safari encounters.
-    if rarity in data.INTERACTIVE_RARITIES:
-        if state.get("pending_encounter"):
-            return None  # already one in front of you
+    if resolution == "safari":
         from . import safari
         state["pending_encounter"] = safari.start(spawn)
         return {**spawn, "outcome": "appeared"}

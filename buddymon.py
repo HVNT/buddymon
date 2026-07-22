@@ -8,34 +8,55 @@ Usage:
   buddymon.py switch <name>       make a caught pokemon your active buddy
   buddymon.py preview             render every sprite (art QA; both frames for packs)
   buddymon.py export-chibi        archive the chibi pack to ~/Pictures/buddymon/
+  buddymon.py share-showcase      save a labeled Showcase PNG to ~/Desktop/
   buddymon.py collect             count tokens from other agent CLIs
+  buddymon.py collector <action>  manage optional background collection
+  buddymon.py app-status          JSON status for BuddyMon.app
+  buddymon.py app-menu-bar-harness JSON state inventory for native menu-bar QA
+  buddymon.py app-menu-panel-harness JSON state inventory for compact-panel QA
+  buddymon.py app-view <screen>   JSON view payload for BuddyMon.app
+  buddymon.py app-action <action> JSON mutation for BuddyMon.app
+  buddymon.py install-assets      fetch nicer local sprite packs
   buddymon.py tiny [--collect]    one-line plain-text status (tmux status bar)
   buddymon.py menubar             SwiftBar plugin output (sprite icon + dropdown)
   buddymon.py menu                interactive terminal UI (party/dex/status/tokens)
   buddymon.py tokens              token usage report
+  buddymon.py backup              make a local snapshot of BuddyMon data
   buddymon.py history [N]         the buddy's journey journal (default last 20)
   buddymon.py safari <action>     play a turn vs a pending wild (rock|bait|ball|run)
   buddymon.py battle <action>     battle-mode turn (attack|ball|run)
-  buddymon.py mode [auto|battle]  toggle/show encounter mode
+  buddymon.py mode [quick|auto|safari|battle]  cycle or set encounter mode
 """
 import base64
 import json
 import random
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import (  # noqa: E402
-    battle as bt, collectors, data, engine, favorites, journal, notify, packs,
-    paths, pixels, png, render, safari as sf, scene, sprites, state,
-    token_usage, tui,
+    app_bridge, backups, battle as bt, collector_service, collectors, data, engine,
+    favorites, journal, menu_bar, menu_launcher, notify, packs, paths, pixels, png,
+    render, safari as sf, scene, showcase_share, sprites, state, token_usage, tui,
 )
 
 EVOLUTION_NOTICE_COLOR = "#4c1d95"
 EVENT_NOTICE_COLOR = "#1e3a8a"
 DOT_SEP = " · "
+_OPEN_MENU_USAGE = (
+    "Usage: open-menu [screen] "
+    "[--launcher auto|ghostty|iterm|terminal] "
+    "[--window-frame x,y,width,height]"
+)
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    text: str
+    exit_code: int = 0
 
 
 def choose(args):
@@ -134,15 +155,25 @@ def export_chibi(_args):
     return "\n".join(msgs)
 
 
-def collect(_args, quiet=False):
+def share_showcase(_args):
+    return showcase_share.save_with_feedback().message
+
+
+def collect(args, quiet=False):
+    scheduled = "--scheduled" in args
     with state.lock():
         s = state.load()
         if not s["pokemon"]:
             return "" if quiet else "No buddy yet — nothing to collect for."
+        started_at = time.time()
+        if scheduled and not collector_service.collection_due(s, started_at):
+            return "" if quiet else "scheduled collection not due"
         summary = collectors.collect(s, random.Random())
         for entry in journal.log_outcomes(summary["result"], summary["encounter"], "cross"):
             if journal.is_rare(entry):
-                notify.notify("buddymon", entry["text"])
+                notify.notify("buddymon", entry["text"], state=s)
+        if scheduled:
+            collector_service.mark_collection(s, time.time())
         state.save(s)
     detail = engine.summarize_events(summary["result"], summary["encounter"])
     if detail:
@@ -154,6 +185,29 @@ def collect(_args, quiet=False):
     tok = summary["tokens"]
     raw = summary.get("raw_tokens", sum(tok.values()))
     return detail or (f"{raw} tokens counted" if raw else "no new tokens")
+
+
+def collector_service_command(args):
+    if len(args) > 1:
+        return CommandResult("Usage: collector install|uninstall|status", 2)
+    action = args[0].lower() if args else "status"
+    try:
+        if action == "install":
+            status = collector_service.install_service()
+            return CommandResult(collector_service.format_status(status))
+        if action == "uninstall":
+            result = collector_service.uninstall_service()
+            count = len(result["removed"])
+            suffix = "s" if count != 1 else ""
+            return CommandResult(
+                f"collector service: uninstalled ({count} file{suffix} removed)"
+            )
+        if action == "status":
+            status = collector_service.service_status()
+            return CommandResult(collector_service.format_status(status))
+    except (collector_service.CollectorServiceError, OSError) as exc:
+        return CommandResult(f"collector service failed: {exc}", 1)
+    return CommandResult("Usage: collector install|uninstall|status", 2)
 
 
 def tiny(args):
@@ -328,7 +382,7 @@ def _switch_submenu(s):
     script = Path(__file__).resolve()
     active_id = s.get("active")
     mons = [p for p in favorites.favorites(s) if p["id"] != active_id]
-    lines = [f"Switch buddy | sfimage=arrow.triangle.2.circlepath"]
+    lines = ["Switch buddy | sfimage=arrow.triangle.2.circlepath"]
     if not mons:
         lines.append(f"--No favorites yet — open Party | sfimage=star "
                      f"bash=/usr/bin/python3 param1={script} param2=open-menu "
@@ -444,7 +498,9 @@ def _bar_line(s, buddy, frame_list, frame_idx):
     if pending or pb:  # a wild is waiting — keep the buddy, flag it with ❗
         grid, palette = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
         icon = base64.b64encode(png.grid_to_png(grid, palette, 4, dpi=_bar_dpi(grid))).decode()
-        return f"❗ | image={icon}"
+        wild = pending or pb
+        name = wild.get("name", "wild")
+        return f"❗ {name} | image={icon}"
     evo_notice = journal.latest_evolution(EVOLUTION_BAR_NOTICE_SECS, now)
     if evo_notice is not None:
         grid, palette = packs.gen5_frames(buddy["name"], buddy["type"], buddy.get("shiny"))[0]
@@ -554,7 +610,7 @@ def _dropdown_lines(s, buddy):
         detail = _dropdown_event_detail(event["detail"], evo, event.get("ts"))
         if detail:
             lines.append(f"{detail} | color={EVENT_NOTICE_COLOR}")
-    lines.extend(_safari_section(s))      # auto mode, rare/legendary
+    lines.extend(_safari_section(s))      # Safari mechanic, when one is pending
     lines.extend(_battle_section(s))      # battle mode, any wild
     lines.extend(_last_encounter_section(s, now))
     # The menu bar is the ambient glance; full browsing lives in the
@@ -564,6 +620,9 @@ def _dropdown_lines(s, buddy):
     lines.append(_dropdown_stats_line(s))
     lines.append(f"Open menu | sfimage=gearshape bash=/usr/bin/python3 "
                  f"param1={script} param2=open-menu terminal=false")
+    lines.append(f"Showcase | sfimage=rosette bash=/usr/bin/python3 "
+                 f"param1={script} param2=open-menu param3=showcase "
+                 f"terminal=false")
     lines.append(
         f"{_token_usage_menu_title()} | sfimage=chart.bar bash=/usr/bin/python3 "
         f"param1={script} param2=open-menu param3=tokens terminal=false"
@@ -607,8 +666,8 @@ def menubar(args):
             pass
         return "\n".join(_menubar_lines(state.load(), int(time.time() / 15)))
 
-    # Cross-client token collection is owned by the launchd agent (every 5 min);
-    # the stream re-reads state only when state.json changes.
+    # Scheduled callers share a state-locked due gate. The stream only re-reads
+    # state here; the app or optional user service owns the periodic trigger.
     frame_idx, dropdown, s, last_mtime, last_emit = 0, None, None, -1.0, 0.0
     while True:
         now = time.time()
@@ -661,18 +720,33 @@ def battle(args):
 
 
 def mode(args):
-    """Toggle/show the encounter mode: 'auto' (Safari) or 'battle'."""
+    """Cycle or set Quick, Safari, or Battle encounter behavior."""
+    aliases = {"quick": "auto"}
+    labels = {"auto": "Quick", "safari": "Safari", "battle": "Battle"}
+    descriptions = {
+        "auto": (
+            "common and uncommon catches resolve automatically; "
+            "rare and legendary encounters use Safari"
+        ),
+        "safari": "every wild waits for Rock, Bait, Ball, or Run",
+        "battle": "every wild waits for Fight, Ball, or Run",
+    }
     with state.lock():
         s = state.load()
-        cur = s.get("mode", "auto")
-        target = args[0] if args else ("battle" if cur == "auto" else "auto")
-        if target not in ("auto", "battle"):
-            return "Usage: mode auto|battle"
+        cur = s.get("mode", state.DEFAULT_MODE)
+        if cur not in state.VALID_MODES:
+            cur = state.DEFAULT_MODE
+        if args:
+            requested = args[0].lower()
+            target = aliases.get(requested, requested)
+        else:
+            index = state.VALID_MODES.index(cur)
+            target = state.VALID_MODES[(index + 1) % len(state.VALID_MODES)]
+        if target not in state.VALID_MODES:
+            return "Usage: mode quick|auto|safari|battle"
         s["mode"] = target
         state.save(s)
-    return f"encounter mode: {target}" + (
-        "  — wild spawns are now weaken-then-catch battles" if target == "battle"
-        else "  — commons auto-catch, rare/legendary use Safari")
+    return f"encounter mode: {labels[target]} — {descriptions[target]}"
 
 
 def menu(args):
@@ -681,19 +755,169 @@ def menu(args):
     return ""
 
 
+def _open_menu_args(args):
+    screen = None
+    launcher = None
+    window_frame = None
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--launcher":
+            if i + 1 >= len(args):
+                raise ValueError("--launcher requires a value")
+            launcher = args[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--launcher="):
+            launcher = arg.split("=", 1)[1]
+            i += 1
+            continue
+        if arg == "--window-frame":
+            if i + 1 >= len(args):
+                raise ValueError("--window-frame requires x,y,width,height")
+            window_frame = menu_launcher.normalize_window_frame(args[i + 1])
+            i += 2
+            continue
+        if arg.startswith("--window-frame="):
+            window_frame = menu_launcher.normalize_window_frame(
+                arg.split("=", 1)[1]
+            )
+            i += 1
+            continue
+        if screen is None:
+            screen = arg
+        i += 1
+    return screen, launcher, window_frame
+
+
 def open_menu(args):
-    """Open the interactive menu in Ghostty when available, else Terminal.app."""
-    notify.open_menu(args[0] if args else None)
-    return ""
+    """Open the interactive menu in Ghostty, iTerm2, or Terminal.app."""
+    try:
+        screen, launcher, window_frame = _open_menu_args(args)
+    except ValueError:
+        return _OPEN_MENU_USAGE
+    if launcher and launcher not in state.PREFERENCE_VALUES["menu_launcher"]:
+        return _OPEN_MENU_USAGE
+    s = state.load()
+    launcher = launcher or state.preference(s, "menu_launcher")
+    replace_owned = state.preference(s, "menu_replace") == "on"
+    opened = notify.open_menu(
+        screen,
+        launcher=launcher,
+        replace_owned=replace_owned,
+        window_frame=window_frame,
+    )
+    if opened:
+        return ""
+    return "Could not open BuddyMon menu. Try: python3 buddymon.py menu"
 
 
 def tokens(_args):
     return "\n".join(token_usage.report_lines())
 
 
+def backup(_args):
+    """Create a manual local snapshot for App and Terminal Settings."""
+    return str(backups.create_backup())
+
+
+def app_status(args):
+    return app_bridge.status_json(indent=2 if "--pretty" in args else None)
+
+
+def app_menu_bar_harness(args):
+    return menu_bar.harness_json(indent=2 if "--pretty" in args else None)
+
+
+def app_menu_panel_harness(args):
+    return app_bridge.menu_panel_harness_json(
+        indent=2 if "--pretty" in args else None
+    )
+
+
+def app_view(args):
+    pretty = "--pretty" in args
+    screens = [arg for arg in args if not arg.startswith("--")]
+    if not screens:
+        return "Usage: app-view <screen>"
+    screen = screens[0]
+    try:
+        return app_bridge.app_view_json(screen, indent=2 if pretty else None)
+    except ValueError as exc:
+        return str(exc)
+
+
+def app_action(args):
+    pretty = "--pretty" in args
+    clean = [arg for arg in args if arg != "--pretty"]
+    action = clean[0] if clean else ""
+    action_args = clean[1:] if len(clean) > 1 else []
+    return app_bridge.app_action_json(action, action_args, indent=2 if pretty else None)
+
+
+def install_assets(args):
+    json_out = "--json" in args
+    refresh = "--refresh" in args or "--force" in args
+    operation = "refresh" if refresh else "install_missing"
+    kinds = None
+    only_args = [arg for arg in args if arg.startswith("--only=")]
+    unsupported = [
+        arg for arg in args
+        if arg not in {"--json", "--refresh", "--force"}
+        and not arg.startswith("--only=")
+    ]
+    usage_error = None
+    if unsupported:
+        usage_error = "unsupported asset option: " + ", ".join(unsupported)
+    elif len(only_args) > 1:
+        usage_error = "--only may be specified once"
+    elif only_args:
+        parts = [part.strip() for part in only_args[0].split("=", 1)[1].split(",")]
+        if not parts or any(not part for part in parts):
+            usage_error = "--only requires one or more pack names"
+        else:
+            kinds = parts
+
+    exit_code = 2 if usage_error else None
+    if usage_error:
+        result = {
+            "operation": operation,
+            "ok": False,
+            "error": usage_error,
+            "results": [],
+            "packs": {},
+        }
+    else:
+        try:
+            result = app_bridge.install_assets(kinds=kinds, operation=operation)
+        except Exception as exc:
+            result = {
+                "operation": operation,
+                "ok": False,
+                "error": str(exc),
+                "results": [],
+                "packs": {},
+            }
+    if exit_code is None:
+        exit_code = 0 if result["ok"] else 1
+    if json_out:
+        return CommandResult(json.dumps(result, sort_keys=True), exit_code)
+    lines = []
+    if result.get("error"):
+        lines.append(f"asset install failed: {result['error']}")
+    for entry in result["results"]:
+        lines.append(f"{entry['kind']}: {entry['status']} - {entry['message']}")
+    if not result["ok"]:
+        lines.append(
+            "Some asset downloads failed; prior working packs were kept, "
+            "and fallback art is used where needed."
+        )
+    return CommandResult("\n".join(lines), exit_code)
+
+
 def history(args):
     n = int(args[0]) if args and args[0].isdigit() else 20
-    entries = journal.tail(n)
+    entries = journal.tail(n, newest_first=True)
     if not entries:
         return "No journal yet — the story starts with your next turn."
     out, day = [], None
@@ -715,12 +939,21 @@ def main():
         "switch-id": switch_id,
         "preview": preview,
         "export-chibi": export_chibi,
+        "share-showcase": share_showcase,
         "collect": collect,
+        "collector": collector_service_command,
         "tiny": tiny,
         "menubar": menubar,
         "menu": menu,
         "open-menu": open_menu,
         "tokens": tokens,
+        "backup": backup,
+        "app-status": app_status,
+        "app-menu-bar-harness": app_menu_bar_harness,
+        "app-menu-panel-harness": app_menu_panel_harness,
+        "app-view": app_view,
+        "app-action": app_action,
+        "install-assets": install_assets,
         "history": history,
         "safari": safari,
         "battle": battle,
@@ -733,12 +966,17 @@ def main():
     handler = handlers.get(cmd)
     if handler is None:
         print(__doc__.strip())
-        sys.exit(2)
+        return 2
     try:
-        print(handler(args))
+        result = handler(args)
+        if isinstance(result, CommandResult):
+            print(result.text)
+            return result.exit_code
+        print(result)
+        return 0
     except BrokenPipeError:  # piped into head etc.
-        sys.exit(0)
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import data, packs, pixels, sprites
+from lib import packs, pixels
 from tools import fetch_official as fo
 
 ASM_FIXTURE = """
@@ -108,6 +108,37 @@ def test_sprite_frames_falls_back_to_scaled_box_art(tmp_path, monkeypatch):
     assert len(grid) <= 16
     assert all(len(row) <= 16 for row in grid)
     assert palette["X"] == "#112233"
+    packs._cache.clear()
+
+
+def test_menu_bar_frames_prefer_compact_species_specific_gen5_art(
+    tmp_path,
+    monkeypatch,
+):
+    from lib import paths
+
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    pack_dir = tmp_path / "packs"
+    gen5_dir = pack_dir / "gen5"
+    gen5_dir.mkdir(parents=True)
+    (pack_dir / "gen2.json").write_text(json.dumps({
+        "Charizard": {
+            "frames": [["LL", "LL"]],
+            "palette": {"L": "#111111"},
+        },
+    }))
+    gen5_grid = ["G" * 24] * 20
+    (gen5_dir / "charizard.json").write_text(json.dumps({
+        "frames": [[gen5_grid, {"G": "#f08030"}]],
+        "shiny_frames": [],
+    }))
+    packs._cache.clear()
+
+    (grid, palette), = packs.menu_bar_frames("Charizard", "Fire")
+
+    assert len(grid) <= 16
+    assert all(len(row) <= 16 for row in grid)
+    assert palette == {"G": "#f08030"}
     packs._cache.clear()
 
 

@@ -22,9 +22,9 @@ def start(spawn, buddy):
     lvl = buddy["level"]
     b = data.BATTLE
     default_level = lvl + (b["wild_level_lo"] + b["wild_level_hi"]) // 2
-    wild_level = engine.clamp_species_level(
+    wild_level = engine.clamp_wild_level(
         spawn["name"],
-        spawn.get("level", default_level),
+        spawn.get("level") or default_level,
     )
     wild_hp = _hp_max("wild_hp_base", "wild_hp_per_level", wild_level)
     buddy_hp = _hp_max("buddy_hp_base", "buddy_hp_per_level", lvl)
@@ -140,7 +140,7 @@ def _resolve(s, pending, outcome):
     if enc:
         for entry in journal.log_outcomes(None, enc, "battle"):
             if journal.is_rare(entry):
-                notify.notify("buddymon", entry["text"])
+                notify.notify("buddymon", entry["text"], state=s)
     s.pop("pending_battle", None)
 
 

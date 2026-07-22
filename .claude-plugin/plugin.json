@@ -1,6 +1,6 @@
 {
   "name": "buddymon",
-  "description": "A pixel-art pokemon buddy that lives in your statusline — earns XP from real token usage, evolves, catches wilds, naps when you're idle. Local-only: no network, no settings.json rewrites.",
+  "description": "A local pixel-art pokemon buddy that earns XP from real token usage, evolves, catches wilds, and naps when you're idle. Normal play stays local; optional art downloads only when requested. No settings.json rewrites.",
   "version": "0.1.0",
   "author": {
     "name": "Hunter Brennick"

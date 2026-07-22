@@ -1,5 +1,5 @@
 ---
-description: Play a Safari turn against a waiting rare or legendary pokemon
+description: Play a Safari turn against a waiting wild pokemon
 argument-hint: "rock|bait|ball|run"
 ---
 

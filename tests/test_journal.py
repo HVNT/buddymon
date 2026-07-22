@@ -1,6 +1,9 @@
 """Journal + notification gating tests."""
+import shlex
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -23,6 +26,28 @@ def test_append_tail_roundtrip_and_corrupt_tolerance(tmp_path, monkeypatch):
     entries = journal.tail(10)
     assert [e["kind"] for e in entries] == ["caught", "level"]
     assert entries[0]["name"] == "Pidgey"
+    newest = journal.tail(10, newest_first=True)
+    assert [e["kind"] for e in newest] == ["level", "caught"]
+
+
+def test_history_command_reads_journal_newest_first(monkeypatch):
+    import buddymon
+
+    calls = []
+
+    def fake_tail(n, newest_first=False):
+        calls.append((n, newest_first))
+        return [
+            {"ts": 2, "text": "new event"},
+            {"ts": 1, "text": "old event"},
+        ]
+
+    monkeypatch.setattr(buddymon.journal, "tail", fake_tail)
+
+    out = buddymon.history(["2"])
+
+    assert calls == [(2, True)]
+    assert out.index("new event") < out.index("old event")
 
 
 def test_log_outcomes_kinds(tmp_path, monkeypatch):
@@ -74,12 +99,88 @@ def test_notify_fires_only_for_rare(tmp_path, monkeypatch):
     assert len(calls) == 1 and "Articuno" in calls[0]
 
 
-def test_open_menu_cmd_runs_stateful_launcher():
+def test_notify_off_suppresses_delivery(monkeypatch):
     from lib import notify
+
+    calls = []
+    monkeypatch.setattr(notify.shutil, "which", lambda _name: "/usr/local/bin/terminal-notifier")
+    monkeypatch.setattr(notify.subprocess, "run", lambda *a, **k: calls.append((a, k)))
+
+    notify.notify("buddymon", "rare catch", notifications="off")
+
+    assert calls == []
+
+
+def test_notify_silent_keeps_click_action_without_sound(monkeypatch):
+    from lib import notify
+
+    calls = []
+    monkeypatch.setattr(notify.shutil, "which", lambda _name: "/usr/local/bin/terminal-notifier")
+    monkeypatch.setattr(notify.subprocess, "run", lambda args, **_kwargs: calls.append(args))
+
+    notify.notify("buddymon", "rare catch", notifications="silent")
+
+    args = calls[0]
+    assert "-execute" in args
+    assert "-sound" not in args
+
+
+def test_notify_on_keeps_glass_sound(monkeypatch):
+    from lib import notify
+
+    calls = []
+    monkeypatch.setattr(notify.shutil, "which", lambda _name: "/usr/local/bin/terminal-notifier")
+    monkeypatch.setattr(notify.subprocess, "run", lambda args, **_kwargs: calls.append(args))
+
+    notify.notify("buddymon", "rare catch", notifications="on")
+
+    assert calls[0][calls[0].index("-sound") + 1] == "Glass"
+
+
+def test_notify_silent_applescript_omits_sound(monkeypatch):
+    from lib import notify
+
+    calls = []
+    monkeypatch.setattr(notify.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(notify.subprocess, "run", lambda args, **_kwargs: calls.append(args))
+
+    notify.notify("buddymon", "rare catch", notifications="silent")
+
+    assert "display notification" in calls[0][2]
+    assert "sound name" not in calls[0][2]
+
+
+def test_banner_uses_plain_notification_without_click_action(monkeypatch):
+    from lib import notify
+
+    calls = []
+    monkeypatch.setattr(notify.subprocess, "run", lambda args, **_kwargs: calls.append(args))
+
+    notify.banner("BuddyMon Showcase", "Saved BuddyMon Showcase.png")
+
+    assert calls[0][:2] == ["osascript", "-e"]
+    assert "display notification" in calls[0][2]
+    assert "BuddyMon Showcase" in calls[0][2]
+    assert "Saved BuddyMon Showcase.png" in calls[0][2]
+
+
+def test_open_menu_cmd_runs_stateful_launcher():
+    from lib import menu_launcher, notify
 
     cmd = notify.open_menu_cmd("tokens")
 
-    assert cmd.startswith("/usr/bin/python3 ")
+    assert cmd.startswith(shlex.quote(menu_launcher._python()) + " ")
+    assert "buddymon.py open-menu tokens" in cmd
+
+
+def test_open_menu_cmd_honors_python_override(monkeypatch):
+    from lib import notify
+
+    monkeypatch.setenv("BUDDYMON_PYTHON", "/tmp/BuddyMon.app/python/bin/python3")
+
+    cmd = notify.open_menu_cmd("tokens")
+
+    assert cmd.startswith("/tmp/BuddyMon.app/python/bin/python3 ")
     assert "buddymon.py open-menu tokens" in cmd
 
 
@@ -91,6 +192,7 @@ def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
     ps = "\n".join([
         "  101 /Applications/Ghostty.app/Contents/MacOS/ghostty",
         "  202 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 /Users/hunt/buddymon/buddymon.py menu\\n",
+        "  203 /Applications/Ghostty.app/Contents/MacOS/ghostty --window-width=88 --window-height=30 -e /usr/bin/python3 /Users/hunt/buddymon/buddymon.py menu tokens",
         "  303 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 /tmp/other/buddymon.py menu\\n",
         "  404 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh",
     ])
@@ -106,15 +208,79 @@ def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
         raise AssertionError(args)
 
     monkeypatch.setattr(menu_launcher.subprocess, "run", fake_run)
-    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+    monkeypatch.setattr(
+        menu_launcher,
+        "_request_launch",
+        lambda args: (spawned.append(args) or True),
+    )
 
     menu_launcher.open_menu("tokens")
 
-    assert killed == [202]
-    assert spawned and spawned[0][:4] == ["open", "-na", "Ghostty", "--args"]
-    assert "--window-width=88" in spawned[0]
-    assert "--window-height=30" in spawned[0]
-    assert any("buddymon.py menu tokens" in part for part in spawned[0])
+    assert killed == [202, 203]
+    assert len(spawned) == 1
+    args = spawned[0]
+    assert args[:4] == [
+        "open",
+        "-na",
+        "Ghostty.app",
+        "--args",
+    ]
+    for option in [
+        "--title=BuddyMon Menu",
+        "--window-save-state=never",
+        "--fullscreen=false",
+        "--maximize=false",
+        "--confirm-close-surface=false",
+        "--window-position-x=80",
+        "--window-position-y=80",
+        "--window-width=88",
+        "--window-height=30",
+    ]:
+        assert option in args
+    assert args[args.index("-e") + 1:] == menu_launcher._menu_args("tokens")
+    assert "osascript" not in args
+
+
+def test_open_showcase_menu_uses_targeted_ghostty_window(monkeypatch):
+    from lib import menu_launcher
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_close_owned_ghostty_menus", lambda: None)
+    monkeypatch.setattr(
+        menu_launcher,
+        "_request_launch",
+        lambda args: (spawned.append(args) or True),
+    )
+
+    menu_launcher.open_menu("showcase")
+
+    assert len(spawned) == 1
+    args = spawned[0]
+    assert args[:3] == ["open", "-na", "Ghostty.app"]
+    assert args[args.index("-e") + 1:] == menu_launcher._menu_args("showcase")
+    assert "osascript" not in args
+
+
+def test_open_menu_can_keep_existing_owned_ghostty_menus(monkeypatch):
+    from lib import menu_launcher
+
+    killed = []
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_close_owned_ghostty_menus", lambda: killed.append("closed"))
+    monkeypatch.setattr(
+        menu_launcher,
+        "_request_launch",
+        lambda args: (spawned.append(args) or True),
+    )
+
+    menu_launcher.open_menu("tokens", replace_owned=False)
+
+    assert killed == []
+    assert spawned and spawned[0][:2] == ["open", "-na"]
 
 
 def test_open_menu_uses_iterm_when_ghostty_missing(monkeypatch):
@@ -130,6 +296,7 @@ def test_open_menu_uses_iterm_when_ghostty_missing(monkeypatch):
     assert spawned and spawned[0][0] == "osascript"
     assert "iTerm" in spawned[0][2]
     assert "buddymon.py menu tokens" in spawned[0][2]
+    assert "set bounds of current window to {80, 80, 840, 600}" in spawned[0][2]
 
 
 def test_open_menu_uses_terminal_when_ghostty_and_iterm_missing(monkeypatch):
@@ -145,3 +312,223 @@ def test_open_menu_uses_terminal_when_ghostty_and_iterm_missing(monkeypatch):
     assert spawned and spawned[0][0] == "osascript"
     assert any("Terminal" in part for part in spawned[0])
     assert any("buddymon.py menu tokens" in part for part in spawned[0])
+    assert any(
+        "set bounds of front window to {80, 80, 840, 600}" in part
+        for part in spawned[0]
+    )
+
+
+def test_open_menu_normalizes_and_uses_requested_window_frame(monkeypatch):
+    from lib import menu_launcher
+
+    assert menu_launcher.normalize_window_frame() == (80, 80, 760, 520)
+    assert menu_launcher.normalize_window_frame("620,24,760,520") == (
+        620,
+        24,
+        760,
+        520,
+    )
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_close_owned_ghostty_menus", lambda: None)
+    monkeypatch.setattr(
+        menu_launcher,
+        "_request_launch",
+        lambda args: (spawned.append(args) or True),
+    )
+
+    menu_launcher.open_menu(
+        "tokens",
+        window_frame=(620, 24, 760, 520),
+    )
+
+    args = spawned[0]
+    assert "--window-position-x=620" in args
+    assert "--window-position-y=24" in args
+    assert "--window-width=88" in args
+    assert "--window-height=30" in args
+
+
+def test_open_menu_rejects_invalid_window_frames():
+    from lib import menu_launcher
+
+    with pytest.raises(ValueError):
+        menu_launcher.normalize_window_frame("80,80,760")
+    with pytest.raises(ValueError):
+        menu_launcher.normalize_window_frame("80,80,0,520")
+
+
+def test_ghostty_launch_never_creates_a_provisional_applescript_window():
+    from lib import menu_launcher
+
+    args = menu_launcher._ghostty_args(
+        "party",
+        window_frame=(420, 24, 760, 520),
+    )
+
+    assert args.count("-e") == 1
+    assert args[0] == "open"
+    assert "osascript" not in args
+    assert "--window-save-state=never" in args
+    assert "--confirm-close-surface=false" in args
+    assert args[args.index("-e") + 1:] == menu_launcher._menu_args("party")
+
+
+def test_open_menu_falls_through_when_ghostty_launch_request_fails(monkeypatch):
+    from lib import menu_launcher
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_close_owned_ghostty_menus", lambda: None)
+
+    monkeypatch.setattr(
+        menu_launcher,
+        "_request_launch",
+        lambda args: (spawned.append(args) or False),
+    )
+    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+
+    target = menu_launcher.open_menu("tokens")
+
+    assert target == "iterm"
+    assert spawned[0][:2] == ["open", "-na"]
+    assert "Ghostty.app" in spawned[0]
+    assert spawned[1][0] == "osascript"
+    assert "iTerm" in spawned[1][2]
+
+
+def test_open_menu_iterm_preference_skips_ghostty(monkeypatch):
+    from lib import menu_launcher
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+
+    menu_launcher.open_menu("tokens", launcher="iterm")
+
+    assert spawned and spawned[0][0] == "osascript"
+    assert "iTerm" in spawned[0][2]
+
+
+def test_open_menu_terminal_preference_uses_terminal_even_when_others_exist(monkeypatch):
+    from lib import menu_launcher
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: True)
+    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+
+    menu_launcher.open_menu("tokens", launcher="terminal")
+
+    assert spawned and spawned[0][0] == "osascript"
+    assert any("Terminal" in part for part in spawned[0])
+
+
+def test_open_menu_cli_accepts_launcher_override(monkeypatch):
+    import buddymon
+    from lib import state
+
+    s = state.default_state()
+    calls = []
+    monkeypatch.setattr(buddymon.state, "load", lambda: s)
+    monkeypatch.setattr(
+        buddymon.notify,
+        "open_menu",
+        lambda screen, launcher="auto", replace_owned=True, window_frame=None: (
+            calls.append((screen, launcher, replace_owned, window_frame)) or True
+        ),
+    )
+
+    out = buddymon.open_menu(["settings", "--launcher", "iterm"])
+
+    assert out == ""
+    assert calls == [("settings", "iterm", True, None)]
+
+
+def test_open_menu_cli_passes_replace_owned_preference(monkeypatch):
+    import buddymon
+    from lib import state
+
+    s = state.default_state()
+    s["preferences"]["menu_replace"] = "off"
+    calls = []
+    monkeypatch.setattr(buddymon.state, "load", lambda: s)
+    monkeypatch.setattr(
+        buddymon.notify,
+        "open_menu",
+        lambda screen, launcher="auto", replace_owned=True, window_frame=None: (
+            calls.append((screen, launcher, replace_owned, window_frame)) or True
+        ),
+    )
+
+    out = buddymon.open_menu(["showcase"])
+
+    assert out == ""
+    assert calls == [("showcase", "auto", False, None)]
+
+
+def test_open_menu_cli_forwards_window_frame(monkeypatch):
+    import buddymon
+    from lib import state
+
+    s = state.default_state()
+    calls = []
+    monkeypatch.setattr(buddymon.state, "load", lambda: s)
+    monkeypatch.setattr(
+        buddymon.notify,
+        "open_menu",
+        lambda screen, launcher="auto", replace_owned=True, window_frame=None: (
+            calls.append((screen, launcher, replace_owned, window_frame)) or True
+        ),
+    )
+
+    out = buddymon.open_menu([
+        "party",
+        "--window-frame=420,24,760,520",
+    ])
+
+    assert out == ""
+    assert calls == [("party", "auto", True, (420, 24, 760, 520))]
+
+
+def test_open_menu_cli_reports_invalid_or_missing_window_frame():
+    import buddymon
+
+    assert "Usage: open-menu" in buddymon.open_menu([
+        "party",
+        "--window-frame=420,24,760",
+    ])
+    assert "Usage: open-menu" in buddymon.open_menu([
+        "party",
+        "--window-frame",
+    ])
+    assert "Usage: open-menu" in buddymon.open_menu([
+        "party",
+        "--launcher",
+    ])
+
+
+def test_open_menu_cli_reports_invalid_launcher():
+    import buddymon
+
+    out = buddymon.open_menu(["settings", "--launcher", "warp"])
+
+    assert "Usage: open-menu" in out
+
+
+def test_open_menu_iterm_preference_falls_back_to_terminal(monkeypatch):
+    from lib import menu_launcher
+
+    spawned = []
+    monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
+    monkeypatch.setattr(menu_launcher, "_iterm_available", lambda: False)
+    monkeypatch.setattr(menu_launcher.subprocess, "Popen", lambda args: spawned.append(args))
+
+    menu_launcher.open_menu("tokens", launcher="iterm")
+
+    assert spawned and spawned[0][0] == "osascript"
+    assert any("Terminal" in part for part in spawned[0])

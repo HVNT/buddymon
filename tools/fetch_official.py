@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import data, paths  # noqa: E402
+from lib import assets, data, species  # noqa: E402
 
 CRYSTAL_RAW = "https://raw.githubusercontent.com/pret/pokecrystal/master"
 POKESPRITE_RAW = "https://raw.githubusercontent.com/msikma/pokesprite/master"
@@ -51,12 +51,8 @@ def parse_menu_icons(asm_text):
 
 
 def dex_species():
-    """Every name that can appear as a buddy or catch."""
-    names = set(data.WILDS) | set(data.STARTERS)
-    for info in data.STARTERS.values():
-        names.update(n for n, _, _ in info["evolutions"])
-    names.update(n for n, _ in data.EEVEE_BRANCHES)
-    return sorted(names)
+    """The complete Gen 1/2 roster supported by pokecrystal."""
+    return list(species.GEN2_SPECIES)
 
 
 # Display names whose pokecrystal constant isn't a clean uppercasing.
@@ -80,8 +76,7 @@ def resolve_icon(name, asm_map):
 
 
 def pokesprite_slug(name):
-    return (name.lower().replace("♀", "-f").replace("♂", "-m")
-            .replace(" ", "-").replace(".", "").replace("'", ""))
+    return species.slug(name)
 
 
 # ── image -> grid conversion (pure-ish; PIL objects in, plain data out) ──────
@@ -158,7 +153,7 @@ def extract_ramp(img):
     return {"a": hx(light), "b": hx(body), "c": hx(dark)}
 
 
-def main():
+def main(pack_root=None):
     from PIL import Image
     import io
 
@@ -200,12 +195,11 @@ def main():
         pack[name] = entry
         print(f"  {name} <- {icon}")
 
-    paths.ensure_dirs()
-    out = paths.STATE_DIR / "packs"
+    out = Path(pack_root) if pack_root is not None else assets.pack_root()
     out.mkdir(parents=True, exist_ok=True)
     (out / "gen2.json").write_text(json.dumps(pack), encoding="utf-8")
     print(f"\nwrote {out / 'gen2.json'} — {len(pack)} species, {len(icon_frames)} icon classes")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(assets.installer_cli("gen2"))

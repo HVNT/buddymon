@@ -1,4 +1,5 @@
 """TUI frame builders (pure, terminal-free) + non-tty guard."""
+import copy
 import contextlib
 import re
 import sys
@@ -6,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import battle, data, engine, render, state, tui
+from lib import battle, data, engine, paths, render, state, tui
 
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -16,6 +17,35 @@ def fresh():
     s = state.default_state()
     engine.create_starter(s, "Charmander")
     return s
+
+
+def _use_temp_state(monkeypatch, tmp_path, initial):
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    state.save(initial)
+
+
+def _record_background_update():
+    with state.lock():
+        latest = state.load()
+        latest["trainer"]["total_xp"] = 12345
+        latest["trainer"]["balls"] = 17
+        latest.setdefault("xp_sessions", {})["background"] = {
+            "last_uuid": "turn-2",
+            "updated": 2,
+        }
+        latest["pending_encounter"] = {
+            "name": "Beldum",
+            "type": "Steel",
+            "rarity": "rare",
+            "shiny": False,
+        }
+        latest["pokemon"].append(
+            engine.new_pokemon("Abra", "Psychic", "🔮", "common", level=5)
+        )
+        state.save(latest)
+    return copy.deepcopy(latest)
 
 
 def visible_width(line):
@@ -29,7 +59,151 @@ def test_menu_frame_lists_all_items_and_marks_selection():
     assert "▶" in frame  # selection cursor present
     assert "┌" in frame and "└" in frame
     assert "🔧  Settings" in frame
+    assert "🏆  Showcase" in frame
     assert "team and active buddy" in frame
+
+
+def test_settings_frame_lists_expanded_preferences_and_support(monkeypatch):
+    s = state.default_state()
+    s["mode"] = "battle"
+    s["preferences"]["notifications"] = "silent"
+    s["preferences"]["menu_launcher"] = "iterm"
+    s["preferences"]["terminal_graphics"] = "off"
+    s["preferences"]["menu_replace"] = "off"
+    s["preferences"]["share_reveal"] = "off"
+    s["preferences"]["share_banner"] = "off"
+    monkeypatch.setenv("BUDDYMON_NO_GRAPHICS", "1")
+
+    frame = tui._settings_frame(s, selected=0, width=80)
+    plain = ANSI_RE.sub("", frame)
+
+    assert "Gameplay" in plain
+    assert "Encounter mode" in plain and "Battle" in plain
+    assert "every wild: fight · ball · run" in plain
+    assert "Notifications" in plain and "Silent" in plain
+    assert "Menu launcher" in plain and "iTerm2" in plain
+    assert "Replace menus" in plain and "Off" in plain
+    assert "Terminal graphics" in plain and "Off" in plain
+    assert "Terminal support" in plain and "off by env" in plain
+    assert "Sharing" in plain
+    assert "Reveal shares" in plain and "Share banners" in plain
+    assert "Your data" in plain
+    assert "Back up my data" in plain and "copy state, journal, and art" in plain
+    assert "read-only" in plain
+    assert all(visible_width(line) <= 80 for line in frame.splitlines())
+
+
+def test_settings_selection_skips_read_only_rows():
+    rows = [
+        {"writable": True},
+        {"writable": False},
+        {"writable": True},
+    ]
+
+    assert tui._settings_select(rows, 0, 1) == 2
+    assert tui._settings_select(rows, 2, 1) == 0
+    assert tui._settings_select(rows, 1) == 0
+
+
+def test_settings_cycle_keeps_mode_canonical_and_preferences_separate():
+    s = state.default_state()
+
+    tui._settings_cycle(s, "mode")
+    assert s["mode"] == "safari"
+    tui._settings_cycle(s, "mode")
+    assert s["mode"] == "battle"
+    tui._settings_cycle(s, "mode")
+    assert s["mode"] == "auto"
+    assert "mode" not in s["preferences"]
+
+    tui._settings_cycle(s, "notifications")
+    tui._settings_cycle(s, "menu_launcher")
+    tui._settings_cycle(s, "terminal_graphics")
+    tui._settings_cycle(s, "menu_replace")
+    tui._settings_cycle(s, "share_reveal")
+    tui._settings_cycle(s, "share_banner")
+
+    assert s["preferences"]["notifications"] == "silent"
+    assert s["preferences"]["menu_launcher"] == "ghostty"
+    assert s["preferences"]["terminal_graphics"] == "off"
+    assert s["preferences"]["menu_replace"] == "off"
+    assert s["preferences"]["share_reveal"] == "off"
+    assert s["preferences"]["share_banner"] == "off"
+
+
+def test_settings_screen_preserves_state_written_while_waiting(
+        tmp_path, monkeypatch):
+    _use_temp_state(monkeypatch, tmp_path, fresh())
+    expected = {}
+
+    def read_key():
+        if not expected:
+            expected["state"] = _record_background_update()
+            return "space"
+        return "esc"
+
+    monkeypatch.setattr(tui, "_draw", lambda _frame: None)
+    monkeypatch.setattr(tui, "_read_key", read_key)
+    monkeypatch.setattr(tui.kgp, "supported", lambda: False)
+
+    tui._settings_screen()
+
+    expected["state"]["mode"] = "safari"
+    assert state.load() == expected["state"]
+
+
+def test_settings_explains_each_encounter_mode():
+    expected = {
+        "auto": ("Quick", "common quick · rare Safari"),
+        "safari": ("Safari", "every wild: rock · bait · ball"),
+        "battle": ("Battle", "every wild: fight · ball · run"),
+    }
+    s = state.default_state()
+
+    for mode, (label, help_text) in expected.items():
+        s["mode"] = mode
+        row = tui._settings_rows(s)[0]
+        assert tui._settings_display_value(row) == label
+        assert row["help"] == help_text
+
+
+def test_graphics_enabled_honors_terminal_graphics_preference(monkeypatch):
+    s = state.default_state()
+    monkeypatch.setattr(tui.kgp, "supported", lambda: True)
+
+    assert tui._graphics_enabled(s)
+
+    s["preferences"]["terminal_graphics"] = "off"
+
+    assert not tui._graphics_enabled(s)
+
+
+def test_search_key_edits_and_clears_query():
+    query, active, handled = tui._search_key("/", "", False)
+    assert (query, active, handled) == ("", True, True)
+
+    query, active, handled = tui._search_key("a", query, active)
+    assert (query, active, handled) == ("a", True, True)
+
+    query, active, handled = tui._search_key("space", query, active)
+    assert (query, active, handled) == ("a ", True, True)
+
+    query, active, handled = tui._search_key("b", query, active)
+    assert (query, active, handled) == ("a b", True, True)
+
+    query, active, handled = tui._search_key("\x7f", query, active)
+    assert (query, active, handled) == ("a ", True, True)
+
+    query, active, handled = tui._search_key("enter", query, active)
+    assert (query, active, handled) == ("a ", False, True)
+
+    query, active, handled = tui._search_key("esc", query, active)
+    assert (query, active, handled) == ("", False, True)
+
+
+def test_query_matches_all_terms_case_insensitive():
+    assert tui._query_matches("char fire", "Charmander", "Fire", "starter")
+    assert not tui._query_matches("char water", "Charmander", "Fire", "starter")
 
 
 def _with_pidgeys(s, n, levels):
@@ -86,6 +260,300 @@ def test_box_empty_is_graceful():
     assert "0 caught" in frame
 
 
+def test_showcase_empty_without_catches_is_a_trophy_room():
+    s = state.default_state()
+    frame = tui._showcase_frame(s, selected=0, width=80, height=60)
+    plain = ANSI_RE.sub("", frame)
+
+    assert "showcase" in plain
+    assert "empty trophy room" in plain
+    assert plain.count("open slot") == 6
+    assert "catch Pokemon first" in plain
+    assert "choose from Box" not in plain
+    assert len(frame.splitlines()) <= 60
+    assert all(visible_width(line) <= 80 for line in frame.splitlines())
+
+
+def test_showcase_empty_slots_with_catches_are_selectable():
+    s = fresh()
+    frame = tui._showcase_frame(s, selected=1, width=80, height=24)
+    plain = ANSI_RE.sub("", frame)
+
+    assert "0/6 podiums filled" in plain
+    assert "showing 1-2 of 6" in plain
+    assert plain.count("open slot") == 2
+    assert "slot 2: empty podium" in plain
+    assert "enter choose" in plain
+    assert "s Share Showcase" in plain
+    assert "choose from Box" in plain
+    edge = "+" + "-" * (tui.SHOWCASE_CARD_INNER_W + 2) + "+"
+    card_rows = [line for line in frame.splitlines() if edge in ANSI_RE.sub("", line)]
+    assert card_rows[0].startswith("    +")
+    assert len(frame.splitlines()) <= 24
+    assert all(visible_width(line) <= 80 for line in frame.splitlines())
+
+
+def test_showcase_row_indent_does_not_bias_odd_slack_right():
+    row_w = tui.SHOWCASE_CARD_W * 2 + tui.SHOWCASE_GAP
+
+    assert row_w == 71
+    assert tui._showcase_row_indent(80, 2) == 4
+    assert tui._showcase_row_indent(81, 2) == 5
+
+
+def test_showcase_frame_vertically_centers_when_roomy():
+    s = fresh()
+    height = 64
+    frame = tui._showcase_frame(s, selected=0, width=80, height=height)
+    plain = [ANSI_RE.sub("", line) for line in frame.splitlines()]
+    nonblank = [i for i, line in enumerate(plain) if line.strip()]
+
+    top_margin = nonblank[0]
+    bottom_margin = height - 1 - nonblank[-1]
+    assert abs(top_margin - bottom_margin) <= 1
+
+
+def test_showcase_frame_can_show_share_notice():
+    s = fresh()
+    frame = tui._showcase_frame(
+        s,
+        selected=0,
+        width=80,
+        height=24,
+        notice="saved to /tmp/BuddyMon Showcase.png",
+    )
+    plain = ANSI_RE.sub("", frame)
+
+    assert "s Share Showcase" in plain
+    assert "saved to /tmp/BuddyMon Showcase.png" in plain
+    assert len(frame.splitlines()) <= 24
+
+
+def test_showcase_cards_keep_fixed_width_footer_rows():
+    pokemon = engine.new_pokemon(
+        "Zigzagoon", "Normal", "🐾", "common", level=15, shiny=True,
+    )
+    cards = [
+        tui._showcase_card_lines({"slot": 0, "pokemon": pokemon}, selected=True),
+        tui._showcase_card_lines({"slot": 1, "pokemon": None}),
+        tui._showcase_card_lines({"slot": 2, "pokemon": None, "missing": True}),
+    ]
+
+    for card in cards:
+        assert all(visible_width(line) == tui.SHOWCASE_CARD_W for line in card)
+
+    selected_plain = [ANSI_RE.sub("", line) for line in cards[0]]
+    assert selected_plain[-3:] == [
+        f"| {tui._center_ansi('#263', tui.SHOWCASE_CARD_INNER_W)} |",
+        f"| {tui._center_ansi('Zigzagoon · Lv.15', tui.SHOWCASE_CARD_INNER_W)} |",
+        "+" + "-" * (tui.SHOWCASE_CARD_INNER_W + 2) + "+",
+    ]
+    assert "shiny" not in "\n".join(selected_plain)
+    assert "#1" not in "\n".join(selected_plain)
+
+
+def test_showcase_text_art_centers_visible_pixels_not_source_padding(monkeypatch):
+    def off_center_frame(_name, _ptype="Normal", _shiny=False):
+        return [([
+            ".........X",
+            ".........X",
+        ], {"X": "#f8d030"})]
+
+    monkeypatch.setattr(tui.packs, "gen5_frames", off_center_frame)
+    monkeypatch.setattr(tui, "_GRAPHICS", False)
+
+    body = tui._showcase_card_art({
+        "name": "Abra", "type": "Psychic", "shiny": False,
+    })
+    rows = [ANSI_RE.sub("", line) for line in body]
+    cols = [
+        i
+        for row in rows
+        for i, ch in enumerate(row)
+        if ch.strip()
+    ]
+
+    assert cols
+    content_center = (min(cols) + max(cols)) / 2
+    card_center = (tui.SHOWCASE_CARD_INNER_W - 1) / 2
+    assert abs(content_center - card_center) <= 0.5
+
+
+def test_showcase_graphics_art_uses_centered_fixed_aperture(monkeypatch):
+    def narrow_frame(_name, _ptype="Normal", _shiny=False):
+        return [([
+            "X",
+            "X",
+        ], {"X": "#f8d030"})]
+
+    monkeypatch.setattr(tui.packs, "gen5_frames", narrow_frame)
+    monkeypatch.setattr(tui, "_GRAPHICS", True)
+    monkeypatch.setattr(tui, "_CELL_PX", (10, 20))
+    tui._frame_images.clear()
+
+    body = tui._showcase_card_art({
+        "name": "Abra", "type": "Psychic", "shiny": False,
+    })
+
+    assert tui._frame_images[0][1:] == (
+        tui.SHOWCASE_ART_W,
+        tui.SHOWCASE_CARD_BODY_ROWS,
+    )
+    assert body[0].startswith("   \x01IMG0\x02")
+    assert all(visible_width(line) == tui.SHOWCASE_CARD_INNER_W for line in body)
+
+
+def test_showcase_debug_body_replaces_art_with_measurement_grid(monkeypatch):
+    pokemon = engine.new_pokemon("Caterpie", "Bug", "🐛", "common", level=1)
+    monkeypatch.setenv("BUDDYMON_SHOWCASE_DEBUG", "1")
+
+    card = "\n".join(ANSI_RE.sub("", line) for line in tui._showcase_card_lines({
+        "slot": 0,
+        "pokemon": pokemon,
+    }))
+
+    assert "src " in card
+    assert "fit " in card
+    assert "bbox " in card
+    assert "mass " in card
+
+
+def test_showcase_png_canvas_centers_visible_sprite_bounds(monkeypatch):
+    monkeypatch.setattr(tui, "_GRAPHICS", True)
+    monkeypatch.setattr(tui, "_CELL_PX", (10, 20))
+
+    for name, ptype, shiny in (
+        ("Caterpie", "Bug", False),
+        ("Linoone", "Normal", False),
+        ("Rhyperior", "Ground", False),
+        ("Zigzagoon", "Normal", True),
+        ("Staravia", "Flying", False),
+        ("Staryu", "Water", True),
+        ("Pidove", "Flying", True),
+    ):
+        grid, palette = tui.packs.gen5_frames(name, ptype, shiny)[0]
+        grid = tui._crop_grid_to_content(grid, palette)
+        src_h, src_w = len(grid), len(grid[0])
+        png_w = tui.SHOWCASE_ART_W * 10
+        png_h = tui.SHOWCASE_CARD_BODY_ROWS * 20
+        max_sprite_w = tui.SHOWCASE_SPRITE_W * 10
+        max_sprite_h = tui.SHOWCASE_SPRITE_ROWS * 20
+        scale = min(max_sprite_w / src_w, max_sprite_h / src_h)
+        art = tui.pixels.nearest(
+            grid,
+            max(1, round(src_w * scale)),
+            max(1, round(src_h * scale)),
+        )
+        centered = tui._pad_grid_alpha_center(art, palette, png_w, png_h)
+        xs = [
+            x
+            for row in centered
+            for x, ch in enumerate(row)
+            if ch in palette
+        ]
+
+        assert xs, name
+        bounds_center = (min(xs) + max(xs)) / 2
+        assert abs(bounds_center - ((png_w - 1) / 2)) <= 0.5, name
+
+
+def test_showcase_filled_and_stale_slots_render_without_autofill():
+    s = fresh()
+    pidgey = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5)
+    s["pokemon"].append(pidgey)
+    s["showcase"] = {"slots": [None, pidgey["id"], "gone"]}
+
+    frame = tui._showcase_frame(s, selected=1, width=80, height=24)
+    plain = ANSI_RE.sub("", frame)
+
+    assert "1/6 podiums filled · 1 missing" in plain
+    assert "Pidgey Lv.5" in plain
+    assert "#016" in plain
+    assert "missing" in plain
+    assert "slot 2: Pidgey Lv.5" in plain
+
+
+def test_showcase_frame_stacks_on_narrow_terminal():
+    s = fresh()
+    frame = tui._showcase_frame(s, selected=0, width=40, height=24)
+    body = [line for line in frame.splitlines() if "arrows move" not in line]
+    plain = ANSI_RE.sub("", frame)
+
+    assert "showing 1-1 of 6" in plain
+    assert len(frame.splitlines()) <= 24
+    assert all(visible_width(line) <= 40 for line in body)
+    assert plain.count("open slot") == 1
+
+
+def test_showcase_frame_pages_to_selected_row():
+    s = fresh()
+    frame = tui._showcase_frame(s, selected=5, width=80, height=24)
+    plain = ANSI_RE.sub("", frame)
+
+    assert "showing 5-6 of 6" in plain
+    assert "slot 6: empty podium" in plain
+    assert len(frame.splitlines()) <= 24
+    assert all(visible_width(line) <= 80 for line in frame.splitlines())
+
+
+def test_showcase_frame_uses_compact_rows_when_cards_cannot_fit():
+    s = fresh()
+    frame = tui._showcase_frame(s, selected=4, width=80, height=14)
+    plain = ANSI_RE.sub("", frame)
+
+    assert "compact view" in plain
+    assert "> 5. empty podium" in plain
+    assert len(frame.splitlines()) <= 14
+    assert all(visible_width(line) <= 80 for line in frame.splitlines())
+
+
+def test_showcase_choose_frame_lists_box_copies():
+    s = _with_pidgeys(fresh(), 2, [3, 1])
+    expanded = tui.box.expand(s["pokemon"])
+    frame = tui._showcase_choose_frame(
+        s,
+        selected=1,
+        top=0,
+        list_height=20,
+        width=80,
+        current_id=expanded[1]["id"],
+    )
+    plain = ANSI_RE.sub("", frame)
+
+    assert "choose display" in plain
+    assert "Pidgey" in plain
+    assert "1/2" in plain and "2/2" in plain
+    assert "assign" in plain
+
+
+def test_showcase_choose_frame_search_filters_picker():
+    s = fresh()
+    s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5))
+    s["pokemon"].append(engine.new_pokemon("Abra", "Psychic", "🔮", "common", level=5))
+
+    frame = tui._showcase_choose_frame(s, selected=0, width=80, query="psychic")
+    plain = ANSI_RE.sub("", frame)
+    assert "search: psychic" in plain
+    assert "Abra" in plain and "Pidgey" not in plain
+
+    empty = tui._showcase_choose_frame(s, selected=0, width=80, query="water")
+    assert "No Pokemon match 'water'" in ANSI_RE.sub("", empty)
+
+
+def test_showcase_choose_save_uses_selected_id_after_fresh_list_shifts():
+    abra = engine.new_pokemon("Abra", "Psychic", "🔮", "common", level=5)
+    pidgey = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5)
+    zubat = engine.new_pokemon("Zubat", "Poison", "🦇", "common", level=5)
+    selected_id = pidgey["id"]
+    old_list = [abra, pidgey]
+    fresh_list = [abra, zubat, pidgey]
+    stale_index = old_list.index(pidgey)
+
+    assert fresh_list[stale_index]["id"] != selected_id
+    assert tui._fresh_showcase_selection_id(fresh_list, selected_id) == selected_id
+    assert tui._fresh_showcase_selection_id(fresh_list, "gone") is None
+
+
 def test_party_marks_favorites_and_filters_to_them():
     s = fresh()  # Charmander starter is auto-favorited
     plain = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5)
@@ -96,6 +564,30 @@ def test_party_marks_favorites_and_filters_to_them():
     fav = tui._party_frame(s, 0, width=80, fav_only=True)
     assert "Charmander" in fav      # the favorite shows
     assert "Pidgey" not in fav      # the non-favorite is filtered out
+
+
+def test_shiny_marker_sits_after_name_without_shifting_favorite_column():
+    shiny = engine.new_pokemon("Staryu", "Water", "⭐", "common", level=1, shiny=True)
+    plain = engine.new_pokemon("Staryu", "Water", "⭐", "common", level=1)
+    tui.favorites.set_favorite(shiny, True)
+    tui.favorites.set_favorite(plain, True)
+
+    shiny_party = ANSI_RE.sub("", tui._party_row(shiny, False, None))
+    plain_party = ANSI_RE.sub("", tui._party_row(plain, False, None))
+    shiny_box = ANSI_RE.sub("", tui._box_row(shiny, False, None))
+    plain_box = ANSI_RE.sub("", tui._box_row(plain, False, None))
+
+    assert "♥*" not in shiny_party
+    assert "♥ Staryu*" in shiny_party
+    assert shiny_party.index("♥") == plain_party.index("♥")
+    assert shiny_party.index("Staryu") == plain_party.index("Staryu")
+    assert shiny_party.index("Lv.") == plain_party.index("Lv.")
+
+    assert "♥*" not in shiny_box
+    assert "♥ Staryu*" in shiny_box
+    assert shiny_box.index("♥") == plain_box.index("♥")
+    assert shiny_box.index("Staryu") == plain_box.index("Staryu")
+    assert shiny_box.index("Lv.") == plain_box.index("Lv.")
 
 
 def test_box_filters_to_favorites_and_shows_empty_state():
@@ -112,6 +604,50 @@ def test_box_filters_to_favorites_and_shows_empty_state():
     s2["pokemon"].append(engine.new_pokemon("Rattata", "Normal", "🐀", "common", level=3))
     empty = tui._box_frame(s2, 0, top=0, list_height=20, width=80, fav_only=True)
     assert "No favorites yet" in empty
+
+
+def test_box_frame_shows_sort_controls_and_respects_sort():
+    s = state.default_state()
+    s["pokemon"] = [
+        engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5),
+        engine.new_pokemon("Zubat", "Poison", "🦇", "common", level=5),
+        engine.new_pokemon("Abra", "Psychic", "🔮", "common", level=5),
+    ]
+
+    frame = tui._box_frame(s, 0, top=0, list_height=20, width=80,
+                           sort_key="dex", descending=True)
+
+    assert "by dex # desc" in frame
+    assert "s sort" in frame and "r reverse" in frame
+    assert [p["name"] for p in tui._box(s, "dex", True)] == ["Abra", "Zubat", "Pidgey"]
+
+
+def test_box_frame_search_filters_by_name_type_and_empty_state():
+    s = state.default_state()
+    s["pokemon"] = [
+        engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5),
+        engine.new_pokemon("Abra", "Psychic", "🔮", "common", level=5),
+    ]
+
+    frame = tui._box_frame(s, 0, top=0, list_height=20, width=80, query="psychic")
+    plain = ANSI_RE.sub("", frame)
+    assert "search: psychic" in plain
+    assert "Abra" in plain and "Pidgey" not in plain
+
+    empty = tui._box_frame(s, 0, top=0, list_height=20, width=80, query="water")
+    assert "No Pokemon match 'water'" in ANSI_RE.sub("", empty)
+
+
+def test_party_frame_search_filters_visible_rows():
+    s = fresh()
+    s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5))
+
+    frame = tui._party_frame(s, 0, width=80, query="flying")
+    plain = ANSI_RE.sub("", frame)
+
+    assert "search: flying" in plain
+    assert "Pidgey" in plain
+    assert "Charmander" not in plain
 
 
 def test_engine_auto_favorites_standouts_not_commons():
@@ -348,6 +884,60 @@ def test_party_frame_marks_active_and_shows_selected_sprite():
     assert "▀" in frame
 
 
+def test_party_favorite_preserves_state_written_while_waiting(
+        tmp_path, monkeypatch):
+    initial = fresh()
+    pidgey = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5)
+    initial["pokemon"].append(pidgey)
+    _use_temp_state(monkeypatch, tmp_path, initial)
+    keys = ["down", "f", "q"]
+    expected = {}
+
+    def read_key():
+        key = keys.pop(0)
+        if key == "f":
+            expected["state"] = _record_background_update()
+        return key
+
+    monkeypatch.setattr(tui, "_draw", lambda _frame: None)
+    monkeypatch.setattr(tui, "_read_key", read_key)
+
+    tui._party_screen()
+
+    assert keys == []
+    assert tui.favorites.toggle(expected["state"], pidgey["id"]) is True
+    assert state.load() == expected["state"]
+
+
+def test_box_activation_uses_selected_id_with_fresh_state(
+        tmp_path, monkeypatch):
+    initial = fresh()
+    pidgey = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5)
+    initial["pokemon"].append(pidgey)
+    _use_temp_state(monkeypatch, tmp_path, initial)
+    keys = ["end", "enter", "q"]
+    expected = {}
+
+    def read_key():
+        key = keys.pop(0)
+        if key == "enter":
+            expected["state"] = _record_background_update()
+        return key
+
+    monkeypatch.setattr(tui, "_draw", lambda _frame: None)
+    monkeypatch.setattr(tui, "_read_key", read_key)
+
+    tui._box_screen()
+
+    assert keys == []
+    expected["state"]["active"] = pidgey["id"]
+    selected = next(
+        p for p in expected["state"]["pokemon"] if p["id"] == pidgey["id"]
+    )
+    tui.favorites.set_favorite(selected, True)
+    assert state.load() == expected["state"]
+
+
 def test_party_inactive_action_hint_sits_outside_detail_card():
     s = fresh()
     s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5))
@@ -416,6 +1006,38 @@ def test_party_pins_active_and_favorites_then_sorts_the_rest():
     assert [p["name"] for p in rest] == ["Abra", "Zubat"]
 
 
+def test_party_keeps_favorited_duplicate_before_best_species_copy():
+    s = state.default_state()
+    shiny = engine.new_pokemon("Staryu", "Water", "⭐", "common", level=1, shiny=True)
+    normal = engine.new_pokemon("Staryu", "Water", "⭐", "common", level=12)
+    abra = engine.new_pokemon("Abra", "Psychic", "🔮", "common", level=2)
+    tui.favorites.set_favorite(shiny, True)
+    s["pokemon"] = [normal, shiny, abra]
+
+    pinned, rest = tui._party_split(s, "name")
+    mons = tui._party(s, "name")
+
+    assert pinned == [shiny]
+    assert mons[0]["id"] == shiny["id"]
+    assert normal["id"] not in [p["id"] for p in mons]
+    assert [p["name"] for p in rest] == ["Abra"]
+
+
+def test_party_keeps_active_duplicate_before_best_species_copy():
+    s = state.default_state()
+    active = engine.new_pokemon("Staryu", "Water", "⭐", "common", level=1)
+    normal = engine.new_pokemon("Staryu", "Water", "⭐", "common", level=12)
+    zubat = engine.new_pokemon("Zubat", "Poison", "🦇", "common", level=9)
+    s["pokemon"] = [normal, active, zubat]
+    s["active"] = active["id"]
+
+    mons = tui._party(s, "name")
+
+    assert mons[0]["id"] == active["id"]
+    assert normal["id"] not in [p["id"] for p in mons]
+    assert [p["name"] for p in mons[1:]] == ["Zubat"]
+
+
 def test_party_frame_shows_sort_controls_and_divider():
     s = state.default_state()
     s["pokemon"].append(engine.new_pokemon("Gastly", "Ghost", "👻", "rare", level=8))
@@ -436,7 +1058,24 @@ def test_journal_lines_empty_is_graceful(tmp_path, monkeypatch):
 
 
 def _stub_journal(monkeypatch, entries):
-    monkeypatch.setattr(tui.journal, "tail", lambda n=200: entries)
+    def fake_tail(n=200, newest_first=False):
+        selected = list(entries if n is None else entries[-n:])
+        return list(reversed(selected)) if newest_first else selected
+
+    monkeypatch.setattr(tui.journal, "tail", fake_tail)
+
+
+def test_journal_lines_show_newest_first_by_default(monkeypatch):
+    _stub_journal(monkeypatch, [
+        {"ts": 1, "kind": "caught", "text": "old catch"},
+        {"ts": 2, "kind": "caught", "text": "new catch"},
+    ])
+
+    newest = "\n".join(tui._journal_lines())
+    oldest = "\n".join(tui._journal_lines(newest_first=False))
+
+    assert newest.index("new catch") < newest.index("old catch")
+    assert oldest.index("old catch") < oldest.index("new catch")
 
 
 def test_journal_filter_shiny_and_legendary(monkeypatch):
@@ -471,6 +1110,29 @@ def test_journal_filter_empty_message_names_the_filter(monkeypatch):
     assert len(lines) == 1 and "No shiny" in lines[0]
     lines = tui._journal_lines(rare_only=True)
     assert "legendary/mythic" in lines[0]
+
+
+def test_journal_query_filters_log_text(monkeypatch):
+    _stub_journal(monkeypatch, [
+        {"ts": 1, "kind": "caught", "text": "🎉 caught Pidgey", "name": "Pidgey"},
+        {"ts": 2, "kind": "caught", "text": "🎉 caught Abra", "name": "Abra"},
+    ])
+
+    lines = "\n".join(tui._journal_lines(query="abra"))
+
+    assert "Abra" in lines
+    assert "Pidgey" not in lines
+
+
+def test_journal_query_empty_message(monkeypatch):
+    _stub_journal(monkeypatch, [
+        {"ts": 1, "kind": "caught", "text": "🎉 caught Pidgey", "name": "Pidgey"},
+    ])
+
+    lines = tui._journal_lines(query="abra")
+
+    assert len(lines) == 1
+    assert "No journal logs match 'abra'" in lines[0]
 
 
 def test_journal_filter_drops_level_ups_keeps_milestones(monkeypatch):
@@ -548,6 +1210,63 @@ def test_dex_frame_is_dense_and_pageable():
     assert "Charmander" in frame
     assert "▀" in frame  # selected preview, while the dex remains a list browser
     assert all(visible_width(line) <= 80 for line in frame.splitlines())
+
+
+def test_dex_view_entries_filter_and_sort():
+    s = fresh()
+    s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5))
+    s["pokemon"].append(engine.new_pokemon("Abra", "Psychic", "🔮", "common", level=5))
+    entries = tui._dex_entries(s)
+
+    caught = tui._dex_view_entries(entries, "dex", False, "caught")
+    missing = tui._dex_view_entries(entries, "dex", False, "missing")
+    caught_name_desc = tui._dex_view_entries(entries, "name", True, "caught")
+
+    assert [e["name"] for e in caught] == ["Charmander", "Pidgey", "Abra"]
+    assert "Charmander" not in {e["name"] for e in missing}
+    assert [e["name"] for e in caught_name_desc] == ["Pidgey", "Charmander", "Abra"]
+
+    psychic = tui._dex_view_entries(entries, "dex", False, "caught", query="psychic")
+    assert [e["name"] for e in psychic] == ["Abra"]
+
+
+def test_dex_frame_shows_filter_and_sort_controls():
+    s = fresh()
+    s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5))
+    all_entries = tui._dex_entries(s)
+    entries = tui._dex_view_entries(all_entries, "name", True, "caught")
+
+    frame = tui._dex_frame(
+        entries,
+        selected=0,
+        top=0,
+        height=18,
+        width=80,
+        sort_key="name",
+        descending=True,
+        filter_mode="caught",
+        total_entries=len(all_entries),
+        total_caught=sum(1 for e in all_entries if e["caught"]),
+    )
+
+    assert "2/649 species" in frame
+    assert "caught" in frame and "by name desc" in frame
+    assert "s sort" in frame and "r reverse" in frame and "c filter" in frame
+
+    searched = tui._dex_frame(
+        entries,
+        selected=0,
+        top=0,
+        height=18,
+        width=80,
+        sort_key="name",
+        descending=True,
+        filter_mode="caught",
+        total_entries=len(all_entries),
+        total_caught=sum(1 for e in all_entries if e["caught"]),
+        query="pidgey",
+    )
+    assert "search: pidgey" in ANSI_RE.sub("", searched)
 
 
 def test_dex_rows_align_columns_across_caught_uncaught_and_gender(monkeypatch):

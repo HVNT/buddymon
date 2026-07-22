@@ -47,7 +47,7 @@ def main():
                     detail = engine.summarize_events(result, encounter)
                     for entry in journal.log_outcomes(result, encounter, "claude"):
                         if journal.is_rare(entry):
-                            notify.notify("buddymon", entry["text"])
+                            notify.notify("buddymon", entry["text"], state=s)
                 state.save(s)
 
     state.record_event(session_id, "stop", detail)
