@@ -1078,6 +1078,18 @@ def test_journal_lines_show_newest_first_by_default(monkeypatch):
     assert oldest.index("old catch") < oldest.index("new catch")
 
 
+def test_journal_lines_include_the_complete_activity_history(monkeypatch):
+    _stub_journal(monkeypatch, [
+        {"ts": index, "kind": "caught", "text": f"activity {index}"}
+        for index in range(250)
+    ])
+
+    activity = "\n".join(tui._journal_lines())
+
+    assert "activity 0" in activity
+    assert "activity 249" in activity
+
+
 def test_journal_filter_shiny_and_legendary(monkeypatch):
     _stub_journal(monkeypatch, [
         {"ts": 0, "kind": "caught", "text": "🎉 caught Pidgey", "rarity": "common", "shiny": False},

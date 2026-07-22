@@ -1743,7 +1743,7 @@ def _journal_qualifier(entries, shiny_only, rare_only):
     return keep
 
 
-def _journal_lines(limit=200, shiny_only=False, rare_only=False, newest_first=True, query=""):
+def _journal_lines(limit=None, shiny_only=False, rare_only=False, newest_first=True, query=""):
     filtering = shiny_only or rare_only or bool(query)
     # Highlights are sparse, so when filtering we scan the whole journal, not a
     # recent window — "every log with any pokemon that qualifies".
@@ -2058,10 +2058,10 @@ def _journal_screen():
     search_active = False
     top = 0
     while True:
-        # Highlights (shiny/legendary) are sparse, so scan deeper when filtering.
-        limit = 2000 if (shiny_only or rare_only or query) else 200
+        # Activity is the permanent local journey, so every mode starts from the
+        # complete journal. Filters and search must not silently narrow the
+        # source window before applying their own criteria.
         lines = _journal_lines(
-            limit=limit,
             shiny_only=shiny_only,
             rare_only=rare_only,
             newest_first=newest_first,
