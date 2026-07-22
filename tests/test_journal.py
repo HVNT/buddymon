@@ -189,10 +189,11 @@ def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
 
     killed = []
     spawned = []
+    buddy_script = menu_launcher._BUDDYMON
     ps = "\n".join([
         "  101 /Applications/Ghostty.app/Contents/MacOS/ghostty",
-        "  202 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 /Users/hunt/buddymon/buddymon.py menu\\n",
-        "  203 /Applications/Ghostty.app/Contents/MacOS/ghostty --window-width=88 --window-height=30 -e /usr/bin/python3 /Users/hunt/buddymon/buddymon.py menu tokens",
+        f"  202 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 {buddy_script} menu\\n",
+        f"  203 /Applications/Ghostty.app/Contents/MacOS/ghostty --window-width=88 --window-height=30 -e /usr/bin/python3 {buddy_script} menu tokens",
         "  303 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 /tmp/other/buddymon.py menu\\n",
         "  404 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh",
     ])
