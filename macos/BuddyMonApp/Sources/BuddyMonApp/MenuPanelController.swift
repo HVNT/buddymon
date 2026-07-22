@@ -52,8 +52,6 @@ private func compactNavigationHeader(
     back.focusRingType = .none
     back.font = BuddyMonBrand.Font.strong(15)
     back.contentTintColor = BuddyMonBrand.Menu.ink
-    back.keyEquivalent = "b"
-    back.keyEquivalentModifierMask = []
     back.setAccessibilityLabel(backAccessibilityLabel)
     row.addArrangedSubview(back)
     row.addArrangedSubview(BuddyMonBrand.Menu.makeDisplayLabel(
@@ -108,10 +106,7 @@ final class MenuPanelController: NSObject {
             defer: false
         )
         super.init()
-        panel.appearance = NSAppearance(named: .aqua)
-        panel.backgroundColor = BuddyMonBrand.Menu.canvas
-        panel.isOpaque = true
-        panel.hasShadow = true
+        BuddyMonBrand.Menu.applyPanelShell(to: panel)
         panel.level = .popUpMenu
         panel.collectionBehavior = [
             .moveToActiveSpace,
@@ -208,8 +203,7 @@ final class MenuPanelController: NSObject {
         let content = BuddyMonCompactMenuView(
             status: status,
             target: target,
-            action: action,
-            revealsSectionsOnAppearance: shouldRevealSections(whenPresenting: .menu)
+            action: action
         )
         compactControls = content.focusableControls
         displayMode = .menu
@@ -232,8 +226,7 @@ final class MenuPanelController: NSObject {
         let content = BuddyMonCompactTokensView(
             view: view,
             target: target,
-            backAction: backAction,
-            revealsSectionsOnAppearance: shouldRevealSections(whenPresenting: .tokens)
+            backAction: backAction
         )
         compactControls = content.focusableControls
         displayMode = .tokens
@@ -252,8 +245,7 @@ final class MenuPanelController: NSObject {
             view: view,
             target: target,
             backAction: backAction,
-            selectionAction: selectionAction,
-            revealsSectionsOnAppearance: shouldRevealSections(whenPresenting: .settings)
+            selectionAction: selectionAction
         )
         compactControls = content.focusableControls
         displayMode = .settings
@@ -270,8 +262,7 @@ final class MenuPanelController: NSObject {
         let content = BuddyMonCompactTrainerView(
             view: view,
             target: target,
-            backAction: backAction,
-            revealsSectionsOnAppearance: shouldRevealSections(whenPresenting: .trainer)
+            backAction: backAction
         )
         compactControls = content.focusableControls
         displayMode = .trainer
@@ -292,8 +283,7 @@ final class MenuPanelController: NSObject {
             message: message,
             target: target,
             action: action,
-            backAction: backAction,
-            revealsSectionsOnAppearance: shouldRevealSections(whenPresenting: .encounter)
+            backAction: backAction
         )
         compactControls = content.focusableControls
         displayMode = .encounter
@@ -310,19 +300,12 @@ final class MenuPanelController: NSObject {
         let content = BuddyMonCompactEncounterResultView(
             result: result,
             target: target,
-            doneAction: doneAction,
-            revealsSectionsOnAppearance: shouldRevealSections(
-                whenPresenting: .encounterResult
-            )
+            doneAction: doneAction
         )
         compactControls = content.focusableControls
         displayMode = .encounterResult
         install(content, preferredSize: content.preferredSize)
         panel.makeFirstResponder(content.initialResponder)
-    }
-
-    private func shouldRevealSections(whenPresenting mode: DisplayMode) -> Bool {
-        !panel.isVisible || displayMode != mode
     }
 
     private func moveCompactFocus(by offset: Int) {
@@ -850,13 +833,10 @@ final class BuddyMonCompactTrainerView: NSView {
     init(
         view: [String: Any],
         target: AnyObject,
-        backAction: Selector,
-        revealsSectionsOnAppearance: Bool = true
+        backAction: Selector
     ) {
         let card = BuddyMonFieldGuideCardBackgroundView()
-        let content = BuddyMonSectionRevealStackView(
-            revealsOnAppearance: revealsSectionsOnAppearance
-        )
+        let content = NSStackView()
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = BuddyMonBrand.Menu.sectionGap
@@ -1206,14 +1186,11 @@ final class BuddyMonCompactMenuView: NSView {
     init(
         status: [String: Any],
         target: AnyObject,
-        action: Selector,
-        revealsSectionsOnAppearance: Bool = true
+        action: Selector
     ) {
         var firstAction: NSView?
         var controls: [NSButton] = []
-        let root = BuddyMonSectionRevealStackView(
-            revealsOnAppearance: revealsSectionsOnAppearance
-        )
+        let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .centerX
         root.spacing = BuddyMonBrand.Menu.sectionGap
@@ -1884,12 +1861,9 @@ final class BuddyMonCompactTokensView: NSView {
     init(
         view: [String: Any],
         target: AnyObject,
-        backAction: Selector,
-        revealsSectionsOnAppearance: Bool = true
+        backAction: Selector
     ) {
-        let root = BuddyMonSectionRevealStackView(
-            revealsOnAppearance: revealsSectionsOnAppearance
-        )
+        let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = BuddyMonBrand.Menu.compactGap
@@ -2235,12 +2209,9 @@ final class BuddyMonCompactSettingsView: NSView {
         view: [String: Any],
         target: AnyObject,
         backAction: Selector,
-        selectionAction: Selector,
-        revealsSectionsOnAppearance: Bool = true
+        selectionAction: Selector
     ) {
-        let root = BuddyMonSectionRevealStackView(
-            revealsOnAppearance: revealsSectionsOnAppearance
-        )
+        let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = BuddyMonBrand.Menu.microGap
@@ -2400,15 +2371,12 @@ final class BuddyMonCompactEncounterView: NSView {
         message: String?,
         target: AnyObject,
         action: Selector,
-        backAction: Selector,
-        revealsSectionsOnAppearance: Bool = true
+        backAction: Selector
     ) {
         let encounter = view["encounter"] as? [String: Any] ?? [:]
         var controls: [NSButton] = []
         var firstControl: NSView?
-        let root = BuddyMonSectionRevealStackView(
-            revealsOnAppearance: revealsSectionsOnAppearance
-        )
+        let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = BuddyMonBrand.Menu.sectionGap
@@ -2718,12 +2686,9 @@ final class BuddyMonCompactEncounterResultView: NSView {
 
     init(result: [String: Any],
         target: AnyObject,
-        doneAction: Selector,
-        revealsSectionsOnAppearance: Bool = true
+        doneAction: Selector
     ) {
-        let root = BuddyMonSectionRevealStackView(
-            revealsOnAppearance: revealsSectionsOnAppearance
-        )
+        let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = BuddyMonBrand.Menu.sectionGap

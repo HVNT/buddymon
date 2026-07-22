@@ -16,10 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusController = StatusWindowController()
     private let menuPanelController = MenuPanelController()
     private let singleInstanceGuard = SingleInstanceGuard()
+    private let localStateObserver = LocalStateObserver()
     private var statusItem: NSStatusItem!
     private var menuBarBuddyController: MenuBarBuddyController!
     private var latestStatus: [String: Any] = [:]
     private var collectionTask: Task<Void, Never>?
+    private var passiveStatusRefreshTask: Task<Void, Never>?
+    private var passiveStatusRefreshPending = false
     private var menuBarPreviewSignalSource: DispatchSourceSignal?
     private var statusRefreshGeneration = 0
     private static let openPanelNotification = Notification.Name(
@@ -59,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             suspensionBehavior: .deliverImmediately
         )
         installMenuBarPreviewSignal()
+        installLocalStateObserver()
         Task { [weak self] in
             guard let self else { return }
             await refreshStatus()
@@ -66,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                await self?.refreshStatus()
+                self?.requestStatusRefresh()
             }
         }
         Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
@@ -106,6 +110,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        localStateObserver.stop()
+        passiveStatusRefreshTask?.cancel()
+        passiveStatusRefreshTask = nil
         menuBarPreviewSignalSource?.cancel()
         menuBarPreviewSignalSource = nil
         try? FileManager.default.removeItem(at: menuBarPreviewURL)
@@ -126,6 +133,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             latestStatus = ["error": runner.diagnosticText(error: error)]
             menuBarBuddyController.showUnavailable()
             refreshCompactPanelIfVisible()
+        }
+    }
+
+    private func installLocalStateObserver() {
+        localStateObserver.start { [weak self] in
+            self?.requestStatusRefresh()
+        }
+    }
+
+    private func requestStatusRefresh() {
+        guard passiveStatusRefreshTask == nil else {
+            passiveStatusRefreshPending = true
+            return
+        }
+
+        passiveStatusRefreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            repeat {
+                passiveStatusRefreshPending = false
+                await refreshStatus()
+            } while passiveStatusRefreshPending && !Task.isCancelled
+            passiveStatusRefreshTask = nil
         }
     }
 
@@ -191,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentDefaultPanel() {
+        requestStatusRefresh()
         if showFirstSetupIfNeeded() {
             return
         }

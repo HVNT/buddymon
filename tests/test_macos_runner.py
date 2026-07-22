@@ -298,6 +298,79 @@ struct SingleInstanceHarness {
 '''
 
 
+LOCAL_STATE_OBSERVER_HARNESS_SOURCE = r'''
+import Darwin
+import Foundation
+
+@main
+@MainActor
+struct LocalStateObserverHarness {
+    static var observer: LocalStateObserver?
+    static var callbackCount = 0
+    static var observedState = ""
+
+    static func main() {
+        guard CommandLine.arguments.count == 2 else {
+            exit(2)
+        }
+
+        let directoryURL = URL(
+            fileURLWithPath: CommandLine.arguments[1],
+            isDirectory: true
+        )
+        let stateURL = directoryURL.appendingPathComponent("state.json")
+        observer = LocalStateObserver(
+            stateURL: stateURL,
+            debounceInterval: 0.08
+        )
+        guard observer?.start(onChange: {
+            guard let value = try? String(
+                contentsOf: stateURL,
+                encoding: .utf8
+            ) else {
+                FileHandle.standardError.write(Data("non-state callback\n".utf8))
+                exit(3)
+            }
+            callbackCount += 1
+            observedState = value
+            if callbackCount == 1 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    print("\(callbackCount)|\(observedState)")
+                    observer?.stop()
+                    exit(callbackCount == 1 ? 0 : 4)
+                }
+            }
+        }) == true else {
+            exit(5)
+        }
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.04) {
+            let journalURL = directoryURL.appendingPathComponent("journal.jsonl")
+            try? Data("noise\n".utf8).write(to: journalURL)
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.24) {
+            try? Data("{\"version\":1}".utf8).write(
+                to: stateURL,
+                options: .atomic
+            )
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.27) {
+            try? Data("{\"version\":2}".utf8).write(
+                to: stateURL,
+                options: .atomic
+            )
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            FileHandle.standardError.write(Data("observer timed out\n".utf8))
+            observer?.stop()
+            exit(6)
+        }
+        dispatchMain()
+    }
+}
+'''
+
+
 @pytest.fixture(scope="session")
 def native_runner_harness(tmp_path_factory):
     build_dir = tmp_path_factory.mktemp("native-runner")
@@ -344,6 +417,36 @@ def single_instance_harness(tmp_path_factory):
             "-module-cache-path",
             str(module_cache),
             str(SWIFT_DIR / "SingleInstanceGuard.swift"),
+            str(harness_source),
+            "-o",
+            str(executable),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return executable
+
+
+@pytest.fixture(scope="session")
+def local_state_observer_harness(tmp_path_factory):
+    build_dir = tmp_path_factory.mktemp("local-state-observer")
+    harness_source = build_dir / "LocalStateObserverHarness.swift"
+    harness_source.write_text(
+        textwrap.dedent(LOCAL_STATE_OBSERVER_HARNESS_SOURCE),
+        encoding="utf-8",
+    )
+    executable = build_dir / "local-state-observer-harness"
+    module_cache = build_dir / "module-cache"
+    result = subprocess.run(
+        [
+            SWIFTC,
+            "-module-cache-path",
+            str(module_cache),
+            str(SWIFT_DIR / "LocalStateObserver.swift"),
             str(harness_source),
             "-o",
             str(executable),
@@ -726,6 +829,56 @@ def test_native_app_rejects_symlink_lock_file(
     assert target.read_text(encoding="utf-8") == "do not touch"
 
 
+def test_native_state_observer_filters_noise_and_debounces_atomic_saves(
+    local_state_observer_harness,
+    tmp_path,
+):
+    result = subprocess.run(
+        [str(local_state_observer_harness), str(tmp_path / "state")],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=5,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == '1|{"version":2}'
+
+
+def test_native_app_refreshes_from_local_state_without_waiting_for_animation():
+    app_source = (SWIFT_DIR / "AppDelegate.swift").read_text(encoding="utf-8")
+    observer_source = (SWIFT_DIR / "LocalStateObserver.swift").read_text(
+        encoding="utf-8"
+    )
+    build_source = (ROOT / "scripts" / "build-macos-app.sh").read_text(
+        encoding="utf-8"
+    )
+    launch = swift_function_body(
+        app_source,
+        "func applicationDidFinishLaunching",
+    )
+    default_panel = swift_function_body(
+        app_source,
+        "private func presentDefaultPanel()",
+    )
+    passive_refresh = swift_function_body(
+        app_source,
+        "private func requestStatusRefresh()",
+    )
+
+    assert "installLocalStateObserver()" in launch
+    assert "withTimeInterval: 30" in launch
+    assert "requestStatusRefresh()" in default_panel
+    assert "passiveStatusRefreshPending = true" in passive_refresh
+    assert "DispatchSource.makeFileSystemObjectSource" in observer_source
+    assert "O_EVTONLY | O_CLOEXEC | O_NOFOLLOW" in observer_source
+    assert 'environment["XDG_STATE_HOME"]' in observer_source
+    assert "signature != lastSignature" in observer_source
+    assert "LocalStateObserver.swift" in build_source
+    assert "momentQueue" not in observer_source
+
+
 def test_native_app_checks_single_instance_before_creating_menu_item():
     app_source = (SWIFT_DIR / "AppDelegate.swift").read_text(encoding="utf-8")
     build_source = (ROOT / "scripts" / "build-macos-app.sh").read_text(
@@ -1063,7 +1216,7 @@ def test_native_panel_locks_its_anchor_for_each_open_session():
     assert "openSessionAnchor = nil" in close
 
 
-def test_native_compact_sections_use_shared_brand_reveal_motion():
+def test_native_compact_views_render_without_entrance_motion():
     panel_source = (SWIFT_DIR / "MenuPanelController.swift").read_text(
         encoding="utf-8"
     )
@@ -1074,55 +1227,35 @@ def test_native_compact_sections_use_shared_brand_reveal_motion():
     brand_docs = (ROOT / "docs" / "brand.md").read_text(encoding="utf-8")
 
     for token in [
-        "enum Motion",
         "struct SectionRevealStyle",
         "static let quickSectionReveal",
         'static let sectionRevealAnimationKey = "buddymon-brand-section-reveal"',
         "static func revealSections",
-        'CABasicAnimation(keyPath: "opacity")',
-        "CAMediaTimingFunction(name: .easeIn)",
-        "accessibilityDisplayShouldReduceMotion",
-        "final class BuddyMonSectionRevealStackView: NSStackView",
-        "override func viewDidMoveToWindow()",
     ]:
-        assert token in brand_source
-    section_reveal = swift_function_body(
+        assert token not in brand_source
+    assert "BuddyMonCompactScreenRevealStackView" not in brand_source
+    assert "BuddyMonSectionRevealStackView" not in brand_source
+    assert "revealsSectionsOnAppearance" not in panel_source
+    assert "shouldRevealSections" not in panel_source
+    assert "BuddyMonBrand.Menu.applyPanelShell(to: panel)" in panel_source
+    panel_shell = swift_function_body(
         brand_source,
-        "static func revealSections",
+        "static func applyPanelShell",
     )
-    assert 'CABasicAnimation(keyPath: "transform.translation.y")' not in section_reveal
-    assert "verticalOffset" not in brand_source
-
-    assert panel_source.count("BuddyMonSectionRevealStackView(") == 6
-    assert panel_source.count("revealsSectionsOnAppearance:") == 12
-    assert "revealsSections:" not in panel_source
-    gate = swift_function_body(
-        panel_source,
-        "private func shouldRevealSections",
-    )
-    assert "!panel.isVisible || displayMode != mode" in gate
-    for mode in [
-        "menu",
-        "tokens",
-        "trainer",
-        "encounter",
-        "encounterResult",
-    ]:
-        assert f"whenPresenting: .{mode}" in panel_source
-    assert "shouldRevealSections(whenPresenting: .settings)" in panel_source
-
-    assert "motionSection()" in preview_source
-    assert '"MOTION + ENTRANCE"' in preview_source
-    assert "BuddyMonSectionRevealStackView()" in preview_source
-    assert "opacity only / 240ms" in preview_source
-    assert "55ms stagger / ease in" in preview_source
+    assert "panel.animationBehavior = .none" in panel_shell
+    assert "motionSection()" not in preview_source
+    assert '"MOTION + ENTRANCE"' not in preview_source
     assert "fieldGuideActiveRowSample()" in preview_source
     assert "BuddyMonBrand.Menu.makeActiveBuddyRow()" in preview_source
     assert "fieldGuideStatusSample()" in preview_source
     assert "BuddyMonBrand.Menu.makeStatusIndicator(state)" in preview_source
-    assert "BuddyMonSectionRevealStackView" in brand_docs
-    assert "same-screen refresh" in brand_docs
-    assert "Reduce Motion presents every section immediately" in brand_docs
+    assert (
+        "Compact screens and drill-ins render completely and immediately"
+        in brand_docs
+    )
+    assert "entrance fades" in brand_docs
+    assert "private static func animateSprite" in panel_source
+    assert 'forKey: "buddymon-menu-sprite-bob"' in panel_source
 
 
 def test_native_first_signal_onboarding_is_present():
@@ -1256,6 +1389,7 @@ def test_native_settings_show_all_preferences_and_apply_immediately():
     navigation = swift_function_body(panel_source, "private func compactNavigationHeader")
     assert 'backAccessibilityLabel: String = "Back to BuddyMon"' in panel_source
     assert "back.setAccessibilityLabel(backAccessibilityLabel)" in navigation
+    assert 'back.keyEquivalent = "b"' not in navigation
     assert '"Back to Settings"' not in compact_settings
 
     for token in [
@@ -1279,7 +1413,7 @@ def test_native_settings_show_all_preferences_and_apply_immediately():
     option_button = brand_source.split(
         "private final class BuddyMonMenuSettingsOptionButton",
         1,
-    )[1].split("/// Drop-in vertical stack", 1)[0]
+    )[1].split("final class BuddyMonFireRedLabel", 1)[0]
     assert "override func mouseDown" not in option_button
     assert 'fieldGuideControlSample("FIELD GUIDE / HOVER", hoveredRow)' in preview_source
     assert 'fieldGuideControlSample("FIELD GUIDE / FOCUS", focusedRow)' in preview_source

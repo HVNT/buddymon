@@ -171,6 +171,7 @@ SWIFT_SOURCES=(
   "${SWIFT_SOURCE_DIR}/AppDelegate.swift"
   "${SWIFT_SOURCE_DIR}/BrandStyle.swift"
   "${SWIFT_SOURCE_DIR}/BuddyMonRunner.swift"
+  "${SWIFT_SOURCE_DIR}/LocalStateObserver.swift"
   "${SWIFT_SOURCE_DIR}/MenuBarBuddy.swift"
   "${SWIFT_SOURCE_DIR}/MenuPanelController.swift"
   "${SWIFT_SOURCE_DIR}/ProcessExecutor.swift"

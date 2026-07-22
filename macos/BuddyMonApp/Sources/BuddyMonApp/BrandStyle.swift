@@ -128,49 +128,8 @@ enum BuddyMonBrand {
     // MARK: Motion
 
     enum Motion {
-        struct SectionRevealStyle {
-            let initialOpacity: Float
-            let duration: CFTimeInterval
-            let stagger: CFTimeInterval
-            let timingFunction: CAMediaTimingFunction
-        }
-
-        /// A smooth opacity-only entrance for vertically ordered rows.
-        /// The model layer always remains at its final value so static captures
-        /// and reduced-motion presentations render deterministically.
-        static let quickSectionReveal = SectionRevealStyle(
-            initialOpacity: 0,
-            duration: 0.24,
-            stagger: 0.055,
-            timingFunction: CAMediaTimingFunction(name: .easeIn)
-        )
-        static let sectionRevealAnimationKey = "buddymon-brand-section-reveal"
         static let quickLinkHoverDuration: CFTimeInterval = 0.12
         static let quickLinkHoverAnimationKey = "buddymon-brand-quick-link-hover"
-
-        static func revealSections(
-            _ sections: [NSView],
-            style: SectionRevealStyle = quickSectionReveal
-        ) {
-            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
-                return
-            }
-
-            let startTime = CACurrentMediaTime()
-            for (index, section) in sections.enumerated() where !section.isHidden {
-                section.wantsLayer = true
-
-                let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = style.initialOpacity
-                fade.toValue = 1
-                fade.duration = style.duration
-                fade.beginTime = startTime + (Double(index) * style.stagger)
-                fade.fillMode = .backwards
-                fade.isRemovedOnCompletion = true
-                fade.timingFunction = style.timingFunction
-                section.layer?.add(fade, forKey: sectionRevealAnimationKey)
-            }
-        }
 
         static func animateQuickLinkHover(_ view: NSView, hovered: Bool) {
             view.wantsLayer = true
@@ -635,6 +594,14 @@ enum BuddyMonBrand {
             view.layer?.borderWidth = Geometry.focusBorderWidth
             view.layer?.cornerRadius = smallCornerRadius
             view.layer?.masksToBounds = true
+        }
+
+        static func applyPanelShell(to panel: NSPanel) {
+            panel.appearance = NSAppearance(named: .aqua)
+            panel.backgroundColor = canvas
+            panel.isOpaque = true
+            panel.hasShadow = true
+            panel.animationBehavior = .none
         }
 
         static func makeActiveBuddyRow() -> NSStackView {
@@ -1422,40 +1389,6 @@ private final class BuddyMonMenuSettingsOptionButton: NSButton {
         let resigned = super.resignFirstResponder()
         apply(state: .normal)
         return resigned
-    }
-}
-
-/// Drop-in vertical stack that reveals its arranged sections once, from top
-/// to bottom, when it joins a window. Swap this in for `NSStackView` anywhere
-/// a brand-owned section entrance is appropriate.
-final class BuddyMonSectionRevealStackView: NSStackView {
-    private let revealsOnAppearance: Bool
-    private let revealStyle: BuddyMonBrand.Motion.SectionRevealStyle
-    private var hasRevealed = false
-
-    init(
-        revealsOnAppearance: Bool = true,
-        style: BuddyMonBrand.Motion.SectionRevealStyle = BuddyMonBrand.Motion.quickSectionReveal
-    ) {
-        self.revealsOnAppearance = revealsOnAppearance
-        revealStyle = style
-        super.init(frame: .zero)
-    }
-
-    required init?(coder: NSCoder) {
-        revealsOnAppearance = true
-        revealStyle = BuddyMonBrand.Motion.quickSectionReveal
-        super.init(coder: coder)
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        guard window != nil, revealsOnAppearance, !hasRevealed else { return }
-        hasRevealed = true
-        BuddyMonBrand.Motion.revealSections(
-            arrangedSubviews,
-            style: revealStyle
-        )
     }
 }
 

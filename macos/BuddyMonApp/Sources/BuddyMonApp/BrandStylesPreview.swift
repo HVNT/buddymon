@@ -763,7 +763,6 @@ final class BrandStylesWindowController: NSWindowController {
             journalComponentSection(),
             setupComponentSection(),
             tokenEdgeSection(),
-            motionSection(),
             accessibilitySection(),
         ]
         for section in sections {
@@ -1654,65 +1653,6 @@ final class BrandStylesWindowController: NSWindowController {
         )
     }
 
-    private func motionSection() -> NSView {
-        let sampleWidth = (
-            BrandPreviewMetric.contentWidth - BuddyMonBrand.Spacing.medium
-        ) / 2
-        let sections = BuddyMonSectionRevealStackView()
-        sections.orientation = .vertical
-        sections.alignment = .leading
-        sections.spacing = BuddyMonBrand.Spacing.compact
-
-        for (title, detail) in [
-            ("01 / BUDDY", "identity settles first"),
-            ("02 / SIGNAL", "current context follows"),
-            ("03 / ACTIONS", "controls arrive last"),
-        ] {
-            let card = BuddyMonBrand.makeSurface()
-            card.widthAnchor.constraint(equalToConstant: sampleWidth).isActive = true
-            card.heightAnchor.constraint(
-                equalToConstant: BuddyMonBrand.Spacing.xlarge
-            ).isActive = true
-            let copy = horizontal(spacing: BuddyMonBrand.Spacing.small)
-            copy.addArrangedSubview(text(
-                title,
-                color: BuddyMonBrand.textPrimary,
-                font: BuddyMonBrand.Font.strong(10)
-            ))
-            copy.addArrangedSubview(text(
-                detail,
-                color: BuddyMonBrand.textSecondary,
-                font: BuddyMonBrand.Font.regular(9)
-            ))
-            card.addSubview(copy)
-            copy.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                copy.leadingAnchor.constraint(
-                    equalTo: card.leadingAnchor,
-                    constant: BuddyMonBrand.Spacing.small
-                ),
-                copy.trailingAnchor.constraint(
-                    lessThanOrEqualTo: card.trailingAnchor,
-                    constant: -BuddyMonBrand.Spacing.small
-                ),
-                copy.centerYAnchor.constraint(equalTo: card.centerYAnchor),
-            ])
-            sections.addArrangedSubview(card)
-        }
-
-        let behavior = stateBlock(
-            "QUICK REVEAL",
-            "top to bottom\nopacity only / 240ms\n55ms stagger / ease in\nonce per presentation\nReduce Motion => immediate",
-            color: BuddyMonBrand.textPrimary
-        )
-        return specimenSection(
-            "28",
-            "MOTION + ENTRANCE",
-            "Use BuddyMonSectionRevealStackView for a restrained, reusable section entrance. The final layout remains the source of truth.",
-            sampleRow([sections, behavior])
-        )
-    }
-
     private func accessibilitySection() -> NSView {
         let keyboard = highlightedText(
             """
@@ -1728,7 +1668,7 @@ final class BrandStylesWindowController: NSWindowController {
             lineSpacing: 7
         )
         return specimenSection(
-            "29",
+            "28",
             "KEYBOARD + ACCESSIBILITY",
             "The brand survives keyboard-only use, VoiceOver, reduced motion, narrow windows, and high-contrast needs.",
             keyboard
