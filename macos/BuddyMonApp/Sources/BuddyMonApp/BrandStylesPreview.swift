@@ -1346,11 +1346,16 @@ final class BrandStylesWindowController: NSWindowController {
         actions.addArrangedSubview(brandButton("[ C COPY REPORT ]"))
         actions.addArrangedSubview(brandButton("[ O OPEN SETTINGS ]", role: .primary, state: .focused))
         actions.addArrangedSubview(text("Sensitive values are redacted by default.", color: BuddyMonBrand.textSecondary, font: BuddyMonBrand.Font.regular(10)))
+        let recovery = stateBlock(
+            "STATE NEEDS CARE",
+            "File untouched.\nRestore or update BuddyMon.",
+            color: BuddyMonBrand.brand
+        )
         return specimenSection(
             "18",
             "DOCTOR + DIAGNOSTIC OUTPUT",
-            "Healthy, optional, blocked, warning, failure, retry, and copy-report states stay readable like real command output.",
-            sampleRow([output, actions])
+            "Healthy, optional, blocked, recovery-required, warning, failure, retry, and copy-report states stay readable like real command output.",
+            sampleRow([output, actions, recovery])
         )
     }
 
@@ -1606,6 +1611,31 @@ final class BrandStylesWindowController: NSWindowController {
     }
 
     private func setupComponentSection() -> NSView {
+        let compactSetup = BuddyMonCompactStarterSetupView(
+            target: nil,
+            chooseAction: nil
+        )
+        compactSetup.heightAnchor.constraint(
+            equalToConstant: compactSetup.preferredSize.height
+        ).isActive = true
+        let compactLoading = BuddyMonCompactNoticeView(
+            message: "Choosing your starter…",
+            kind: .loading
+        )
+        compactLoading.heightAnchor.constraint(
+            equalToConstant: compactLoading.preferredSize.height
+        ).isActive = true
+        let compactError = BuddyMonCompactNoticeView(
+            message: "BuddyMon could not finish setup.\nYour local state was not changed.",
+            kind: .error
+        )
+        compactError.heightAnchor.constraint(
+            equalToConstant: compactError.preferredSize.height
+        ).isActive = true
+        let compactFlows = vertical(spacing: BuddyMonBrand.Spacing.medium)
+        compactFlows.addArrangedSubview(sampleRow([compactSetup, compactLoading]))
+        compactFlows.addArrangedSubview(compactError)
+
         let starters = sampleRow([
             starterChoice("PIKACHU", state: "SELECTED", color: BuddyMonBrand.pikachu),
             starterChoice("BULBASAUR", state: "DEFAULT", color: BuddyMonBrand.starterGrass),
@@ -1628,6 +1658,7 @@ final class BrandStylesWindowController: NSWindowController {
         )
         let stack = vertical(spacing: BuddyMonBrand.Spacing.medium)
         stack.alignment = .leading
+        stack.addArrangedSubview(compactFlows)
         stack.addArrangedSubview(starters)
         stack.addArrangedSubview(setup)
         return specimenSection(

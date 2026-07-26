@@ -7,6 +7,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import engine, kgp, state, tui
+from lib import tui_collections as collections_ui
+from lib import tui_layout as layout
+from lib import tui_runtime as runtime
 
 
 def fresh():
@@ -94,22 +97,22 @@ def test_draw_replaces_markers_with_positioned_images():
     s = fresh()
     s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5))
     try:
-        tui._GRAPHICS = True
-        frame = tui._party_frame(s, 0, art_h=24)
+        runtime.configure_graphics(True)
+        frame = collections_ui._party_frame(s, 0, art_h=24)
         assert "\x01IMG0\x02" in frame  # marker before draw
-        assert tui._frame_images, "preview registered as a PNG"
+        assert runtime.frame_images(), "preview registered as a PNG"
 
         buf = io.StringIO()
         real = sys.stdout
         sys.stdout = buf
         try:
-            tui._draw(frame)
+            runtime.draw_frame(frame)
         finally:
             sys.stdout = real
         out = buf.getvalue()
     finally:
-        tui._GRAPHICS = False
-        tui._frame_images.clear()
+        runtime.configure_graphics(False)
+        runtime.begin_frame()
 
     assert "\x01IMG" not in out          # marker never leaks to the terminal
     assert "\x1b_Ga=d" in out            # stale images wiped first
@@ -119,21 +122,21 @@ def test_draw_replaces_markers_with_positioned_images():
 
 def test_draw_places_images_by_visible_column_not_ansi_string_index():
     try:
-        tui._GRAPHICS = True
-        tui._frame_images[:] = [(b"\x89PNG\r\n\x1a\n", 4, 2)]
-        frame = f"{tui.GREEN}▶{tui.RESET} abc \x01IMG0\x02"
+        runtime.configure_graphics(True)
+        runtime.frame_images()[:] = [(b"\x89PNG\r\n\x1a\n", 4, 2)]
+        frame = f"{layout.GREEN}▶{layout.RESET} abc \x01IMG0\x02"
 
         buf = io.StringIO()
         real = sys.stdout
         sys.stdout = buf
         try:
-            tui._draw(frame)
+            runtime.draw_frame(frame)
         finally:
             sys.stdout = real
         out = buf.getvalue()
     finally:
-        tui._GRAPHICS = False
-        tui._frame_images.clear()
+        runtime.configure_graphics(False)
+        runtime.begin_frame()
 
     # Visible prefix is "▶ abc " => image starts at terminal column 7.
     assert "\x1b[1;7H\x1b_Ga=T" in out
@@ -141,8 +144,8 @@ def test_draw_places_images_by_visible_column_not_ansi_string_index():
 
 def test_draw_places_second_same_row_image_after_prior_reserved_cells():
     try:
-        tui._GRAPHICS = True
-        tui._frame_images[:] = [
+        runtime.configure_graphics(True)
+        runtime.frame_images()[:] = [
             (b"\x89PNG\r\n\x1a\n", 24, 10),
             (b"\x89PNG\r\n\x1a\n", 24, 10),
         ]
@@ -152,43 +155,43 @@ def test_draw_places_second_same_row_image_after_prior_reserved_cells():
         real = sys.stdout
         sys.stdout = buf
         try:
-            tui._draw(frame)
+            runtime.draw_frame(frame)
         finally:
             sys.stdout = real
         out = buf.getvalue()
     finally:
-        tui._GRAPHICS = False
-        tui._frame_images.clear()
+        runtime.configure_graphics(False)
+        runtime.begin_frame()
 
     assert "\x1b[1;7H\x1b_Ga=T" in out
     assert "\x1b[1;39H\x1b_Ga=T" in out
 
 
 def test_sprite_card_graphics_mode_uses_terminal_row_budget():
-    old_cell = tui._CELL_PX
+    old_cell = runtime.cell_size()
     try:
-        tui._GRAPHICS = True
-        tui._CELL_PX = (10, 20)
-        tui._frame_images.clear()
+        runtime.configure_graphics(True)
+        runtime.set_cell_size((10, 20))
+        runtime.begin_frame()
 
-        lines = tui._sprite_card_lines({
+        lines = layout._sprite_card_lines({
             "name": "Beheeyem", "type": "Psychic", "shiny": False,
         }, max_h=64)
 
-        _, cols, rows = tui._frame_images[0]
+        _, cols, rows = runtime.frame_images()[0]
     finally:
-        tui._GRAPHICS = False
-        tui._CELL_PX = old_cell
-        tui._frame_images.clear()
+        runtime.configure_graphics(False)
+        runtime.set_cell_size(old_cell)
+        runtime.begin_frame()
 
-    assert len(lines) == tui.SELECT_CARD_INNER_ROWS + 2
-    assert cols <= tui.SELECT_CARD_INNER_W
-    assert rows <= tui.SELECT_CARD_INNER_ROWS
+    assert len(lines) == layout.SELECT_CARD_INNER_ROWS + 2
+    assert cols <= layout.SELECT_CARD_INNER_W
+    assert rows <= layout.SELECT_CARD_INNER_ROWS
     marker_rows = [i for i, line in enumerate(lines) if "\x01IMG0\x02" in line]
     assert marker_rows and 1 <= marker_rows[0] < len(lines) - 1
-    assert marker_rows[0] - 1 == (tui.SELECT_CARD_INNER_ROWS - rows) // 2
+    assert marker_rows[0] - 1 == (layout.SELECT_CARD_INNER_ROWS - rows) // 2
     assert lines[marker_rows[0]].index("\x01IMG0\x02") - 2 == (
-        tui.SELECT_CARD_INNER_W - cols) // 2
+        layout.SELECT_CARD_INNER_W - cols) // 2
 
 
 def test_paired_battle_view_places_two_non_overlapping_images():
@@ -200,19 +203,19 @@ def test_paired_battle_view_places_two_non_overlapping_images():
         "wild_hp": 30, "wild_hp_max": 30, "buddy_hp": 40, "buddy_hp_max": 40,
     }
     try:
-        tui._GRAPHICS = True
-        frame = tui._encounter_frame(s, "battle", 0)
+        runtime.configure_graphics(True)
+        frame = tui.render_encounter_frame(s, "battle", 0)
         buf = io.StringIO()
         real = sys.stdout
         sys.stdout = buf
         try:
-            tui._draw(frame)
+            runtime.draw_frame(frame)
         finally:
             sys.stdout = real
         out = buf.getvalue()
     finally:
-        tui._GRAPHICS = False
-        tui._frame_images.clear()
+        runtime.configure_graphics(False)
+        runtime.begin_frame()
 
     spans = []
     for m in re.finditer(r"\x1b\[(\d+);(\d+)H\x1b_Ga=T[^;]*c=(\d+),r=(\d+)", out):

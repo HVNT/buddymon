@@ -15,6 +15,13 @@ xcrun swiftc \
   -framework QuartzCore \
   "${SOURCE_DIR}/BrandStyle.swift" \
   "${SOURCE_DIR}/MenuPanelController.swift" \
+  "${SOURCE_DIR}/MenuPanelSharedViews.swift" \
+  "${SOURCE_DIR}/CompactRootView.swift" \
+  "${SOURCE_DIR}/CompactTrainerCardView.swift" \
+  "${SOURCE_DIR}/CompactTokenUsageView.swift" \
+  "${SOURCE_DIR}/CompactSettingsView.swift" \
+  "${SOURCE_DIR}/CompactEncounterView.swift" \
+  "${SOURCE_DIR}/CompactSetupView.swift" \
   "${SOURCE_DIR}/MenuPanelStateHarnessView.swift" \
   "${ROOT}/tools/MenuPanelStateHarness.swift" \
   -o "${EXECUTABLE}"

@@ -13,7 +13,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private let runner = BuddyMonRunner()
-    private let statusController = StatusWindowController()
     private let menuPanelController = MenuPanelController()
     private let singleInstanceGuard = SingleInstanceGuard()
     private let localStateObserver = LocalStateObserver()
@@ -25,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var passiveStatusRefreshPending = false
     private var menuBarPreviewSignalSource: DispatchSourceSignal?
     private var statusRefreshGeneration = 0
+    private var hasConfirmedStatus = false
     private static let openPanelNotification = Notification.Name(
         "com.hunt.buddymon.open-menu-panel"
     )
@@ -45,15 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.action = #selector(handleStatusItemClick(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp])
         menuPanelController.attach(to: statusItem.button)
-        statusController.contentHandler = { [weak self] content, preferredSize in
-            self?.menuPanelController.showExpanded(
-                content: content,
-                preferredSize: preferredSize
-            )
-        }
-        statusController.keyboardHandlerChanged = { [weak self] handler in
-            self?.menuPanelController.setKeyboardHandler(handler)
-        }
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(handleOpenPanelSignal(_:)),
@@ -105,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        presentDefaultPanel()
+        presentRootPanel()
         return true
     }
 
@@ -126,13 +117,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let status = try await runner.status(timeout: CommandTimeout.status)
             guard generation == statusRefreshGeneration else { return }
             latestStatus = status
+            hasConfirmedStatus = true
             menuBarBuddyController.apply(status: status)
-            refreshCompactPanelIfVisible()
+            refreshRootPanelIfVisible()
         } catch {
             guard generation == statusRefreshGeneration else { return }
             latestStatus = ["error": runner.diagnosticText(error: error)]
+            hasConfirmedStatus = false
             menuBarBuddyController.showUnavailable()
-            refreshCompactPanelIfVisible()
+            refreshRootPanelIfVisible()
         }
     }
 
@@ -181,12 +174,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if menuPanelController.isVisible {
             menuPanelController.close()
         } else {
-            presentDefaultPanel()
+            presentRootPanel()
         }
     }
 
     @objc private func handleOpenPanelSignal(_ notification: Notification) {
-        presentDefaultPanel()
+        presentRootPanel()
     }
 
     private var menuBarPreviewURL: URL {
@@ -219,50 +212,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarBuddyController.preview(envelope)
     }
 
-    private func presentDefaultPanel() {
+    private func presentRootPanel() {
         requestStatusRefresh()
-        if showFirstSetupIfNeeded() {
+        if presentStarterSetupIfNeeded() {
             return
         }
-        menuPanelController.showCompact(
+        menuPanelController.presentRoot(
             status: latestStatus,
             target: self,
             action: #selector(handleNativeMenuAction(_:))
         )
     }
 
-    private func refreshCompactPanelIfVisible() {
+    private func refreshRootPanelIfVisible() {
         guard
             menuPanelController.isVisible,
             menuPanelController.displayMode == .menu
         else { return }
-        menuPanelController.showCompact(
+        menuPanelController.presentRoot(
             status: latestStatus,
             target: self,
             action: #selector(handleNativeMenuAction(_:))
         )
     }
 
-    private func showFirstSetupIfNeeded() -> Bool {
+    private func presentStarterSetupIfNeeded() -> Bool {
+        guard hasConfirmedStatus else { return false }
         guard latestStatus["error"] == nil else { return false }
+        guard latestStatus["recovery_required"] as? Bool != true else { return false }
         guard (latestStatus["has_buddy"] as? Bool) == false else { return false }
-        statusController.showStarterSetup(
+        guard latestStatus["active"] as? [String: Any] == nil else { return false }
+        guard
+            let setup = latestStatus["setup"] as? [String: Any],
+            setup["needs_starter"] as? Bool == true
+        else { return false }
+        menuPanelController.presentStarterSetup(
             target: self,
-            chooseSelector: #selector(chooseStarterFromWelcome(_:))
+            chooseAction: #selector(chooseStarterFromWelcome(_:))
         )
         return true
     }
 
-    private func chooseStarter(_ starter: String) async {
-        statusController.showLoading("Choosing your starter…")
+    private func chooseStarter(_ starter: String) async -> Bool {
+        menuPanelController.presentLoading("Choosing your starter…")
         do {
             _ = try await runner.run(
                 ["choose", starter],
                 timeout: CommandTimeout.action
             )
             await refreshStatus()
+            return true
         } catch {
-            showText(runner.diagnosticText(error: error))
+            presentMessage(runner.diagnosticText(error: error))
+            return false
         }
     }
 
@@ -270,8 +272,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let starter = sender.identifier?.rawValue else { return }
         Task { [weak self] in
             guard let self else { return }
-            await chooseStarter(starter)
-            presentDefaultPanel()
+            if await chooseStarter(starter) {
+                presentRootPanel()
+            }
         }
     }
 
@@ -288,39 +291,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showText(_ text: String) {
-        statusController.show(text: text)
+    private func presentMessage(_ text: String) {
+        menuPanelController.presentMessage(text)
     }
 
-    @objc private func showCompactPanel() {
-        menuPanelController.showCompact(
+    @objc private func openRootPanel() {
+        menuPanelController.presentRoot(
             status: latestStatus,
             target: self,
             action: #selector(handleNativeMenuAction(_:))
         )
     }
 
-    private func showEncounter(message: String? = nil) async {
+    private func loadEncounter(message: String? = nil) async {
         do {
             let view = try await runner.appView(
                 "encounter",
                 timeout: CommandTimeout.view
             )
-            menuPanelController.showCompactEncounter(
+            menuPanelController.presentEncounter(
                 view: view,
                 message: message,
                 target: self,
                 action: #selector(handleEncounterAction(_:)),
-                backAction: #selector(showCompactPanel)
+                backAction: #selector(openRootPanel)
             )
         } catch {
-            menuPanelController.showCompactEncounterResult(
+            menuPanelController.presentEncounterResult(
                 result: [
                     "title": "Encounter unavailable",
                     "message": error.localizedDescription,
                 ],
                 target: self,
-                doneAction: #selector(showCompactPanel)
+                doneAction: #selector(openRootPanel)
             )
         }
     }
@@ -340,91 +343,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await refreshStatus()
                 let message = response["message"] as? String
                 if let result = response["encounter_result"] as? [String: Any] {
-                    menuPanelController.showCompactEncounterResult(
+                    menuPanelController.presentEncounterResult(
                         result: result,
                         target: self,
-                        doneAction: #selector(showCompactPanel)
+                        doneAction: #selector(openRootPanel)
                     )
                 } else if let view = response["view"] as? [String: Any] {
-                    menuPanelController.showCompactEncounter(
+                    menuPanelController.presentEncounter(
                         view: view,
                         message: message,
                         target: self,
                         action: #selector(handleEncounterAction(_:)),
-                        backAction: #selector(showCompactPanel)
+                        backAction: #selector(openRootPanel)
                     )
                 } else {
-                    await showEncounter(message: message)
+                    await loadEncounter(message: message)
                 }
             } catch {
-                menuPanelController.showCompactEncounterResult(
+                menuPanelController.presentEncounterResult(
                     result: [
                         "title": "Move failed",
                         "message": error.localizedDescription,
                     ],
                     target: self,
-                    doneAction: #selector(showCompactPanel)
+                    doneAction: #selector(openRootPanel)
                 )
             }
         }
     }
 
-    private func showTokenUsage() async {
+    private func loadTokenUsage() async {
         do {
             let view = try await runner.appView(
                 "tokens",
                 timeout: CommandTimeout.view
             )
-            presentCompactTokenUsage(view)
+            presentTokenUsage(view)
         } catch {
-            presentCompactTokenUsage([
+            presentTokenUsage([
                 "error": runner.diagnosticText(error: error),
             ])
         }
     }
 
-    private func presentCompactTokenUsage(_ view: [String: Any]) {
-        menuPanelController.showCompactTokens(
+    private func presentTokenUsage(_ view: [String: Any]) {
+        menuPanelController.presentTokenUsage(
             view: view,
             target: self,
-            backAction: #selector(showCompactPanel)
+            backAction: #selector(openRootPanel)
         )
     }
 
-    private func showTrainerCard() async {
+    private func loadTrainerCard() async {
         do {
             let view = try await runner.appView(
                 "trainer",
                 timeout: CommandTimeout.view
             )
-            menuPanelController.showCompactTrainer(
+            menuPanelController.presentTrainerCard(
                 view: view,
                 target: self,
-                backAction: #selector(showCompactPanel)
+                backAction: #selector(openRootPanel)
             )
         } catch {
-            showText(runner.diagnosticText(error: error))
+            presentMessage(runner.diagnosticText(error: error))
         }
     }
 
-    private func presentCompactSettings(_ view: [String: Any]) {
-        menuPanelController.showCompactSettings(
+    private func presentSettings(_ view: [String: Any]) {
+        menuPanelController.presentSettings(
             view: view,
             target: self,
-            backAction: #selector(showCompactPanel),
+            backAction: #selector(openRootPanel),
             selectionAction: #selector(handleCompactSettingsAction(_:))
         )
     }
 
-    private func loadCompactSettings() async {
+    private func loadSettings() async {
         do {
             let view = try await runner.appView(
                 "settings",
                 timeout: CommandTimeout.view
             )
-            presentCompactSettings(view)
+            presentSettings(view)
         } catch {
-            presentCompactSettings(["error": runner.diagnosticText(error: error)])
+            presentSettings(["error": runner.diagnosticText(error: error)])
         }
     }
 
@@ -452,7 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard response["ok"] as? Bool == true else {
                     let message = response["message"] as? String
                         ?? "The setting could not be changed."
-                    presentCompactSettings(["error": message])
+                    presentSettings(["error": message])
                     return
                 }
                 let view: [String: Any]
@@ -464,37 +467,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         timeout: CommandTimeout.view
                     )
                 }
-                presentCompactSettings(view)
+                presentSettings(view)
                 await refreshStatus()
             } catch {
-                presentCompactSettings(["error": runner.diagnosticText(error: error)])
+                presentSettings(["error": runner.diagnosticText(error: error)])
             }
         }
     }
 
     @objc private func openEncounter() {
         Task { [weak self] in
-            await self?.showEncounter()
+            await self?.loadEncounter()
         }
     }
 
     @objc private func openTokenUsage() {
-        presentCompactTokenUsage(["loading": true])
+        presentTokenUsage(["loading": true])
         Task { [weak self] in
-            await self?.showTokenUsage()
+            await self?.loadTokenUsage()
         }
     }
 
     @objc private func openTrainerCard() {
         Task { [weak self] in
-            await self?.showTrainerCard()
+            await self?.loadTrainerCard()
         }
     }
 
     @objc private func openSettings() {
-        presentCompactSettings(["loading": true])
+        presentSettings(["loading": true])
         Task { [weak self] in
-            await self?.loadCompactSettings()
+            await self?.loadSettings()
         }
     }
 
@@ -515,7 +518,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     timeout: CommandTimeout.terminalLaunch
                 )
             } catch {
-                showText(
+                presentMessage(
                     "Terminal experience could not open.\n\n" +
                     runner.diagnosticText(error: error)
                 )

@@ -93,7 +93,7 @@ final class BuddyMonRunner {
             issues.append("Missing Python runtime at \(pythonURL.path).")
         }
         if !usesBundledPython {
-            issues.append("This is a developer build. Friend-test builds should bundle Python.")
+            issues.append("This is a developer build. Self-contained builds should bundle Python.")
         }
         return issues
     }
@@ -122,7 +122,7 @@ final class BuddyMonRunner {
         }
 
         lines.append("")
-        lines.append("Build a friend-test app with:")
+        lines.append("Build a self-contained app with:")
         lines.append("scripts/build-macos-app.sh --friend")
         lines.append("")
         lines.append("Or use a prepared runtime:")

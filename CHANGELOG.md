@@ -5,10 +5,17 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+## [0.2.0] - 2026-07-26
+
 ### Added
 
-- Added a native 3:2 Trainer Card with NAME, TOKENS, POKÉDEX, CAUGHT, Red's
-  exact 64-by-64 FireRed/LeafGreen card pose, and collection-backed badges.
+- Added macOS pull-request CI, one canonical release version, immutable
+  per-architecture Python/Pillow runtime locks, release metadata validation,
+  and an explicit Developer ID signing/notarization/checksum packager.
+- Added write-blocking recovery for corrupt, unreadable, structurally invalid,
+  and newer-version state. Valid older state now preserves a pre-migration copy.
+- Added a native 3:2 Trainer Card with NAME, TOKENS, POKÉDEX, CAUGHT, BuddyMon's
+  original two-tone trainer silhouette, and collection-backed badges.
   Its former empty middle band now carries a compact live status rail for
   encounter mode, activity streak, available balls, and owned shiny count.
   That rail now spans the full card width so its surface and rules meet the
@@ -17,10 +24,11 @@ git tags and matching plugin metadata versions.
   represented; Shiny National stays completely hidden until National is earned.
   Badges are now larger circular medallions with centered equal-width alignment,
   a staggered entrance, gentle hover lift, and a subtle shiny-achievement glow.
-  Their symbols use a one-point optical lift instead of sitting low inside the
-  circles. Badge motion honors macOS Reduce Motion. The fact/value grid, stars,
-  portrait, and bottom rail now share deliberate columns, and each badge can be
-  selected by pointer or keyboard to reveal its status or requirement.
+  Their symbols now use true zero-offset vertical centering. Badge motion honors
+  macOS Reduce Motion. The fact/value grid, portrait, and bottom rail now share
+  deliberate columns. The four-star core-badge rank moved into the badge header;
+  selecting a badge replaces the left-side heading with its name instead of
+  repeating `EARNED`.
 - Added a Python menu-bar demo runner that can play any canonical status-item
   state or a complete Charmander user story on the real native menu-bar buddy.
   Previews are local, temporary, do not mutate trainer state, and automatically
@@ -54,7 +62,7 @@ git tags and matching plugin metadata versions.
   cute built-in pixel art beside optional local-pack PNG sprites.
 - Kept the three earlier native visual explorations in a developer-only Style
   Archive that is explicitly historical and non-normative.
-- Added a self-contained, menu-bar-only `BuddyMon.app` friend build with a
+- Added a self-contained, menu-bar-only `BuddyMon.app` build with a
   private Python runtime.
 - Added native Home, Encounter, and Showcase screens plus expanded-panel views
   for collections, journal, token usage, settings, Doctor, and waiting wilds.
@@ -67,6 +75,39 @@ git tags and matching plugin metadata versions.
 
 ### Changed
 
+- First Signal, starter selection progress, and setup errors now stay inside the
+  standard 304-by-210 Field Guide panel. The legacy hidden titled flow window,
+  generic expanded-content host, and its special keyboard plumbing were
+  removed.
+- Starter setup now requires one confirmed, internally consistent no-buddy
+  status before it appears. State-recovery errors and active-buddy payloads
+  cannot be mistaken for a new game.
+- `--install` now stops the running BuddyMon process before replacing the app,
+  preventing `--open` from signaling a stale in-memory build.
+- Token Usage now compares This Week with the same elapsed weekdays from last
+  week and names the cutoff in the prior-period label until Sunday.
+- Self-contained runtime builds no longer query a mutable latest release,
+  upgrade pip, or install a Pillow range. Every archive and wheel is exact and
+  hash-verified. Managed runtimes must still match that lock before reuse;
+  external development runtimes require an explicit opt-out.
+- Release packaging now rejects bundle metadata overrides and validates the
+  production identity before signing and archiving. CI uses the release Python
+  and Pillow versions, checks committed whitespace, and builds the locked
+  self-contained app.
+- State validation now covers nested trainer, Pokémon, session, encounter, and
+  preference records before migration and before every save. State v5 migrates
+  additive preference and session fields missing from historical v4 files,
+  preserving the v4 source before the first migrated save.
+- Release checksum files now record only the archive basename, so verification
+  remains portable after download.
+- Removed the extracted Trainer Red portrait from the distributable app. The
+  Trainer Card now always draws BuddyMon's original two-tone silhouette.
+- Removed the final unreachable native confirmation builder and normalized the
+  surviving compact-panel, Python bridge, and terminal helper names around
+  `present`, `load`, `open`, `build`, `handle`, and `render` roles. Public CLI
+  verbs, JSON keys, state, layout, and gameplay behavior are unchanged. The
+  compact native views, JSON bridge, terminal features, SwiftBar renderer, and
+  their tests now live in focused files behind the same public entry points.
 - Made native status synchronization event driven. Atomic local `state.json`
   saves now trigger one debounced, coalesced refresh, opening the dropdown asks
   for fresh status immediately, and the existing 30-second poll remains only as
@@ -118,7 +159,11 @@ git tags and matching plugin metadata versions.
   that previously appeared while its local report loaded. Its resolved compact
   view now uses the available height for a proportional seven-day pulse, daily
   average, peak day, active streak, and supported-tool share instead of empty
-  vertical gaps. Its irrelevant arrow/Return instruction footer is removed;
+  vertical gaps. Three isolated headline cards are now two equal comparison
+  cards: Today with Yesterday, and This Week with Last Week, each with its own
+  percentage. The daily pulse now devotes 52 points to the chart, more than
+  doubling the drawable bar height without changing the panel dimensions. Its
+  irrelevant arrow/Return instruction footer is removed;
   supported-tool share now forms the report's clean bottom edge. Home now uses a square 3-by-2 grid of six 22-point links for
   Trainer, Party, Box, Pokédex, Activity, and Settings. Each link has a subtle
   one-pixel rule, no rounded button body, and a small Reduce-Motion-aware hover

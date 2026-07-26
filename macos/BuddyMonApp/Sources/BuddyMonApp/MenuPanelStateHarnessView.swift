@@ -107,6 +107,26 @@ final class MenuPanelStateHarnessView: NSView {
             stack.addArrangedSubview(row)
         }
 
+        let setupRow = NSStackView()
+        setupRow.orientation = .horizontal
+        setupRow.alignment = .top
+        setupRow.spacing = BuddyMonBrand.Spacing.large
+        setupRow.addArrangedSubview(setupCard())
+        setupRow.addArrangedSubview(noticeCard(kind: .loading))
+        stack.addArrangedSubview(setupRow)
+
+        let errorRow = NSStackView()
+        errorRow.orientation = .horizontal
+        errorRow.alignment = .top
+        errorRow.spacing = BuddyMonBrand.Spacing.large
+        errorRow.addArrangedSubview(noticeCard(kind: .error))
+        let errorSpacer = NSView()
+        errorSpacer.widthAnchor.constraint(
+            equalToConstant: Layout.cardWidth
+        ).isActive = true
+        errorRow.addArrangedSubview(errorSpacer)
+        stack.addArrangedSubview(errorRow)
+
         let tokenRow = NSStackView()
         tokenRow.orientation = .horizontal
         tokenRow.alignment = .top
@@ -255,9 +275,22 @@ final class MenuPanelStateHarnessView: NSView {
         } else {
             payload = [
                 "summary": [
-                    ["id": "today", "label": "Today", "compact": "148.2K"],
-                    ["id": "last_7_days", "label": "Last 7 days", "compact": "1.4M"],
-                    ["id": "trend", "label": "7-day trend", "compact": "+18%"],
+                    [
+                        "id": "day",
+                        "label": "Today",
+                        "compact": "148.2K",
+                        "comparison_label": "Yesterday",
+                        "comparison_compact": "102.4K",
+                        "change": "+45%",
+                    ],
+                    [
+                        "id": "week",
+                        "label": "This week",
+                        "compact": "714K",
+                        "comparison_label": "Last week",
+                        "comparison_compact": "1.2M",
+                        "change": "-40%",
+                    ],
                 ],
                 "dashboard": [
                     "daily": [
@@ -317,6 +350,37 @@ final class MenuPanelStateHarnessView: NSView {
         content.widthAnchor.constraint(equalToConstant: Layout.cardWidth).isActive = true
         BuddyMonBrand.Menu.applySurface(to: content)
         return content
+    }
+
+    private func setupCard() -> NSView {
+        let panel = BuddyMonCompactStarterSetupView(
+            target: self,
+            chooseAction: #selector(noop(_:))
+        )
+        return drillInCard(
+            title: "FIRST SIGNAL / COMPACT SETUP",
+            stateID: "starter_setup",
+            panel: panel,
+            height: panel.preferredSize.height
+        )
+    }
+
+    private func noticeCard(kind: BuddyMonCompactNoticeView.Kind) -> NSView {
+        let loading = kind == .loading
+        let panel = BuddyMonCompactNoticeView(
+            message: loading
+                ? "Choosing your starter…"
+                : "BuddyMon could not finish setup.\nYour local state was not changed.",
+            kind: kind
+        )
+        return drillInCard(
+            title: loading
+                ? "FLOW NOTICE / LOADING"
+                : "FLOW NOTICE / ERROR",
+            stateID: loading ? "flow_loading" : "flow_error",
+            panel: panel,
+            height: panel.preferredSize.height
+        )
     }
 
     private func settingsCard(loading: Bool = false) -> NSView {

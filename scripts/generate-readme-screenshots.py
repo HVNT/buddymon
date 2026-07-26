@@ -328,11 +328,11 @@ def battle_png(s, path: Path) -> None:
 
 
 def encounter_lines(s):
-    return tui._encounter_frame(s, "battle", 0).splitlines()
+    return tui.render_encounter_frame(s, "battle", 0).splitlines()
 
 
 def menu_lines(s):
-    return tui._menu_frame(tui._menu_items(s), 0).splitlines()
+    return tui.render_menu_frame(s, 0).splitlines()
 
 
 def statusline_lines(s):

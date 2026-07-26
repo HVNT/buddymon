@@ -15,6 +15,8 @@ xcrun swiftc \
   -framework AppKit \
   -framework QuartzCore \
   "${SOURCE_DIR}/BrandStyle.swift" \
+  "${SOURCE_DIR}/MenuPanelSharedViews.swift" \
+  "${SOURCE_DIR}/CompactSetupView.swift" \
   "${SOURCE_DIR}/BrandStylesPreview.swift" \
   "${ROOT}/tools/BrandStylesSnapshot.swift" \
   -o "${EXECUTABLE}"

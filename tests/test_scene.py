@@ -143,10 +143,10 @@ def test_evolution_line_survives_single_frame_fallback(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
     monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
     packs._cache.clear()
-    import buddymon
+    from lib import swiftbar
     entry = {"name": "Charizard", "ts": 0}
     for phase in range(scene.EVOLUTION_SECS):
-        assert "image=" in buddymon._evolution_line(entry, phase)
+        assert "image=" in swiftbar._evolution_line(entry, phase)
     packs._cache.clear()
 
 
@@ -155,12 +155,12 @@ def test_caught_cutscene_result_names_caught_species(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
     monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
     packs._cache.clear()
-    import buddymon
+    from lib import swiftbar
 
     buddy = (["B" * 16] * 16, {"B": "#f08030"})
     entry = {"kind": "caught", "name": "Pidgey", "rarity": "common", "shiny": False}
 
-    line = buddymon._cutscene_line(entry, scene.PHASE_RESULT.start, [buddy], 0)
+    line = swiftbar._cutscene_line(entry, scene.PHASE_RESULT.start, [buddy], 0)
 
     assert "Caught Pidgey!" in line
     assert "GOTCHA!" not in line
@@ -181,9 +181,9 @@ def test_cutscene_uses_box_fallback_for_non_gen2_species(tmp_path, monkeypatch):
         },
     }))
     packs._cache.clear()
-    import buddymon
+    from lib import swiftbar
 
-    (grid, palette), = buddymon._wild_frames(
+    (grid, palette), = swiftbar._wild_frames(
         {"kind": "fled", "name": "Swellow", "rarity": "rare", "shiny": False})
 
     assert len(grid) <= 16
@@ -197,7 +197,7 @@ def test_battle_throw_result_names_caught_species(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
     monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
     packs._cache.clear()
-    import buddymon
+    from lib import swiftbar
 
     buddy = (["B" * 16] * 16, {"B": "#f08030"})
     pending = {
@@ -207,7 +207,7 @@ def test_battle_throw_result_names_caught_species(tmp_path, monkeypatch):
         "last_throw": {"caught": True, "ts": 0},
     }
 
-    line = buddymon._throw_line(pending, scene.THROW_SECS - 1, [buddy])
+    line = swiftbar._throw_line(pending, scene.THROW_SECS - 1, [buddy])
 
     assert "Caught Doduo!" in line
     assert "GOTCHA!" not in line

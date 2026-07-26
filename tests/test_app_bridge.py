@@ -5,7 +5,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import app_bridge, engine, menu_panel, packs, paths, state
+from lib import (
+    app_bridge,
+    engine,
+    packs,
+    paths,
+    safari,
+    state,
+    token_usage,
+)
 
 
 def use_temp_state(monkeypatch, tmp_path):
@@ -38,10 +46,41 @@ def test_app_status_reports_missing_buddy_and_pack_paths(tmp_path, monkeypatch):
     assert status["sources"]["native_desktop_apps"]["kind"] == "unsupported_v1"
 
 
+def test_status_json_reports_recovery_without_overwriting_corrupt_state(
+    tmp_path, monkeypatch
+):
+    use_temp_state(monkeypatch, tmp_path)
+    original = b'{"version": 4, "pokemon": ['
+    paths.STATE_DIR.mkdir(parents=True)
+    paths.STATE_FILE.write_bytes(original)
+
+    status = json.loads(app_bridge.status_json())
+
+    assert status["recovery_required"] is True
+    assert status["recovery_code"] == "invalid_state"
+    assert status["recovery_summary"].startswith("File untouched.")
+    assert "left untouched" in status["error"]
+    assert status["native_menu"]["items"] == []
+    assert paths.STATE_FILE.read_bytes() == original
+
+
+def test_preference_action_refuses_to_overwrite_corrupt_state(tmp_path, monkeypatch):
+    use_temp_state(monkeypatch, tmp_path)
+    original = b'{"version": 4, "pokemon": ['
+    paths.STATE_DIR.mkdir(parents=True)
+    paths.STATE_FILE.write_bytes(original)
+
+    result = app_bridge.app_action("preference", ["notifications", "off"])
+
+    assert result["ok"] is False
+    assert "left untouched" in result["message"]
+    assert paths.STATE_FILE.read_bytes() == original
+
+
 def test_app_status_reports_active_buddy_and_icon(tmp_path, monkeypatch):
     use_temp_state(monkeypatch, tmp_path)
     monkeypatch.setattr(
-        app_bridge.token_usage,
+        token_usage,
         "current_day_totals",
         lambda: {"today": 148_200, "yesterday": 102_400},
     )
@@ -78,11 +117,13 @@ def test_app_status_reports_pending_alert(tmp_path, monkeypatch):
     use_temp_state(monkeypatch, tmp_path)
     s = state.default_state()
     engine.create_starter(s, "Charmander")
-    s["pending_encounter"] = {
+    s["pending_encounter"] = safari.start({
         "name": "Haxorus",
         "type": "Dragon",
+        "emoji": "🐉",
+        "rarity": "rare",
         "shiny": False,
-    }
+    })
     state.save(s)
 
     status = app_bridge.app_status()
@@ -153,7 +194,13 @@ def test_native_menu_policy_is_compact_and_state_driven(tmp_path, monkeypatch):
     assert all(item["modifiers"] == ["command"] for item in menu["footer_items"])
     assert all("children" not in item for item in menu["items"])
 
-    s["pending_encounter"] = {"name": "Eevee", "type": "Normal"}
+    s["pending_encounter"] = safari.start({
+        "name": "Eevee",
+        "type": "Normal",
+        "emoji": "🦊",
+        "rarity": "rare",
+        "shiny": False,
+    })
     state.save(s)
     pending_menu = app_bridge.app_status()["native_menu"]
     assert [item["id"] for item in pending_menu["items"]] == [
@@ -194,6 +241,7 @@ def test_compact_menu_harness_covers_all_review_states_without_expansion():
         "shiny",
         "long_values",
         "unavailable",
+        "recovery_required",
     ]
     for fixture in payload["fixtures"]:
         items = fixture["status"].get("native_menu", {}).get("items", [])
@@ -318,10 +366,34 @@ def test_app_view_settings_and_tokens(tmp_path, monkeypatch):
     use_temp_state(monkeypatch, tmp_path)
     state.save(state.default_state())
     monkeypatch.setattr(
-        app_bridge.token_usage,
+        token_usage,
         "dashboard",
         lambda: {
             "today": {"tokens": 100, "compact": "100"},
+            "headline": [
+                {
+                    "id": "day",
+                    "label": "Today",
+                    "tokens": 100,
+                    "compact": "100",
+                    "comparison_label": "Yesterday",
+                    "comparison_tokens": 80,
+                    "comparison_compact": "80",
+                    "change": "+25%",
+                    "tone": "up",
+                },
+                {
+                    "id": "week",
+                    "label": "This week",
+                    "tokens": 300,
+                    "compact": "300",
+                    "comparison_label": "Last week",
+                    "comparison_tokens": 200,
+                    "comparison_compact": "200",
+                    "change": "+50%",
+                    "tone": "up",
+                },
+            ],
             "total": {"tokens": 450, "compact": "450"},
             "daily": [{"label": "Mon", "tokens": 100}],
             "clients": [{"label": "Codex", "tokens": 450, "percent": 100}],
@@ -338,7 +410,7 @@ def test_app_view_settings_and_tokens(tmp_path, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        app_bridge.token_usage,
+        token_usage,
         "report_lines",
         lambda: ["Token Usage", "Today 100"],
     )
@@ -366,9 +438,10 @@ def test_app_view_settings_and_tokens(tmp_path, monkeypatch):
         "Sharing",
         "Sharing",
     ]
-    assert tokens["summary"][0]["tokens"] == 100
-    assert tokens["summary"][1]["tokens"] == 450
-    assert tokens["summary"][2]["compact"] == "+50%"
+    assert tokens["summary"][0]["comparison_label"] == "Yesterday"
+    assert tokens["summary"][0]["change"] == "+25%"
+    assert tokens["summary"][1]["comparison_label"] == "Last week"
+    assert tokens["summary"][1]["change"] == "+50%"
     assert tokens["dashboard"]["daily"][0]["label"] == "Mon"
     assert tokens["report_lines"] == ["Token Usage", "Today 100"]
 
@@ -410,7 +483,7 @@ def test_removed_native_app_actions_are_rejected_without_mutating_state(
     assert state.load() == before
 
 
-def test_app_action_preference_sets_exact_value_and_cycles(tmp_path, monkeypatch):
+def test_handle_preference_action_sets_exact_value_and_cycles(tmp_path, monkeypatch):
     use_temp_state(monkeypatch, tmp_path)
     state.save(state.default_state())
 
@@ -428,7 +501,7 @@ def test_app_action_preference_sets_exact_value_and_cycles(tmp_path, monkeypatch
     assert bad["ok"] is False
 
 
-def test_app_action_encounter_resolves_run(tmp_path, monkeypatch):
+def test_handle_encounter_action_resolves_run(tmp_path, monkeypatch):
     use_temp_state(monkeypatch, tmp_path)
     s = state.default_state()
     engine.create_starter(s, "Squirtle")

@@ -4,9 +4,10 @@ set -euo pipefail
 RUNTIME_DIR=""
 RUNTIME_DIR_SET=0
 FORCE=0
-PYTHON_VERSION="${PYTHON_BUILD_STANDALONE_VERSION:-3.12}"
+PYTHON_VERSION="${PYTHON_BUILD_STANDALONE_VERSION:-}"
 SOURCE_URL="${PYTHON_BUILD_STANDALONE_URL:-}"
 SOURCE_TARBALL="${PYTHON_BUILD_STANDALONE_TARBALL:-}"
+SOURCE_SHA256="${PYTHON_BUILD_STANDALONE_SHA256:-}"
 WORK_DIR=""
 BACKUP_DIR=""
 
@@ -14,13 +15,14 @@ usage() {
   cat <<'MSG'
 Usage: scripts/build-python-runtime.sh [options]
 
-Creates a standalone Python runtime for BuddyMon friend-test app builds.
+Creates a standalone Python runtime for self-contained BuddyMon app builds.
 
 Options:
   --runtime-dir DIR      Output directory. Defaults to .build/python-runtime.
-  --python-version VER   CPython version prefix. Defaults to 3.12.
+  --python-version VER   Exact locked CPython version.
   --url URL              Direct python-build-standalone tarball URL.
   --tarball PATH         Local python-build-standalone tarball.
+  --sha256 HASH          Required SHA-256 for URL/tarball overrides.
   --force                Recreate a BuddyMon-managed runtime even if valid.
   -h, --help             Show this help.
 
@@ -28,6 +30,7 @@ Environment aliases:
   PYTHON_BUILD_STANDALONE_VERSION
   PYTHON_BUILD_STANDALONE_URL
   PYTHON_BUILD_STANDALONE_TARBALL
+  PYTHON_BUILD_STANDALONE_SHA256
 MSG
 }
 
@@ -91,6 +94,21 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       ;;
+    --sha256)
+      if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "error: --sha256 requires a hash" >&2
+        exit 2
+      fi
+      SOURCE_SHA256="$2"
+      shift
+      ;;
+    --sha256=*)
+      SOURCE_SHA256="${1#*=}"
+      if [[ -z "${SOURCE_SHA256}" ]]; then
+        echo "error: --sha256 requires a hash" >&2
+        exit 2
+      fi
+      ;;
     --force)
       FORCE=1
       ;;
@@ -132,6 +150,55 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required on the packaging Mac to prepare a runtime" >&2
   exit 1
 fi
+
+LOCK_FILE="${ROOT}/scripts/runtime-lock.json"
+LOCK_VALUES="$(
+  python3 - "${LOCK_FILE}" "${PBS_PLATFORM}" <<'PY'
+import json
+import sys
+
+lock = json.load(open(sys.argv[1], encoding="utf-8"))
+python = lock["python"]
+entry = python["platforms"].get(sys.argv[2])
+if not entry:
+    raise SystemExit(f"runtime lock does not support {sys.argv[2]}")
+pillow = entry["pillow"]
+print("\t".join((
+    python["version"],
+    entry["url"],
+    entry["sha256"],
+    pillow["version"],
+    pillow["url"],
+    pillow["sha256"],
+)))
+PY
+)"
+IFS=$'\t' read -r \
+  LOCKED_PYTHON_VERSION \
+  LOCKED_SOURCE_URL \
+  LOCKED_SOURCE_SHA256 \
+  LOCKED_PILLOW_VERSION \
+  LOCKED_PILLOW_URL \
+  LOCKED_PILLOW_SHA256 <<< "${LOCK_VALUES}"
+
+if [[ -z "${PYTHON_VERSION}" ]]; then
+  PYTHON_VERSION="${LOCKED_PYTHON_VERSION}"
+elif [[ "${PYTHON_VERSION}" != "${LOCKED_PYTHON_VERSION}" ]]; then
+  echo "error: Python ${PYTHON_VERSION} is not in scripts/runtime-lock.json" >&2
+  exit 1
+fi
+
+if [[ -z "${SOURCE_URL}" && -z "${SOURCE_TARBALL}" ]]; then
+  SOURCE_URL="${LOCKED_SOURCE_URL}"
+  SOURCE_SHA256="${LOCKED_SOURCE_SHA256}"
+elif [[ -n "${SOURCE_URL}" && "${SOURCE_URL}" == "${LOCKED_SOURCE_URL}" && -z "${SOURCE_SHA256}" ]]; then
+  SOURCE_SHA256="${LOCKED_SOURCE_SHA256}"
+fi
+if [[ ! "${SOURCE_SHA256}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  echo "error: URL and tarball overrides require --sha256 with a 64-character digest" >&2
+  exit 1
+fi
+SOURCE_SHA256="$(printf '%s' "${SOURCE_SHA256}" | tr '[:upper:]' '[:lower:]')"
 
 lexical_path() {
   python3 - "$1" <<'PY'
@@ -221,8 +288,10 @@ directory_is_empty() {
   [[ -z "$(find "$1" -mindepth 1 -print -quit)" ]]
 }
 
-if [[ "${FORCE}" != "1" ]] && validate_runtime "${RUNTIME_DIR}"; then
-  echo "runtime already valid: ${RUNTIME_DIR}"
+if [[ "${FORCE}" != "1" ]] \
+  && python3 "${ROOT}/scripts/verify-python-runtime.py" "${RUNTIME_DIR}" \
+    >/dev/null 2>&1; then
+  echo "runtime already matches lock: ${RUNTIME_DIR}"
   exit 0
 fi
 
@@ -287,59 +356,27 @@ if [[ -n "${SOURCE_TARBALL}" ]]; then
   fi
   cp "${SOURCE_TARBALL}" "${ARCHIVE}"
 else
-  if [[ -z "${SOURCE_URL}" ]]; then
-    SOURCE_URL="$(
-      PBS_PLATFORM="${PBS_PLATFORM}" PYTHON_VERSION="${PYTHON_VERSION}" python3 - <<'PY'
-import json
-import os
-import urllib.request
-
-platform = os.environ["PBS_PLATFORM"]
-version = os.environ.get("PYTHON_VERSION", "")
-request = urllib.request.Request(
-    "https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest",
-    headers={
-        "Accept": "application/vnd.github+json",
-        "User-Agent": "buddymon-runtime-builder",
-    },
-)
-with urllib.request.urlopen(request, timeout=30) as response:
-    release = json.load(response)
-
-matches = []
-for asset in release.get("assets", []):
-    name = asset.get("name", "")
-    url = asset.get("browser_download_url", "")
-    if not url:
-        continue
-    if "cpython-" not in name:
-        continue
-    if platform not in name:
-        continue
-    if "install_only" not in name:
-        continue
-    if not name.endswith((".tar.gz", ".tgz")):
-        continue
-    if version and not name.startswith(f"cpython-{version}"):
-        continue
-    score = 0
-    if "stripped" in name:
-        score += 10
-    if "pgo" in name:
-        score += 1
-    matches.append((score, name, url))
-
-if not matches:
-    hint = f" for CPython {version}" if version else ""
-    raise SystemExit(f"no python-build-standalone asset found for {platform}{hint}")
-
-matches.sort(reverse=True)
-print(matches[0][2])
-PY
-    )"
-  fi
   echo "downloading runtime: ${SOURCE_URL}"
   curl -L --fail --show-error --output "${ARCHIVE}" "${SOURCE_URL}"
+fi
+
+ACTUAL_SOURCE_SHA256="$(
+  python3 - "${ARCHIVE}" <<'PY'
+import hashlib
+import sys
+
+digest = hashlib.sha256()
+with open(sys.argv[1], "rb") as handle:
+    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+        digest.update(chunk)
+print(digest.hexdigest())
+PY
+)"
+if [[ "${ACTUAL_SOURCE_SHA256}" != "${SOURCE_SHA256}" ]]; then
+  echo "runtime archive SHA-256 mismatch" >&2
+  echo "expected: ${SOURCE_SHA256}" >&2
+  echo "actual:   ${ACTUAL_SOURCE_SHA256}" >&2
+  exit 1
 fi
 
 EXTRACT_DIR="${WORK_DIR}/extract"
@@ -360,8 +397,25 @@ mkdir -p "${STAGED_RUNTIME}"
 rsync -a "${PYTHON_ROOT%/}/" "${STAGED_RUNTIME}/"
 
 "${STAGED_RUNTIME}/bin/python3" -m ensurepip --upgrade
-"${STAGED_RUNTIME}/bin/python3" -m pip install --upgrade pip
-"${STAGED_RUNTIME}/bin/python3" -m pip install --only-binary=:all: 'Pillow>=10,<13'
+RUNTIME_REQUIREMENTS="${WORK_DIR}/runtime-requirements.txt"
+printf 'Pillow @ %s --hash=sha256:%s\n' \
+  "${LOCKED_PILLOW_URL}" \
+  "${LOCKED_PILLOW_SHA256}" > "${RUNTIME_REQUIREMENTS}"
+"${STAGED_RUNTIME}/bin/python3" -m pip install \
+  --disable-pip-version-check \
+  --no-deps \
+  --only-binary=:all: \
+  --require-hashes \
+  --requirement "${RUNTIME_REQUIREMENTS}"
+"${STAGED_RUNTIME}/bin/python3" - "${LOCKED_PILLOW_VERSION}" <<'PY'
+import PIL
+import sys
+
+if PIL.__version__ != sys.argv[1]:
+    raise SystemExit(
+        f"installed Pillow {PIL.__version__}, expected locked {sys.argv[1]}"
+    )
+PY
 
 if ! validate_runtime "${STAGED_RUNTIME}"; then
   echo "runtime validation failed before install: ${RUNTIME_DIR}" >&2
@@ -370,6 +424,9 @@ fi
 
 BUDDYMON_RUNTIME_PLATFORM="${PBS_PLATFORM}" \
 BUDDYMON_RUNTIME_SOURCE_URL="${SOURCE_URL}" \
+ BUDDYMON_RUNTIME_SOURCE_SHA256="${SOURCE_SHA256}" \
+ BUDDYMON_RUNTIME_PILLOW_URL="${LOCKED_PILLOW_URL}" \
+ BUDDYMON_RUNTIME_PILLOW_SHA256="${LOCKED_PILLOW_SHA256}" \
   "${STAGED_RUNTIME}/bin/python3" - <<'PY' >"${STAGED_RUNTIME}/buddymon-runtime.json"
 import json
 import os
@@ -385,6 +442,9 @@ payload = {
     "python": platform.python_version(),
     "pillow": getattr(PIL, "__version__", "unknown"),
     "source_url": os.environ["BUDDYMON_RUNTIME_SOURCE_URL"],
+    "source_sha256": os.environ["BUDDYMON_RUNTIME_SOURCE_SHA256"],
+    "pillow_url": os.environ["BUDDYMON_RUNTIME_PILLOW_URL"],
+    "pillow_sha256": os.environ["BUDDYMON_RUNTIME_PILLOW_SHA256"],
 }
 print(json.dumps(payload, indent=2, sort_keys=True))
 PY
@@ -426,6 +486,19 @@ if ! validate_runtime "${RUNTIME_DIR}"; then
     mkdir -p "${RUNTIME_DIR}"
   fi
   echo "runtime validation failed after install: ${RUNTIME_DIR}" >&2
+  exit 1
+fi
+
+if [[ -z "${SOURCE_TARBALL}" && "${SOURCE_URL}" == "${LOCKED_SOURCE_URL}" ]] \
+  && ! python3 "${ROOT}/scripts/verify-python-runtime.py" "${RUNTIME_DIR}"; then
+  mv "${RUNTIME_DIR}" "${WORK_DIR}/failed-runtime"
+  if [[ -n "${BACKUP_DIR}" && -d "${BACKUP_DIR}" ]]; then
+    mv "${BACKUP_DIR}" "${RUNTIME_DIR}"
+    BACKUP_DIR=""
+  elif [[ "${HAD_EMPTY_TARGET}" == "1" ]]; then
+    mkdir -p "${RUNTIME_DIR}"
+  fi
+  echo "runtime lock validation failed after install: ${RUNTIME_DIR}" >&2
   exit 1
 fi
 

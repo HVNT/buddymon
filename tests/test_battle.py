@@ -194,42 +194,42 @@ def test_recent_encounter_recap_stays_out_of_swiftbar_dropdown(tmp_path, monkeyp
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
     monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
     monkeypatch.setattr(paths, "JOURNAL_FILE", tmp_path / "journal.jsonl")
-    import buddymon
+    from lib import swiftbar
     now = time.time()
     journal.append("caught", "caught Mamoswine", {"name": "Mamoswine", "rarity": "rare"})
     s = fresh()
 
     # Recent encounters should not add a heavy dropdown image.
-    recap = buddymon._last_encounter_section(s, now)
+    recap = swiftbar._last_encounter_section(s, now)
     assert recap == []
 
     # A live Safari encounter still does not get an extra recap stacked below it.
     s["pending_encounter"] = {"name": "Beldum", "type": "Steel", "shiny": False}
-    assert buddymon._last_encounter_section(s, now) == []
+    assert swiftbar._last_encounter_section(s, now) == []
 
     # Same for a live Battle-Mode encounter.
     del s["pending_encounter"]
     s["pending_battle"] = {"name": "Beldum", "type": "Steel", "shiny": False}
-    assert buddymon._last_encounter_section(s, now) == []
+    assert swiftbar._last_encounter_section(s, now) == []
 
 
 def test_battle_scene_image_uses_dropdown_scale():
-    import buddymon
-    buddy = buddymon._battle_sprite("Charmander", "Fire", False)
-    wild = buddymon._battle_sprite("Beldum", "Steel", False)
+    from lib import swiftbar
+    buddy = swiftbar._battle_sprite("Charmander", "Fire", False)
+    wild = swiftbar._battle_sprite("Beldum", "Steel", False)
     grid, palette = scene.battle_screen(
         buddy, wild, "active", options=["FIGHT", "BALL", "RUN"])
 
-    raw = base64.b64decode(buddymon._battle_scene_image(grid, palette))
+    raw = base64.b64decode(swiftbar._battle_scene_image(grid, palette))
     width, height = struct.unpack(">II", raw[16:24])
 
-    assert width == len(grid[0]) * buddymon.BATTLE_IMAGE_SCALE
-    assert height == len(grid) * buddymon.BATTLE_IMAGE_SCALE
-    assert buddymon.BATTLE_IMAGE_SCALE == 2
+    assert width == len(grid[0]) * swiftbar.BATTLE_IMAGE_SCALE
+    assert height == len(grid) * swiftbar.BATTLE_IMAGE_SCALE
+    assert swiftbar.BATTLE_IMAGE_SCALE == 2
 
 
 def test_recent_evolution_notice_persists_after_animation(tmp_path, monkeypatch):
-    import buddymon
+    from lib import swiftbar
     from lib import journal, paths
 
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
@@ -241,30 +241,30 @@ def test_recent_evolution_notice_persists_after_animation(tmp_path, monkeypatch)
     entry = journal.append("evolved", "evolved into Charizard",
                            {"name": "Charizard", "level": 36, "source": "claude"})
     notice_ts = entry["ts"] + scene.EVOLUTION_SECS + 1
-    monkeypatch.setattr(buddymon.time, "time",
+    monkeypatch.setattr(swiftbar.time, "time",
                         lambda: notice_ts)
     monkeypatch.setattr(
-        buddymon.state, "read_event",
+        swiftbar.state, "read_event",
         lambda name: (
             {"detail": "+11429 progress  🎊 evolved into Charizard Lv.36!", "ts": notice_ts}
             if name == "cross" else {}
         ),
     )
 
-    bar = buddymon._bar_line(s, buddy, [], 0)
-    dropdown = buddymon._dropdown_lines(s, buddy)
+    bar = swiftbar._bar_line(s, buddy, [], 0)
+    dropdown = swiftbar._dropdown_lines(s, buddy)
 
     assert "🎊 CHARIZARD!" in bar
     assert any("evolved into Charizard Lv.36" in line for line in dropdown)
-    assert any(f"color={buddymon.EVOLUTION_NOTICE_COLOR}" in line for line in dropdown)
+    assert any(f"color={swiftbar.EVOLUTION_NOTICE_COLOR}" in line for line in dropdown)
     assert not any("+11429 progress" in line for line in dropdown)
-    assert not any(f"color={buddymon.EVENT_NOTICE_COLOR}" in line for line in dropdown)
-    assert buddymon.EVOLUTION_NOTICE_COLOR == "#4c1d95"
-    assert buddymon.EVENT_NOTICE_COLOR == "#1e3a8a"
+    assert not any(f"color={swiftbar.EVENT_NOTICE_COLOR}" in line for line in dropdown)
+    assert swiftbar.EVOLUTION_NOTICE_COLOR == "#4c1d95"
+    assert swiftbar.EVENT_NOTICE_COLOR == "#1e3a8a"
 
 
 def test_swiftbar_waiting_encounter_bar_names_the_wild(monkeypatch):
-    import buddymon
+    from lib import swiftbar
     s = fresh()
     buddy = state.active_pokemon(s)
     s["pending_encounter"] = {
@@ -274,10 +274,10 @@ def test_swiftbar_waiting_encounter_bar_names_the_wild(monkeypatch):
         "rarity": "rare",
         "shiny": False,
     }
-    monkeypatch.setattr(buddymon.journal, "latest_evolution", lambda *a, **k: None)
-    monkeypatch.setattr(buddymon.journal, "latest_encounter", lambda *a, **k: None)
+    monkeypatch.setattr(swiftbar.journal, "latest_evolution", lambda *a, **k: None)
+    monkeypatch.setattr(swiftbar.journal, "latest_encounter", lambda *a, **k: None)
 
-    bar = buddymon._bar_line(s, buddy, [], 0)
+    bar = swiftbar._bar_line(s, buddy, [], 0)
 
     assert bar.startswith("❗ Sawk | image=")
 
@@ -285,14 +285,14 @@ def test_swiftbar_waiting_encounter_bar_names_the_wild(monkeypatch):
 def test_switch_submenu_lists_favorites_without_png():
     # The submenu is now the favorites shortlist. Per-row base64 PNGs made
     # SwiftBar hoard ~90 images and leak >1GB RAM, so child rows stay PNG-free.
-    import buddymon
+    from lib import swiftbar
     from lib import favorites
     s = fresh()
     p = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=4)
     favorites.set_favorite(p, True)
     s["pokemon"].append(p)
 
-    lines = buddymon._switch_submenu(s)
+    lines = swiftbar._switch_submenu(s)
 
     assert lines[0].startswith("Switch buddy")
     child_rows = [ln for ln in lines if ln.startswith("--")]
@@ -302,9 +302,9 @@ def test_switch_submenu_lists_favorites_without_png():
 
 
 def test_switch_submenu_empty_state_opens_party():
-    import buddymon
+    from lib import swiftbar
     s = fresh()  # only the active (favorited) starter, which the submenu excludes
-    lines = buddymon._switch_submenu(s)
+    lines = swiftbar._switch_submenu(s)
     assert lines[0].startswith("Switch buddy")
     body = [ln for ln in lines if ln.startswith("--")]
     assert len(body) == 1
@@ -312,18 +312,18 @@ def test_switch_submenu_empty_state_opens_party():
 
 
 def test_switch_submenu_caps_rows_and_links_to_party_menu():
-    import buddymon
+    from lib import swiftbar
     from lib import favorites
     s = fresh()
-    for i in range(buddymon.SWITCH_SUBMENU_LIMIT + 3):
+    for i in range(swiftbar.SWITCH_SUBMENU_LIMIT + 3):
         p = engine.new_pokemon(f"Mon{i:02d}", "Normal", "•", "common", level=1)
         favorites.set_favorite(p, True)
         s["pokemon"].append(p)
 
-    lines = buddymon._switch_submenu(s)
+    lines = swiftbar._switch_submenu(s)
     child_rows = [ln for ln in lines if ln.startswith("--") and "param2=switch-id" in ln]
 
-    assert len(child_rows) == buddymon.SWITCH_SUBMENU_LIMIT
+    assert len(child_rows) == swiftbar.SWITCH_SUBMENU_LIMIT
     assert lines[-1].startswith("--More in menu...")
     assert "param2=open-menu" in lines[-1]
     assert "param3=party" in lines[-1]
@@ -331,9 +331,9 @@ def test_switch_submenu_caps_rows_and_links_to_party_menu():
 
 
 def test_swiftbar_dropdown_action_order_is_menu_showcase_tokens_then_switch_without_dex(monkeypatch):
-    import buddymon
+    from lib import swiftbar
     monkeypatch.setattr(
-        buddymon.token_usage,
+        swiftbar.token_usage,
         "current_day_totals",
         lambda: {"today": 208_000_000, "yesterday": 201_000_000},
     )
@@ -341,7 +341,7 @@ def test_swiftbar_dropdown_action_order_is_menu_showcase_tokens_then_switch_with
     s["pokemon"].append(engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=4))
     buddy = state.active_pokemon(s)
 
-    lines = buddymon._dropdown_lines(s, buddy)
+    lines = swiftbar._dropdown_lines(s, buddy)
 
     open_i = next(i for i, line in enumerate(lines) if line.startswith("Open menu"))
     showcase_i = next(i for i, line in enumerate(lines) if line.startswith("Showcase"))
@@ -371,10 +371,10 @@ def test_swiftbar_dropdown_action_order_is_menu_showcase_tokens_then_switch_with
 
 
 def test_swiftbar_dropdown_active_summary_uses_sprite_and_caught_metadata(monkeypatch):
-    import buddymon
+    from lib import swiftbar
     s = fresh()
     buddy = state.active_pokemon(s)
-    caught = buddymon.time.mktime((2026, 5, 12, 9, 30, 0, 0, 0, -1))
+    caught = swiftbar.time.mktime((2026, 5, 12, 9, 30, 0, 0, 0, -1))
     now = caught + 123 * 86400 + 60
     buddy.update({
         "name": "Gastly",
@@ -384,9 +384,9 @@ def test_swiftbar_dropdown_active_summary_uses_sprite_and_caught_metadata(monkey
         "level": 15,
         "caught_at": caught,
     })
-    monkeypatch.setattr(buddymon.time, "time", lambda: now)
+    monkeypatch.setattr(swiftbar.time, "time", lambda: now)
 
-    lines = buddymon._dropdown_lines(s, buddy)
+    lines = swiftbar._dropdown_lines(s, buddy)
 
     assert lines[0] == "---"
     assert "Gastly · Lv.15" in lines[1]
@@ -403,13 +403,13 @@ def test_swiftbar_dropdown_active_summary_uses_sprite_and_caught_metadata(monkey
 
 
 def test_swiftbar_recent_catch_notice_shows_event_time(monkeypatch):
-    import buddymon
+    from lib import swiftbar
     s = fresh()
     buddy = state.active_pokemon(s)
-    event_ts = buddymon.time.mktime((2026, 6, 26, 9, 46, 0, 0, 0, -1))
-    monkeypatch.setattr(buddymon.time, "time", lambda: event_ts + 30)
+    event_ts = swiftbar.time.mktime((2026, 6, 26, 9, 46, 0, 0, 0, -1))
+    monkeypatch.setattr(swiftbar.time, "time", lambda: event_ts + 30)
     monkeypatch.setattr(
-        buddymon.state,
+        swiftbar.state,
         "read_event",
         lambda name: (
             {"detail": "🎉 caught 🐾 Doduo Lv.17", "ts": event_ts}
@@ -417,13 +417,13 @@ def test_swiftbar_recent_catch_notice_shows_event_time(monkeypatch):
         ),
     )
 
-    lines = buddymon._dropdown_lines(s, buddy)
+    lines = swiftbar._dropdown_lines(s, buddy)
 
     assert any("🎉 caught 🐾 Doduo Lv.17 · 9:46 AM" in line for line in lines)
 
 
 def test_swiftbar_dropdown_stats_summary_sits_above_open_menu():
-    import buddymon
+    from lib import swiftbar
     s = fresh()
     s["trainer"]["streak"] = 5
     s["trainer"]["balls"] = 934
@@ -431,7 +431,7 @@ def test_swiftbar_dropdown_stats_summary_sits_above_open_menu():
         s["pokemon"].append(engine.new_pokemon(f"Mon{i:03d}", "Normal", "•", "common", level=1))
     buddy = state.active_pokemon(s)
 
-    lines = buddymon._dropdown_lines(s, buddy)
+    lines = swiftbar._dropdown_lines(s, buddy)
 
     assert lines[0] == "---"
     open_i = next(i for i, line in enumerate(lines) if line.startswith("Open menu"))

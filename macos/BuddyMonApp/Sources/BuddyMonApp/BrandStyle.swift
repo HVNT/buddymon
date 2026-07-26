@@ -181,7 +181,7 @@ enum BuddyMonBrand {
     }
 
     /// A compact bitmap display face inspired by the FireRed/LeafGreen UI.
-    /// It is drawn locally from a tiny glyph map so friend builds do not need
+    /// It is drawn locally from a tiny glyph map so self-contained builds do not need
     /// an installed font or a downloaded asset.
     enum FireRedDisplay {
         static let glyphWidth = 5
@@ -503,6 +503,8 @@ enum BuddyMonBrand {
         static let panelWidth: CGFloat = 304
         static let popoverMinimumHeight: CGFloat = 160
         static let panelMinimumHeight: CGFloat = 210
+        static let starterPanelMinimumHeight = panelMinimumHeight
+        static let noticePanelMinimumHeight = panelMinimumHeight
         static let tokenPanelMinimumHeight = panelMinimumHeight
         static let settingsPanelMinimumHeight = panelMinimumHeight
         static let trainerPanelMinimumHeight: CGFloat = 208
@@ -527,7 +529,7 @@ enum BuddyMonBrand {
         static let encounterSpriteSize: CGFloat = 52
         static let compactProgressWidth: CGFloat = 78
         static let compactProgressHeight: CGFloat = 6
-        static let tokenDailyPulseHeight: CGFloat = 38
+        static let tokenDailyPulseHeight: CGFloat = 52
         static let tokenHeaderWidth: CGFloat = 164
         static let terminalWindowWidth: CGFloat = 760
         static let terminalWindowHeight: CGFloat = 520
@@ -544,7 +546,7 @@ enum BuddyMonBrand {
         static let trainerBadgeDenseSize: CGFloat = 25
         static let trainerBadgeSymbolSize: CGFloat = 12
         static let trainerBadgeDenseSymbolSize: CGFloat = 11
-        static let trainerBadgeSymbolOpticalLift: CGFloat = 1
+        static let trainerBadgeSymbolOpticalLift: CGFloat = 0
         static let trainerBadgeInnerInset: CGFloat = 3
         static let trainerBadgeRevealScale: CGFloat = 0.82
         static let trainerBadgeRevealOvershoot: CGFloat = 1.05
@@ -565,6 +567,8 @@ enum BuddyMonBrand {
         static let controlHeight: CGFloat = 32
         static let quickLinkHeight: CGFloat = 22
         static let quickLinkColumns = 3
+        static let starterChoiceColumns = 3
+        static let starterChoiceAccentSize: CGFloat = 4
         static let quickLinkHoverLift: CGFloat = 1
         static let actionHorizontalInset: CGFloat = 5
         static let progressCornerRadius: CGFloat = 4
@@ -776,6 +780,26 @@ enum BuddyMonBrand {
                 treatment: .quickLink,
                 minimumHeight: quickLinkHeight
             )
+            return button
+        }
+
+        static func makeStarterChoice(
+            _ title: String,
+            identityColor: NSColor,
+            target: AnyObject?,
+            action: Selector?
+        ) -> NSButton {
+            let button = BuddyMonMenuActionButton(
+                title: title,
+                target: target,
+                action: action
+            )
+            button.configure(
+                role: .quiet,
+                treatment: .quickLink,
+                minimumHeight: quickLinkHeight
+            )
+            button.configureIdentityAccent(identityColor)
             return button
         }
 
@@ -1536,6 +1560,7 @@ private final class BuddyMonMenuActionButton: NSButton {
     private var tracking: NSTrackingArea?
     private var menuTitle = ""
     private var menuTitleColor = BuddyMonBrand.Menu.ink
+    private var identityAccent: NSColor?
     fileprivate var actionTreatment: BuddyMonBrand.Menu.ActionTreatment = .button
 
     override var acceptsFirstResponder: Bool { isEnabled }
@@ -1578,13 +1603,39 @@ private final class BuddyMonMenuActionButton: NSButton {
         needsDisplay = true
     }
 
+    func configureIdentityAccent(_ color: NSColor) {
+        identityAccent = color
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        let titleInset: CGFloat
+        if let identityAccent {
+            let accentSize = BuddyMonBrand.Menu.starterChoiceAccentSize
+            identityAccent.setFill()
+            NSBezierPath.fill(NSRect(
+                x: BuddyMonBrand.Menu.actionHorizontalInset,
+                y: bounds.midY - (accentSize / 2),
+                width: accentSize,
+                height: accentSize
+            ))
+            titleInset = BuddyMonBrand.Menu.actionHorizontalInset
+                + accentSize
+                + BuddyMonBrand.Menu.tightGap
+        } else {
+            titleInset = BuddyMonBrand.Menu.actionHorizontalInset
+        }
         BuddyMonBrand.FireRedDisplay.draw(
             menuTitle,
-            in: bounds.insetBy(
-                dx: BuddyMonBrand.Menu.actionHorizontalInset,
-                dy: BuddyMonBrand.Menu.tightGap
+            in: NSRect(
+                x: titleInset,
+                y: BuddyMonBrand.Menu.tightGap,
+                width: max(0, bounds.width - titleInset),
+                height: max(
+                    0,
+                    bounds.height - (BuddyMonBrand.Menu.tightGap * 2)
+                )
             ),
             color: menuTitleColor,
             pixel: BuddyMonBrand.Menu.actionLabelPixel,
