@@ -7,9 +7,11 @@ BuddyMon is a local Python game with several small presentation shells.
 - `hooks/stop.py` reads Claude Code activity.
 - `lib/engine.py` owns progression, encounters, catches, and evolution.
 - `lib/state.py` owns persisted game state and its cross-process lock.
-- `lib/app_bridge.py` exposes stable JSON status plus the native encounter,
-  token, trainer, and settings views. Its native mutations are encounter moves
-  and exact preference changes.
+- `lib/app_bridge.py` is the stable JSON facade for the native app.
+  `lib/app_payloads.py` owns status and Pokémon payload primitives,
+  `lib/app_views.py` owns read-only encounter, token, trainer, and settings
+  views, `lib/app_actions.py` owns lock-aware mutations, and
+  `lib/app_fixtures.py` owns deterministic visual-harness payloads.
 - `lib/menu_panel.py` owns the compact panel's structure, labels, visibility,
   shortcuts, and stable action ids.
 - `lib/trainer_card.py` projects local trainer facts, current gameplay stats,
@@ -19,18 +21,25 @@ BuddyMon is a local Python game with several small presentation shells.
 - `lib/token_usage.py` reads only supported local AI-tool records (Claude Code,
   Codex CLI, Auggie, and Gemini CLI) into report and dashboard data; it never
   guesses unknown providers or model names.
-- `statusline.py`, `buddymon.py menu`, SwiftBar, and tmux render the same
-  state for different clients.
+- `lib/tui.py` coordinates terminal screens through focused layout,
+  collection, Showcase, settings, and terminal-runtime modules. The runtime
+  module is the sole owner of inline-image state and terminal I/O.
+- `lib/swiftbar.py` owns the still-supported SwiftBar rendering and animation;
+  `buddymon.py` remains the command adapter and CLI dispatcher.
+- `statusline.py`, the terminal menu, SwiftBar, and tmux render the same state
+  for different clients.
 - `BuddyMon.app` is a thin menu-bar-only AppKit shell. Python remains the game
   brain.
 - `MenuBarBuddy.swift` decodes and schedules Python-owned menu-bar sequences on
   the native status item. It contains no game or encounter rules.
-- `MenuPanelController.swift` owns the anchored compact `NSPanel`. It snapshots
-  the status item's screen-space anchor when the panel opens and reuses that
-  geometry until close, so animated status-item widths cannot move an open
-  panel. Its generic content host also presents first-run setup, loading,
-  confirmation, and diagnostic text built by `StatusWindowController.swift`;
-  that controller never presents a standalone product window.
+- `MenuPanelController.swift` owns only the anchored compact `NSPanel`: its
+  lifecycle, focus, dismissal, and locked screen-space anchor. Compact screen
+  content lives in `CompactRootView.swift`, `CompactTrainerCardView.swift`,
+  `CompactTokenUsageView.swift`, `CompactSettingsView.swift`, and
+  `CompactEncounterView.swift`. `CompactSetupView.swift` owns compact first-run,
+  loading, and diagnostic states; genuinely shared compact chrome lives in
+  `MenuPanelSharedViews.swift`. There is no hidden titled window or generic
+  expanded-content host.
 - `BrandStyle.swift` is the only source of native colors, type, spacing,
   geometry, and shared control treatments. `BrandStylesPreview.swift` renders
   the shared living reference, while `MenuPanelStateHarnessView.swift` renders
@@ -38,7 +47,7 @@ BuddyMon is a local Python game with several small presentation shells.
   `StyleArchivePreview.swift` is historical only.
 
 The native shell holds a per-user advisory lock for its full lifetime, so app
-copies from development previews and friend builds cannot create duplicate
+copies from development previews and self-contained builds cannot create duplicate
 menu-bar items, timers, or collection commands. The lock file rejects symbolic
 links and is not inherited by child commands. A later launch notifies the
 running copy to reopen its panel, then exits before it creates UI or starts
@@ -47,6 +56,14 @@ work.
 Personal state, journal history, and optional packs live under
 `$XDG_STATE_HOME/buddymon`, defaulting to
 `~/.local/state/buddymon`.
+
+Missing state creates a new in-memory default. An existing corrupt, unreadable,
+structurally invalid, or future-version state raises a typed recovery error
+instead; normal commands and hooks cannot save over it. Valid older state keeps
+its source version outside the JSON payload so the first migrated save can
+preserve the original under `recovery/`. State v5 treats preference and session
+fields missing from historical v4 files as additive migration inputs, while
+still rejecting malformed values that are present.
 
 ## Data Flow
 
@@ -97,8 +114,10 @@ shortcuts, and stable action IDs in Python. AppKit renders that model with
 `BuddyMonBrand`. Clicking the status item opens the compact view; a waiting wild
 becomes its first action. Trainer Card data is served through `app-view trainer`;
 it reads state and journal evidence without mutating either. Badge selection is
-ephemeral native view state: it exposes an earned status or requirement but
-never writes game state. Settings reads `app-view settings` and writes through the validated
+ephemeral native view state: it replaces the badge heading with the selected
+name while medallion styling carries earned or locked state and the tooltip
+retains the requirement. It never writes game state. Settings reads `app-view
+settings` and writes through the validated
 `app-action preference <key> <value>` contract inside the compact panel, so each
 visible native option sets an exact value instead of relying on client-side
 cycling. Party, Box, Pokédex, and Activity invoke the existing `open-menu`
@@ -127,9 +146,9 @@ Optional packs are installed or refreshed only after an explicit user action.
 Downloads are staged and validated before replacement; a failure leaves the
 last working pack in place.
 
-The native bundle also contains the fixed 64-by-64 FireRed/LeafGreen Red card
-pose used by the Trainer Card. It is source-recorded rather than downloaded at
-runtime; a local monochrome figure remains the missing-resource fallback.
+The native Trainer Card draws BuddyMon's original two-tone trainer silhouette
+with `BuddyMonBrand` colors. It neither bundles nor fetches an external trainer
+portrait.
 
 Showcase selection stores only Pokémon ids in normal state. PNG export reads
 those ids and writes a local file on demand without storing export history.
@@ -137,7 +156,7 @@ those ids and writes a local file on demand without storing export history.
 ## Boundaries
 
 - Code lives in this repository.
-- Friend builds copy code and a private Python runtime into the app bundle.
+- Self-contained builds copy code and a private Python runtime into the app bundle.
 - Personal state and generated packs stay outside the repository.
 - Normal play is local-only and does not rewrite AI-tool settings.
 - Runtime code stays stdlib-only where practical; tooling may use Pillow.
@@ -147,9 +166,9 @@ those ids and writes a local file on demand without storing export history.
   `capture-menu-bar-states.sh` renders every status-item state at light, dark,
   selected, and reduced-motion settings. `capture-menu-panel.sh` renders the
   shipping compact view, while `capture-menu-panel-states.sh` renders root,
-  token, all-preferences Settings, Settings loading, encounter, result, and both Trainer Card
-  states. All use stable sizes for visual review and deterministic native
-  tests.
+  first-run setup, flow loading/error, token, all-preferences Settings, Settings
+  loading, encounter, result, and both Trainer Card states. All use stable sizes
+  for visual review and deterministic native tests.
 
 See [Development](development.md) for build and test commands and
 [Brand Styles](brand.md) for the native visual contract, and [BuddyMon.app,

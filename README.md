@@ -9,7 +9,7 @@ runs as a Claude Code plugin, a terminal game, or a local macOS app.
 
 ### macOS app
 
-Build and install the self-contained friend version:
+Build and install the self-contained app:
 
 ```bash
 scripts/build-macos-app.sh --friend --install --open
@@ -18,8 +18,9 @@ scripts/build-macos-app.sh --friend --install --open
 The app includes its own Python runtime and lives in the menu bar without a
 Dock icon or standalone app window. Launching it starts the buddy without
 opening UI. On first run, click the egg to open **First Signal** and choose a
-starter. Built-in fallback art works immediately. Optional art is downloaded
-only when you explicitly run `/buddymon:official` or `install-assets`.
+starter inside the same compact anchored panel. Built-in fallback art works
+immediately. Optional art is downloaded only when you explicitly run
+`/buddymon:official` or `install-assets`.
 
 Click the menu-bar buddy for the compact everyday dropdown. A waiting wild
 Pokémon becomes its first action; otherwise the panel stays focused on your
@@ -35,11 +36,13 @@ use the local FireRed/LeafGreen-style pixel face; Refresh and Quit are quiet
 `⌘R` and `⌘Q` footer commands.
 
 Trainer opens a native 3:2 card with local collection facts and selectable
-achievement medallions. Selecting a badge shows its earned state or unlock
-requirement; its subtle motion honors Reduce Motion. Settings opens one native
+achievement medallions. Selecting one replaces the badge heading with its name;
+the medallion shows earned or locked state, and its tooltip retains the unlock
+requirement. Its subtle motion honors Reduce Motion. Settings opens one native
 compact list with all seven preferences. Every allowed option is visible, the
-active one is marked, and every change applies immediately. Party, Box, Pokédex,
-and Activity remain explicit terminal shortcuts for people who want them.
+active one is marked, and every change applies immediately. Party, Box,
+Pokédex, and Activity remain explicit terminal shortcuts for people who want
+them.
 
 The menu-bar buddy is a real game surface, not a static launcher icon. It rests,
 works, gains XP, levels, reacts to encounters, catches Pokémon, and plays short
@@ -47,10 +50,14 @@ evolution moments. These states use installed local sprite art when available
 and the built-in pixel pack otherwise. Reduce Motion shows a representative
 static frame.
 
-The current app is unsigned and not notarized, so macOS may ask you to approve
-it the first time.
+Local builds are development artifacts, so macOS may ask you to approve them.
+Published app archives are built through the signed and notarized release path
+documented in [Development](docs/development.md).
 
 ### Claude Code plugin
+
+The plugin invokes `python3`; make sure Python 3 is available on your `PATH`
+before launching Claude Code.
 
 ```bash
 git clone https://github.com/HVNT/buddymon.git ~/buddymon
@@ -102,7 +109,9 @@ Normal play reads local transcripts and local BuddyMon state. It does not upload
 game state, rewrite AI-tool settings, or require a BuddyMon account.
 
 Network access happens only when you explicitly install or refresh optional art.
-The friend build may also download its private Python runtime while packaging.
+The self-contained build may also download its private Python runtime while
+packaging. Those Python and Pillow inputs are pinned per architecture and
+verified by SHA-256 before use.
 Persistent background collection is opt-in through `collector install`.
 
 ## Common Commands

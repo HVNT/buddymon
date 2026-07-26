@@ -116,6 +116,11 @@ has no corner radius or resting button fill, and keeps one subtle neutral rule.
 Hover adds a quiet surface wash and one-point lift over 120 milliseconds;
 Reduce Motion keeps the link stationary. Primary and encounter actions retain
 the standard 32-point button treatment.
+First Signal uses the standard 304-by-210 Field Guide frame. Five starter
+choices use the same 22-point quick-link treatment in a 3-by-2 grid, with one
+small identity-color mark and neutral action text. Its working and error states
+remain in that frame; setup never switches to the historical dark console skin
+or a larger window.
 The compact root, Token Usage, Settings, Battle, and Battle Result stacks sit
 inside the same 288-point striped Field Guide frame used by the Trainer Card,
 leaving an eight-point canvas reveal on each side. Their existing hierarchies
@@ -127,10 +132,15 @@ Token Usage keeps the standard 304-by-210-point compact panel size while its
 local report loads, after it resolves, and if the report fails. Loading and
 failure render inside the Field Guide card; they never install a standalone
 Redline surface as an intermediate frame. Its resolved hierarchy is
-three headline measures, a seven-day pulse with proportional daily bars, one
+two equal comparison cards, a seven-day pulse with proportional daily bars, one
 context line for daily average, peak day, and active streak, then supported-tool
-share. The pulse and context use the structured local dashboard payload; they do
-not parse or duplicate terminal report copy. Because Token Usage is read-only,
+share. The first card compares Today with Yesterday; the second compares This
+Week with Last Week. Each card keeps its change percentage beside its title and
+the earlier period below the primary total. The pulse and context use the
+structured local dashboard payload; they do
+not parse or duplicate terminal report copy. The pulse is 52 points tall so its
+27-point drawable bar range uses the report's available vertical space while
+the panel remains 304 by 210 points. Because Token Usage is read-only,
 it has no generic arrow/Return instruction footer; the supported-tool share is
 its final bottom-anchored row, while Back and Escape remain available through
 the shared navigation behavior.
@@ -150,13 +160,12 @@ trailing context such as the Trainer ID. The back control remains first in the
 keyboard order; separate bottom Back or oversized Return Home actions are not
 used.
 The Trainer drill-in uses a 288-by-192-point, 3:2 card inside that panel. Its
-striped Field Guide surface contains one header, four fact rows, the exact
-64-point FireRed/LeafGreen Red card pose, a four-star achievement summary, one
-compact trainer-status rail, and one badge rail. A monochrome built-in figure
-remains the missing-resource fallback. The status rail turns the former blank
-middle band into four current, trainer-owned readouts: encounter mode, activity
-streak, available balls, and owned shiny count. Battle mode reports unlimited
-balls instead of implying that Safari inventory is consumed. Its 26-point
+striped Field Guide surface contains one header, four fact rows, BuddyMon's
+original two-tone trainer silhouette, a four-star badge-rank summary, one
+compact trainer-status rail, and one badge rail. The status rail turns the
+former blank middle band into four current, trainer-owned readouts: encounter
+mode, activity streak, available balls, and owned shiny count. Battle mode
+reports unlimited balls instead of implying that Safari inventory is consumed. Its 26-point
 shared treatment uses equal-width cells on a quiet raised surface with subtle
 top and bottom rules; it adds no nested card or new accent color. The rail is
 the deliberate exception to the drill-in's ten-point content gutter: it spans
@@ -168,19 +177,23 @@ National is omitted, not shown as a locked teaser, until National is earned;
 the National-complete harness state shows the resulting tenth position. Badge
 symbols sit centered inside 28-point circular medallions; the ten-badge state
 uses 25-point medallions so every center remains on one even rail. Text glyphs
-receive the shared one-point optical lift so their visible shapes, not their
-font boxes, sit in the circle's center. Opening the card gives each medallion a
+use the shared zero-offset center alignment so their visible shapes sit on the
+circle's center. Opening the card gives each medallion a
 short staggered stamp, hovering gives it a slight lift, and earned shiny badges
 carry a slow low-opacity glow. All three motions are disabled by macOS Reduce
 Motion.
-Each medallion is also a real keyboard and pointer control. Selecting it updates
-the rail header with its earned state or requirement; tooltips retain the full
-badge name and description. The fact grid uses fixed label and value columns;
-the stars occupy the same right-aligned value column directly below NAME, while
-the portrait owns one separate trailing column. The status rail occupies the
+Each medallion is also a real keyboard and pointer control. Selecting it replaces
+the rail's left-side `BADGES` heading with the badge name; the medallion styling
+already communicates earned or locked state, while tooltips retain the full
+name and requirement. The badge header's right side shows `RANK` and four stars:
+each star represents two of the eight core badges, not a trainer level. The fact
+grid uses fixed label and value columns, while the portrait owns one separate
+trailing column. The status rail occupies the
 space between those facts and the bottom-anchored badge rail; flexible space is
 used only as a compatibility fallback for older payloads that do not provide
 trainer stats, and never appears below the badge rail.
+The trainer portrait is BuddyMon's original two-tone silhouette, drawn directly
+with shared `BuddyMonBrand` ink colors. No external trainer portrait is bundled.
 Inside the buddy identity column, the level and XP percentage share the same
 right edge. The XP bar flexes to fill all space between its label and value.
 The active-buddy group is a full-width raised row inside the Field Guide frame.
@@ -238,7 +251,8 @@ The outputs are `.build/brand-styles.png`,
 and `.build/menu-panel-states.png`. The menu-bar harness uses
 the shipping local-first art path and deterministic state fixtures; the compact
 panel capture reads local `app-status`; the compact-panel harness covers no
-starter, ready, recent, encounter, shiny, long-value, unavailable, Tokens,
+starter, compact First Signal, flow loading/error, ready, recent, encounter,
+shiny, long-value, unavailable, state-recovery-required, Tokens,
 all-preferences Settings and Settings loading, minimal battle, caught and ran-away battle
 results, Trainer, and National-complete Trainer states. None changes game
 state. The macOS test suite renders these surfaces twice and requires

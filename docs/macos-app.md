@@ -3,8 +3,8 @@
 BuddyMon.app is a tiny menu-bar companion. The Python game inside it is the
 brain; the native app is a very thin shell around that shared core.
 
-The self-contained friend build carries a private Python runtime, so the tester
-does not need Homebrew, Terminal setup, Ghostty, or their own Python install.
+The self-contained build carries a private Python runtime, so the user does not
+need Homebrew, Terminal setup, Ghostty, or their own Python install.
 
 ## Open It
 
@@ -76,25 +76,30 @@ small stats and supporting copy remain SF Mono.
 Every clickable compact control uses the macOS pointing-hand cursor; passive
 labels, sprites, and status rows retain the normal arrow.
 
-Tokens opens a second compact Field Guide panel with Today, Last 7 Days,
-7-day trend, and the leading local tools. Its back chevron shares the title row,
-matching Trainer, Battle, and Battle Result. Back returns to the buddy dropdown;
-it never opens a standalone dashboard.
+Tokens opens a second compact Field Guide panel. Two equal cards compare Today
+with Yesterday and This Week with the same elapsed weekdays from last week,
+with each percentage kept inside its own card. The prior-week label names its
+cutoff until Sunday. The seven-day bars and leading local tools remain below. Its back
+chevron shares the title row, matching Trainer, Battle, and Battle Result. Back
+returns to the buddy dropdown; it never opens a standalone dashboard.
 
 Trainer opens a 3:2 Field Guide card in the same panel. It shows NAME, TOKENS,
-POKÉDEX, and CAUGHT beside Red's original FireRed/LeafGreen card pose. A compact
-status rail adds the current encounter mode, activity streak, available balls,
-and owned shiny count without changing the card size. Battle mode shows
+POKÉDEX, and CAUGHT beside BuddyMon's original two-tone trainer silhouette. A
+compact status rail adds the current encounter mode, activity streak, available
+balls, and owned shiny count without changing the card size. Battle mode shows
 unlimited balls because Battle throws do not consume Safari inventory. There is
-no Trainer Level: levels belong to Pokémon. The status rail alone spans the
+no Trainer Level: levels belong to Pokémon. The four-star badge rank awards one
+star for every two of the eight core badges and sits in the badge header. The
+status rail alone spans the
 full card width and meets the border; the rest of the content keeps its normal
 inset. The badge rail recognizes Bond,
 Safari, Battle, Curator, Type, Shiny, Legend, National, and Shiny Legend
 achievements from local collection, Showcase, and journey evidence. Shiny
 National is not shown at all until the National Badge is complete; it then
 appears locked until every National Pokédex species has a shiny copy.
-Badges are pointer- and keyboard-selectable; choosing one reveals its earned
-state or requirement without leaving the card.
+Badges are pointer- and keyboard-selectable; choosing one replaces the badge
+heading with its name. Medallion styling carries earned or locked state, and
+the tooltip retains the unlock requirement.
 Large circular medallions use equal-width slots so every symbol is centered.
 They stamp in sequentially when the card opens, lift gently on hover, and give
 earned shiny achievements a slow glow; Reduce Motion keeps them static.
@@ -121,7 +126,9 @@ Signal** in the anchored panel:
    if you want it.
 
 BuddyMon never downloads optional art automatically, and missing art never
-blocks setup. A failed refresh keeps the last working copy.
+blocks setup. First Signal, its working state, and any setup error all use the
+same 304-by-210 Field Guide panel as the everyday dropdown. There is no dark
+console-style setup window. A failed refresh keeps the last working copy.
 
 ## Compact Dropdown
 
@@ -188,6 +195,12 @@ Use **Back up my data** in Terminal Settings, or run
 `python3 buddymon.py backup`, to create a timestamped local copy in
 `~/Documents/BuddyMon Backups`.
 
-The current build is unsigned and not notarized, so macOS may ask for approval
-the first time. For build details, see [Development](development.md). For common
-problems, see [Troubleshooting](troubleshooting.md).
+If existing state is corrupt, unreadable, structurally invalid, or from a newer
+BuddyMon release, every normal mutation stops and the original `state.json`
+remains untouched. The compact panel shows **State Needs Care** instead of
+mistaking the file for a new game. Valid older state is migrated only after a
+copy is preserved under the local `recovery/` directory.
+
+Local builds may require first-open approval. Published archives use the
+explicit signing and notarization path in [Development](development.md). For
+common problems, see [Troubleshooting](troubleshooting.md).

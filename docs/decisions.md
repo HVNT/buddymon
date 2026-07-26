@@ -27,6 +27,15 @@ Manual backups copy the entire active state directory to
 `python3 buddymon.py backup` call the same Python operation. It respects
 `XDG_STATE_HOME` and does not modify live data.
 
+An existing state file is never equivalent to missing state. Corrupt,
+unreadable, structurally invalid, and future-version files block normal writes
+and remain untouched. Valid older state may migrate, but its original file is
+copied into the local `recovery/` directory before the migrated state is saved.
+Persisted fields added after a release require an explicit state-version
+boundary. State v5 formalizes preference and session fields that older v4
+builds added incrementally, so missing fields migrate with a recovery copy
+while invalid values that are present still block writes.
+
 ## Python owns the game
 
 **Decision:** Keep rules and persistence in Python. Statusline, terminal,
@@ -86,21 +95,32 @@ output streams, and bound them with timeout and cancellation handling.
 **Why:** Collection, image export, or a large JSON response must not freeze the
 app or deadlock on a full process pipe.
 
-## The friend app is menu-bar-only and self-contained
+## The app is menu-bar-only and self-contained
 
-**Decision:** Ship the friend build with a private Python runtime. The app is an
+**Decision:** Ship the self-contained build with a private Python runtime. The app is an
 accessory process with one visible home: the menu-bar buddy and its anchored
 panel. It does not create a Dock icon or standalone product window.
 
 **Why:** A nontechnical tester still gets one app to open without installing
 Python or using Terminal, while everyday use stays faithful to BuddyMon's tiny
-ambient-companion purpose. The tradeoff is a larger, currently unsigned app
-bundle.
+ambient-companion purpose. The tradeoff is a larger app bundle. Local builds
+remain development artifacts; public archives use the explicit signed and
+notarized release path.
+
+## Release inputs are immutable
+
+**Decision:** Keep one tracked `VERSION`, generate native metadata from it, and
+lock embedded Python archives and Pillow wheels by exact URL, version, platform,
+and SHA-256. Public app archives must be signed, notarized, stapled, assessed,
+and checksummed by the release packager.
+
+**Why:** A release tag should identify source and rebuildable inputs rather than
+whatever a mutable `latest` endpoint or package range returned that day.
 
 ## The native app has one process per user
 
 **Decision:** Allow only one running BuddyMon native app across development,
-preview, and friend-build bundle copies.
+preview, and self-contained bundle copies.
 
 **Why:** Each native process owns a menu-bar item, timers, and child
 commands. A per-user advisory lock enforces the invariant even when a developer
@@ -155,13 +175,11 @@ content or make navigation cadence depend on row count.
 is installed or refreshed only after a confirmed user action, and a failed
 operation preserves the last working pack.
 
-**Why:** Normal play should remain local-only and dependable. Optional,
-third-party-derived assets should not be bundled or downloaded silently.
+**Why:** Normal play should remain local-only and dependable. Optional art packs
+should not be downloaded silently.
 
-The Trainer Card's 64-by-64 Red pose is one explicit exception requested by the
-trainer. It is a fixed, source-recorded FireRed/LeafGreen UI asset bundled with
-the native shell; there is no runtime fetch. If that resource cannot load, the
-card falls back to its local monochrome figure.
+The Trainer Card uses an original two-tone silhouette drawn in code with
+`BuddyMonBrand` colors, so no external trainer portrait is bundled or fetched.
 
 ## Scheduled collection has one gate
 
@@ -234,10 +252,11 @@ accounts, uploads, or persistent export history.
 
 ## Onboarding invites without interrupting work
 
-**Decision:** Native first run starts with a quiet menu-bar egg. Clicking it opens
-First Signal in the anchored panel: a five-starter local setup screen with one
-simple first mission. It does not open a standalone window, download optional
-art, or schedule prompts.
+**Decision:** Native first run starts with a quiet menu-bar egg. Clicking it
+opens First Signal as a 304-by-210 Field Guide card in the anchored panel: five
+compact starter choices and one simple first mission. Choosing, loading, and
+failure stay in that same compact panel. There is no hidden titled setup window,
+standalone window, automatic optional-art download, or scheduled prompt.
 
 **Why:** BuddyMon should feel like a little game from the first click while
 remaining a calm local companion. Delight belongs to the player's own work and
@@ -248,8 +267,8 @@ collection, not attention-harvesting loops.
 **Decision:** Clicking the buddy always opens the compact everyday dropdown. A
 waiting wild becomes its first emphasized action instead of bypassing the
 dropdown. The native shell retains only the compact root, encounter and result,
-Token Usage, Trainer, Settings, and the small generic setup/loading/confirmation
-host. Party, Box, Pokédex, Activity, and Showcase remain terminal-game
+Token Usage, Trainer, Settings, and compact setup/loading/message components.
+Party, Box, Pokédex, Activity, and Showcase remain terminal-game
 destinations; the deleted expanded native graph and its private JSON routes are
 not dormant product surfaces. The root presents a square two-row grid of six
 compact links: native Trainer and Settings destinations plus terminal handoffs
@@ -300,7 +319,7 @@ unsafe. A bounded local-only playback channel tests the shipping renderer while
 preserving the core's state and privacy boundaries.
 
 The shipping native graph stops at the menu-bar state harness, compact
-dropdown, its compact drill-ins, and generic first-run/result content. Terminal
+dropdown, and its compact setup, notice, and drill-in components. Terminal
 screens do not require duplicate native renderers.
 
 ## The compact dropdown uses the Field Guide skin
@@ -313,11 +332,13 @@ are not the default native surface. Shared tokens and controls live under
 `BuddyMonBrand.Menu`; Pokémon identity, rarity, and urgent alerts remain the
 few semantic color accents.
 
-Token Usage is the first compact drill-in. It summarizes Today, Last 7 Days,
-prior-period trend, a proportional seven-day daily pulse, daily average, peak
-day, active streak, and leading tools inside the same anchored panel. These are
-the highest-value glanceable parts of the structured dashboard payload; there
-is no separate wide native dashboard.
+Token Usage is the first compact drill-in. Its two equal headline cards compare
+Today with Yesterday and This Week with Last Week; each card owns its percentage
+instead of separating comparison context into a third card. A proportional
+seven-day daily pulse, daily average, peak day, active streak, and leading tools
+remain inside the same anchored panel. These are the highest-value glanceable
+parts of the structured dashboard payload; there is no separate wide native
+dashboard.
 Its loading, success, and failure states all use the standard 304-by-210-point
 Field Guide panel. The async view request never routes through a standalone
 loading window, preventing a dark oversized frame during navigation.
@@ -359,10 +380,12 @@ the active Pokémon's level. Badge eligibility is derived by Python from local
 collection, Showcase, and journey evidence. The regular rail contains Bond,
 Safari, Battle, Curator, Type, Shiny, Legend, National, and Shiny Legend.
 Shiny National is omitted entirely until National is earned, then appears as a
-locked or earned tenth badge. The four stars summarize core badge progress and
-are not a level.
-Badge controls explain their earned state or requirement in place. Selection
-does not mutate progress or open another surface.
+locked or earned tenth badge. The four-star rank awards one star for every two
+earned core badges and sits in the badge header, where its meaning is explicit;
+it is not a level. Selecting a badge replaces the left-side badge heading with
+its name. The medallion styling already communicates earned or locked state, so
+the heading does not repeat it. Tooltips retain the requirement. Selection does
+not mutate progress or open another surface.
 
 Waiting encounters use the same compact drill-in contract. The shell renders
 the Python-supplied buddy, wild, HP, message, and action policy as two sprite

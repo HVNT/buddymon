@@ -23,7 +23,7 @@ The app is intentionally visible only in the menu bar. Opening it again asks
 the already-running copy to show its panel. Add BuddyMon in **System Settings >
 General > Login Items** if you want it to reopen after login.
 
-If the installed app is missing, rebuild, install, and open a friend build:
+If the installed app is missing, rebuild, install, and open a self-contained build:
 
 ```bash
 scripts/build-macos-app.sh --friend --install --open
@@ -31,6 +31,19 @@ scripts/build-macos-app.sh --friend --install --open
 
 `.build/macos/BuddyMon.app` is the development build output; it is not the
 installed copy.
+
+## First Signal appears even though a buddy exists
+
+The installed process is older than the state format it is reading. Trainer
+state is not erased; quit the stale process and replace the installed app:
+
+```bash
+scripts/build-macos-app.sh --friend --install --open
+```
+
+The install command now stops the running BuddyMon process before replacing and
+opening `/Applications/BuddyMon.app`, so the new binary—not an old in-memory
+copy—handles the state.
 
 ## BuddyMon.app says Python is missing
 
@@ -46,7 +59,20 @@ If you supply a prepared runtime, point the build at it:
 BUDDYMON_PYTHON_RUNTIME=/path/to/runtime scripts/build-macos-app.sh --friend --install --open
 ```
 
-A friend tester should not need a separate Python or Pillow install.
+A user should not need a separate Python or Pillow install.
+
+## BuddyMon says State Needs Care
+
+BuddyMon found an existing `state.json` that it cannot safely use. Corrupt,
+unreadable, structurally invalid, and newer-version files block every normal
+write; BuddyMon does not replace them with a new game.
+
+First make a copy of
+`$XDG_STATE_HOME/buddymon/state.json`, or
+`~/.local/state/buddymon/state.json` by default. Restore a known-good backup or
+update BuddyMon if the message says the state came from a newer release. Move
+the file aside only when you deliberately want to start over. Valid older
+states preserve a pre-migration copy under the local `recovery/` directory.
 
 ## Optional art is missing or failed
 
@@ -104,6 +130,18 @@ open -a SwiftBar
 ```
 
 Its menu stream is long-lived and may still have old code loaded.
+
+## Claude Code reports `python3` not found
+
+The source plugin invokes `python3` for its status line and hooks. Confirm that
+Python 3 is on the same `PATH` Claude Code receives:
+
+```bash
+python3 --version
+```
+
+If that command fails, install Python 3 and restart Claude Code before
+reinstalling the plugin.
 
 ## A terminal shortcut does nothing
 

@@ -43,27 +43,47 @@ For the user flow, see [BuddyMon.app, ELI5](macos-app.md).
 # Developer build: uses this Mac's /usr/bin/python3
 scripts/build-macos-app.sh
 
-# Self-contained friend build
+# Self-contained build
 scripts/build-macos-app.sh --friend
 
 # Replace /Applications/BuddyMon.app and open that installed copy
 scripts/build-macos-app.sh --friend --install --open
 ```
 
-The friend build uses `BUDDYMON_PYTHON_RUNTIME` or `--runtime-dir` when
+`--install` first asks any running BuddyMon process to quit, then replaces the
+bundle. This prevents `--open` from signaling an old in-memory build after its
+files have been updated.
+
+The self-contained build uses `BUDDYMON_PYTHON_RUNTIME` or `--runtime-dir` when
 provided. Otherwise it creates a managed standalone CPython runtime under
 `.build/python-runtime`, installs Pillow, validates the runtime, and copies it
-into the app.
+into the app. Default runtime inputs come only from
+`scripts/runtime-lock.json`: exact Python archives and architecture-specific
+Pillow wheels are verified by SHA-256 before extraction or installation. A
+managed runtime is reused only when its metadata and imported Python/Pillow
+versions still match that lock.
+Custom `--url` or `--tarball` inputs require an explicit `--sha256`.
 
 ```bash
 scripts/build-macos-app.sh --friend --force-runtime
-scripts/build-macos-app.sh --friend --python-version 3.12
+scripts/build-macos-app.sh --friend --python-version 3.12.13
 BUDDYMON_PYTHON_RUNTIME=/path/to/runtime scripts/build-macos-app.sh --friend
 scripts/capture-brand-styles.sh
 scripts/menu-bar-state-harness.sh
 scripts/capture-menu-bar-states.sh
 scripts/capture-menu-panel.sh
 scripts/capture-menu-panel-states.sh
+```
+
+An external development runtime must be named explicitly and paired with
+`--allow-unlocked-runtime`. That escape hatch performs import checks but is not
+used by CI or the release packager:
+
+```bash
+scripts/build-macos-app.sh \
+  --friend \
+  --runtime-dir /path/to/development-runtime \
+  --allow-unlocked-runtime
 ```
 
 ### Watch menu-bar states and user stories
@@ -98,12 +118,42 @@ The builder never rewrites an unmarked external runtime. BuddyMon-managed
 runtimes carry `buddymon-runtime.json`; replacements are validated in staging
 before the previous runtime is changed.
 
+`VERSION` is the canonical product version. The plugin manifest, marketplace
+metadata, generated app plist, and runtime lock are checked with:
+
+```bash
+python3 scripts/validate-release-metadata.py
+python3 scripts/validate-release-metadata.py --app .build/macos/BuddyMon.app
+```
+
+### Signed release archive
+
+The release packager rebuilds the embedded runtime from the lock, verifies it,
+enforces the production bundle id and canonical version/build before signing
+and again before archiving, signs every Mach-O payload and the app with Hardened
+Runtime, submits the archive for notarization, staples and assesses the app,
+and writes a SHA-256 file whose entry uses the archive basename, so the two
+downloaded files verify together in any directory. It never discovers
+credentials. Configure an existing Developer ID identity and `notarytool`
+keychain profile through Apple's supported tools, then run:
+
+```bash
+BUDDYMON_CODESIGN_IDENTITY="Developer ID Application: ..." \
+BUDDYMON_NOTARY_PROFILE="buddymon-notary" \
+scripts/package-macos-release.sh
+```
+
+The output is `.build/release/BuddyMon-VERSION-ARCH.zip` plus its checksum.
+Build on each architecture you intend to publish; do not label one archive
+universal.
+
 Before changing native UI, read [Brand Styles](brand.md) and use
 `BuddyMonBrand`. `BrandStylesPreview.swift` is the living reference for the
 shared system. `MenuPanelStateHarnessView.swift` renders the shipping compact
-components, including both Trainer Card badge counts. `StyleArchivePreview.swift`
-keeps three older directions as non-normative history. These developer/snapshot
-sources are excluded from the self-contained friend build.
+components, including first-run setup, loading/error notices, and both Trainer
+Card badge counts. `StyleArchivePreview.swift` keeps three older directions as
+non-normative history. These developer/snapshot sources are excluded from the
+self-contained build.
 
 New colors, type, spacing, geometry, or control treatments start in
 `BrandStyle.swift`, then appear in the Brand Styles preview with all relevant
@@ -165,7 +215,9 @@ See [Assets](assets.md) for sources, validation, and fallback behavior.
 ## Before Pushing
 
 ```bash
-uv run --with pytest --with pillow --no-project python3 -m pytest tests/ -q
+python3 -m pip install --requirement requirements-test.txt
+python3 -m pytest tests/ -q
+python3 scripts/validate-release-metadata.py
 scripts/build-macos-app.sh
 git diff --check
 git status --short
@@ -173,3 +225,6 @@ git status --short
 
 Keep generated packs, personal state, and unrelated worktree changes out of the
 commit.
+
+The same test/build/metadata gate runs on macOS for every pull request and
+`main` push through `.github/workflows/ci.yml`.

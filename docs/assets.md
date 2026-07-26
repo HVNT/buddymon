@@ -41,14 +41,9 @@ working copy of each pack.
 Runtime uses local packs when present and otherwise falls back to the original
 sprites in `lib/sprites.py`.
 
-The native Trainer Card has one bounded bundled exception:
-`macos/BuddyMonApp/Resources/TrainerRedFRLG.png`. It is the exact 64-by-64
-Red Trainer Card pose from the FireRed/LeafGreen
-[Player Sprites sheet](https://www.spriters-resource.com/game_boy_advance/pokemonfireredleafgreen/asset/52432/),
-uploaded there by FrenchOrange. BuddyMon removes only the sheet's orange
-background and preserves the game pixels. The extracted PNG SHA-256 is
-`b9455d9dde99f00d1d93430b62ba320284f894fba315d02144c2b5a7163c61b3`.
-It is copyrighted game art, not a freely licensed BuddyMon asset.
+The native Trainer Card draws BuddyMon's original two-tone trainer silhouette
+with `BuddyMonBrand` colors. It does not bundle or fetch an external trainer
+portrait.
 
 The native status item prioritizes compacted, species-specific Gen 5 frames so
 its buddy matches the Pokémon shown in the native panel. If that pack is not
