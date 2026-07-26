@@ -4,15 +4,43 @@ import random
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib import data, engine, pixels, render, sprites, state, transcript
+from lib import data, engine, pixels, render, safari, sprites, state, transcript
 
 
 def fresh_state(starter="Charmander"):
     s = state.default_state()
     engine.create_starter(s, starter)
     return s
+
+
+def write_state_file(path, payload):
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def historical_v4_state():
+    """Shape written when 28aa932 introduced v4 preferences."""
+    return {
+        "version": 4,
+        "trainer": {
+            "streak": 0,
+            "last_day": None,
+            "balls": 10,
+            "total_xp": 0,
+            "total_tokens": 0,
+        },
+        "active": None,
+        "pokemon": [],
+        "xp_sessions": {"empty": {"updated": 123}},
+        "mode": "battle",
+        "preferences": {
+            "notifications": "silent",
+            "menu_launcher": "iterm",
+        },
+    }
 
 
 # ── level curve ──────────────────────────────────────────────────────────────
@@ -428,7 +456,7 @@ def test_v1_state_migrates_without_level_loss(tmp_path, monkeypatch):
                       "emoji": "🔥", "rarity": "starter", "level": 21,
                       "xp": 24000, "shiny": False, "caught_at": 0}]
     v1["active"] = "x"
-    state.save(v1)
+    write_state_file(paths.STATE_FILE, v1)
 
     migrated = state.load()
     buddy = state.active_pokemon(migrated)
@@ -457,7 +485,7 @@ def test_v2_state_migrates_evolved_forms_up_to_stage_floor(tmp_path, monkeypatch
          "xp": engine.xp_for_level(20), "shiny": False, "caught_at": 0},
     ]
     v2["active"] = "h"
-    state.save(v2)
+    write_state_file(paths.STATE_FILE, v2)
 
     migrated = state.load()
     haunter = state.active_pokemon(migrated)
@@ -488,7 +516,7 @@ def test_v3_state_migrates_preferences_without_touching_gameplay(tmp_path, monke
     }
     v3["trainer"]["balls"] = 7
     v3["xp_sessions"] = {"s1": {"last_uuid": "u1", "updated": 123}}
-    state.save(v3)
+    write_state_file(paths.STATE_FILE, v3)
 
     migrated = state.load()
 
@@ -506,13 +534,13 @@ def test_v3_state_migrates_preferences_without_touching_gameplay(tmp_path, monke
     assert migrated["xp_sessions"] == {"s1": {"last_uuid": "u1", "updated": 123}}
 
 
-def test_invalid_mode_and_preferences_fall_back_to_defaults(tmp_path, monkeypatch):
+def test_v3_invalid_mode_and_preferences_migrate_to_defaults(tmp_path, monkeypatch):
     from lib import paths
     monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
     monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
     monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
     broken = state.default_state()
-    broken["version"] = 4
+    broken["version"] = 3
     broken["mode"] = "surprise"
     broken["preferences"] = {
         "notifications": "loud",
@@ -522,12 +550,267 @@ def test_invalid_mode_and_preferences_fall_back_to_defaults(tmp_path, monkeypatc
         "share_reveal": "maybe",
         "share_banner": "toast",
     }
-    state.save(broken)
+    write_state_file(paths.STATE_FILE, broken)
 
     migrated = state.load()
 
     assert migrated["mode"] == "auto"
     assert migrated["preferences"] == state.DEFAULT_PREFERENCES
+
+
+def test_historical_v4_additive_fields_migrate_with_recovery_copy(
+    tmp_path,
+    monkeypatch,
+):
+    from lib import paths
+
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    original = json.dumps(historical_v4_state(), sort_keys=True).encode()
+    paths.STATE_FILE.write_bytes(original)
+
+    migrated = state.load()
+
+    assert migrated.source_version == 4
+    assert migrated["version"] == state.STATE_VERSION == 5
+    assert migrated["preferences"] == {
+        **state.DEFAULT_PREFERENCES,
+        "notifications": "silent",
+        "menu_launcher": "iterm",
+    }
+    assert migrated["xp_sessions"]["empty"] == {
+        "last_uuid": "",
+        "updated": 123,
+    }
+
+    state.save(migrated)
+
+    backups = list((tmp_path / "recovery").glob("state-v4-pre-migration-*.json"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == original
+
+
+def test_historical_v4_rejects_invalid_present_additive_values(
+    tmp_path,
+    monkeypatch,
+):
+    from lib import paths
+
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+
+    broken_preferences = historical_v4_state()
+    broken_preferences["preferences"]["notifications"] = "loud"
+    broken_session = historical_v4_state()
+    broken_session["xp_sessions"]["empty"]["updated"] = "recently"
+
+    for payload in (broken_preferences, broken_session):
+        original = json.dumps(payload, sort_keys=True).encode()
+        paths.STATE_FILE.write_bytes(original)
+
+        with pytest.raises(state.InvalidStateError):
+            state.load()
+
+        assert paths.STATE_FILE.read_bytes() == original
+
+
+def test_corrupt_state_is_never_treated_as_a_new_game(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    original = b'{"version": 4, "pokemon": ['
+    paths.STATE_FILE.write_bytes(original)
+
+    try:
+        state.load()
+    except state.InvalidStateError as exc:
+        assert exc.code == "invalid_state"
+        assert "left untouched" in str(exc)
+    else:
+        raise AssertionError("corrupt state must block loading")
+
+    assert paths.STATE_FILE.read_bytes() == original
+
+
+def test_future_state_version_is_never_downgraded(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    future = state.default_state()
+    future["version"] = state.STATE_VERSION + 1
+    original = json.dumps(future, sort_keys=True).encode()
+    paths.STATE_FILE.write_bytes(original)
+
+    try:
+        state.load()
+    except state.UnsupportedStateVersionError as exc:
+        assert exc.version == state.STATE_VERSION + 1
+        assert "newer release" in str(exc)
+    else:
+        raise AssertionError("future state must block loading")
+
+    assert paths.STATE_FILE.read_bytes() == original
+
+
+def test_structurally_invalid_state_is_rejected(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    paths.STATE_FILE.write_text(
+        json.dumps({"version": state.STATE_VERSION, "pokemon": {}}),
+        encoding="utf-8",
+    )
+
+    try:
+        state.load()
+    except state.InvalidStateError as exc:
+        assert "Pokemon collection" in str(exc)
+    else:
+        raise AssertionError("invalid state shape must block loading")
+
+
+def test_invalid_nested_records_are_rejected_without_rewrite(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+
+    valid = fresh_state()
+    valid["xp_sessions"] = {"session-1": {"last_uuid": "event-1", "updated": 1}}
+    valid["pending_encounter"] = safari.start({
+        "name": "Snorlax",
+        "type": "Normal",
+        "emoji": "😴",
+        "rarity": "rare",
+        "shiny": False,
+        "level": 30,
+    })
+
+    cases = []
+    broken = json.loads(json.dumps(valid))
+    broken["trainer"]["balls"] = "many"
+    cases.append(broken)
+    broken = json.loads(json.dumps(valid))
+    del broken["pokemon"][0]["name"]
+    cases.append(broken)
+    broken = json.loads(json.dumps(valid))
+    broken["xp_sessions"]["session-1"]["updated"] = "recently"
+    cases.append(broken)
+    broken = json.loads(json.dumps(valid))
+    broken["pending_encounter"] = {"name": "Snorlax"}
+    cases.append(broken)
+    broken = json.loads(json.dumps(valid))
+    broken["preferences"]["notifications"] = "loud"
+    cases.append(broken)
+
+    for payload in cases:
+        original = json.dumps(payload, sort_keys=True).encode()
+        paths.STATE_FILE.write_bytes(original)
+
+        with pytest.raises(state.InvalidStateError):
+            state.load()
+
+        assert paths.STATE_FILE.read_bytes() == original
+
+
+def test_normal_mutation_cannot_overwrite_invalid_pokemon_state(
+    tmp_path,
+    monkeypatch,
+):
+    import buddymon
+    from lib import paths
+
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    broken = state.default_state()
+    broken["pokemon"] = [{"id": "broken"}]
+    original = json.dumps(broken, sort_keys=True).encode()
+    paths.STATE_FILE.write_bytes(original)
+
+    with pytest.raises(state.InvalidStateError):
+        buddymon.mode(["safari"])
+
+    assert paths.STATE_FILE.read_bytes() == original
+
+
+def test_v2_malformed_pokemon_raises_typed_state_error(tmp_path, monkeypatch):
+    from lib import paths
+
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    broken = state.default_state()
+    broken["version"] = 2
+    broken["pokemon"] = [None]
+    write_state_file(paths.STATE_FILE, broken)
+
+    with pytest.raises(state.InvalidStateError):
+        state.load()
+
+
+def test_save_validates_current_state_before_writing(tmp_path, monkeypatch):
+    from lib import paths
+
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    broken = state.default_state()
+    broken["preferences"]["notifications"] = "loud"
+
+    with pytest.raises(state.InvalidStateError):
+        state.save(broken)
+
+    assert not paths.STATE_FILE.exists()
+
+
+def test_unreadable_state_is_rejected_without_falling_back(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    paths.STATE_FILE.write_text("{}", encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def unreadable(path, *args, **kwargs):
+        if path == paths.STATE_FILE:
+            raise PermissionError("denied")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+
+    try:
+        state.load()
+    except state.UnreadableStateError as exc:
+        assert exc.code == "unreadable_state"
+        assert "left untouched" in str(exc)
+    else:
+        raise AssertionError("unreadable state must block loading")
+
+
+def test_migration_save_preserves_the_original_state(tmp_path, monkeypatch):
+    from lib import paths
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    v3 = state.default_state()
+    v3["version"] = 3
+    write_state_file(paths.STATE_FILE, v3)
+    original = paths.STATE_FILE.read_bytes()
+
+    migrated = state.load()
+    migrated["trainer"]["balls"] = 99
+    state.save(migrated)
+
+    backups = list((tmp_path / "recovery").glob("state-v3-pre-migration-*.json"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == original
+    assert state.load()["trainer"]["balls"] == 99
 
 
 def test_milestone_balls_accrue_with_lifetime_xp():

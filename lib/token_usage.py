@@ -485,6 +485,25 @@ def _active_streak(daily):
     return streak
 
 
+def _comparison_trend(current_total, previous_total, detail):
+    delta = current_total - previous_total
+    if previous_total:
+        change_percent = int(round(delta * 100 / previous_total))
+        value = f"{change_percent:+d}%" if change_percent else "0%"
+    elif current_total:
+        change_percent = None
+        value = "New"
+    else:
+        change_percent = 0
+        value = "0%"
+    return {
+        "direction": "up" if delta > 0 else ("down" if delta < 0 else "flat"),
+        "change_percent": change_percent,
+        "value": value,
+        "detail": detail,
+    }
+
+
 def dashboard(now=None, days=7, history_days=28):
     """Structured local usage for the native app's useful, supported-tool charts."""
     now = _coerce_now(now)
@@ -494,7 +513,15 @@ def dashboard(now=None, days=7, history_days=28):
     current_start = today - timedelta(days=days - 1)
     previous_start = current_start - timedelta(days=days)
     history_start = today - timedelta(days=history_days - 1)
-    rows = cached_daily_counts(min(previous_start, history_start), now)
+    current_week_start = today - timedelta(days=today.weekday())
+    previous_week_start = current_week_start - timedelta(days=7)
+    previous_week_end = previous_week_start + timedelta(
+        days=today.weekday() + 1
+    )
+    rows = cached_daily_counts(
+        min(previous_start, history_start, previous_week_start),
+        now,
+    )
 
     daily = []
     for offset in range(days):
@@ -519,17 +546,28 @@ def dashboard(now=None, days=7, history_days=28):
     previous_counts = _counts_days(rows, previous_start, current_start)
     current_total = _total_tokens(current_counts)
     previous_total = _total_tokens(previous_counts)
-    delta = current_total - previous_total
-    if previous_total:
-        change_percent = int(round(delta * 100 / previous_total))
-        trend_value = f"{change_percent:+d}%" if change_percent else "0%"
-    elif current_total:
-        change_percent = None
-        trend_value = "New"
-    else:
-        change_percent = 0
-        trend_value = "0%"
-    direction = "up" if delta > 0 else ("down" if delta < 0 else "flat")
+    trend = _comparison_trend(current_total, previous_total, f"vs prior {days} days")
+
+    today_tokens = daily[-1]["tokens"]
+    yesterday_tokens = daily[-2]["tokens"]
+    day_trend = _comparison_trend(today_tokens, yesterday_tokens, "vs yesterday")
+
+    current_week_total = _sum_days(rows, current_week_start, now)
+    previous_week_total = _sum_days(
+        rows,
+        previous_week_start,
+        previous_week_end,
+    )
+    previous_week_label = (
+        "Last week"
+        if today.weekday() == 6
+        else f"Last week thru {today.strftime('%a')}"
+    )
+    week_trend = _comparison_trend(
+        current_week_total,
+        previous_week_total,
+        f"vs {previous_week_label.lower()}",
+    )
 
     clients = []
     for client in CLIENTS:
@@ -596,6 +634,30 @@ def dashboard(now=None, days=7, history_days=28):
             "end": today.date().isoformat(),
         },
         "today": daily[-1],
+        "headline": [
+            {
+                "id": "day",
+                "label": "Today",
+                "tokens": today_tokens,
+                "compact": compact_tokens(today_tokens),
+                "comparison_label": "Yesterday",
+                "comparison_tokens": yesterday_tokens,
+                "comparison_compact": compact_tokens(yesterday_tokens),
+                "change": day_trend["value"],
+                "tone": day_trend["direction"],
+            },
+            {
+                "id": "week",
+                "label": "This week",
+                "tokens": current_week_total,
+                "compact": compact_tokens(current_week_total),
+                "comparison_label": previous_week_label,
+                "comparison_tokens": previous_week_total,
+                "comparison_compact": compact_tokens(previous_week_total),
+                "change": week_trend["value"],
+                "tone": week_trend["direction"],
+            },
+        ],
         "total": {
             "tokens": current_total,
             "compact": compact_tokens(current_total),
@@ -626,12 +688,7 @@ def dashboard(now=None, days=7, history_days=28):
                 "compact": compact_tokens(previous_total),
             },
         ],
-        "trend": {
-            "direction": direction,
-            "change_percent": change_percent,
-            "value": trend_value,
-            "detail": f"vs prior {days} days",
-        },
+        "trend": trend,
         "insights": [
             {
                 "id": "peak",

@@ -146,10 +146,26 @@ def test_current_day_totals_returns_today_and_yesterday(tmp_path, monkeypatch):
     }
 
 
+def test_comparison_trend_handles_zero_baselines_without_fake_percentages():
+    assert token_usage._comparison_trend(500, 0, "vs yesterday") == {
+        "direction": "up",
+        "change_percent": None,
+        "value": "New",
+        "detail": "vs yesterday",
+    }
+    assert token_usage._comparison_trend(0, 0, "vs last week") == {
+        "direction": "flat",
+        "change_percent": 0,
+        "value": "0%",
+        "detail": "vs last week",
+    }
+
+
 def test_dashboard_builds_daily_mix_trend_and_insights(monkeypatch):
     rows = {
         "2026-06-10": {"Claude": 200},
         "2026-06-12": {"Codex": 300},
+        "2026-06-15": {"Codex": 250},
         "2026-06-16": {"Claude": 100},
         "2026-06-17": {"Codex": 200},
         "2026-06-19": {"Claude": 300},
@@ -181,12 +197,36 @@ def test_dashboard_builds_daily_mix_trend_and_insights(monkeypatch):
         "2026-06-22",
     ]
     assert dashboard["today"]["tokens"] == 500
+    assert dashboard["headline"] == [
+        {
+            "id": "day",
+            "label": "Today",
+            "tokens": 500,
+            "compact": "500",
+            "comparison_label": "Yesterday",
+            "comparison_tokens": 400,
+            "comparison_compact": "400",
+            "change": "+25%",
+            "tone": "up",
+        },
+        {
+            "id": "week",
+            "label": "This week",
+            "tokens": 500,
+            "compact": "500",
+            "comparison_label": "Last week thru Mon",
+            "comparison_tokens": 250,
+            "comparison_compact": "250",
+            "change": "+100%",
+            "tone": "up",
+        },
+    ]
     assert dashboard["total"] == {"tokens": 1500, "compact": "1,500"}
-    assert dashboard["comparison"][1]["tokens"] == 500
+    assert dashboard["comparison"][1]["tokens"] == 750
     assert dashboard["trend"] == {
         "direction": "up",
-        "change_percent": 200,
-        "value": "+200%",
+        "change_percent": 100,
+        "value": "+100%",
         "detail": "vs prior 7 days",
     }
     assert dashboard["clients"][:2] == [
@@ -255,6 +295,94 @@ def test_dashboard_builds_daily_mix_trend_and_insights(monkeypatch):
     ]
     assert len(dashboard["history"]) == 28
     assert len(dashboard["weekly"]) == 4
+
+
+def test_dashboard_fetches_previous_week_for_short_history(monkeypatch):
+    requested = {}
+
+    def daily_counts(start, end):
+        requested["start"] = start
+        requested["end"] = end
+        return {
+            "2026-06-15": {"Codex": 100},
+            "2026-06-22": {"Codex": 200},
+        }
+
+    monkeypatch.setattr(token_usage, "cached_daily_counts", daily_counts)
+
+    now = datetime(2026, 6, 22, 12, tzinfo=token_usage.LOCAL_TZ)
+    dashboard = token_usage.dashboard(now, days=2, history_days=2)
+
+    assert requested["start"] == datetime(
+        2026,
+        6,
+        15,
+        tzinfo=token_usage.LOCAL_TZ,
+    )
+    assert requested["end"] == now
+    assert dashboard["headline"][1]["tokens"] == 200
+    assert dashboard["headline"][1]["comparison_tokens"] == 100
+    assert dashboard["headline"][1]["comparison_label"] == "Last week thru Mon"
+
+
+def test_dashboard_week_comparison_uses_the_same_elapsed_weekdays(monkeypatch):
+    rows = {
+        "2026-06-29": {"Codex": 50},
+        "2026-06-30": {"Codex": 100},
+        "2026-07-01": {"Codex": 150},
+        "2026-07-02": {"Codex": 10_000},
+        "2026-07-03": {"Codex": 20_000},
+        "2026-07-06": {"Codex": 100},
+        "2026-07-07": {"Codex": 200},
+        "2026-07-08": {"Codex": 300},
+    }
+    monkeypatch.setattr(
+        token_usage,
+        "cached_daily_counts",
+        lambda _start, _end: rows,
+    )
+
+    dashboard = token_usage.dashboard(
+        datetime(2026, 7, 8, 12, tzinfo=token_usage.LOCAL_TZ)
+    )
+    week = dashboard["headline"][1]
+
+    assert week["tokens"] == 600
+    assert week["comparison_tokens"] == 300
+    assert week["comparison_label"] == "Last week thru Wed"
+    assert week["change"] == "+100%"
+
+
+def test_dashboard_sunday_compares_the_two_complete_weeks(monkeypatch):
+    rows = {
+        **{
+            f"2026-06-{day:02d}": {"Codex": 100}
+            for day in range(22, 29)
+        },
+        **{
+            f"2026-06-{day:02d}": {"Codex": 200}
+            for day in range(29, 31)
+        },
+        **{
+            f"2026-07-{day:02d}": {"Codex": 200}
+            for day in range(1, 6)
+        },
+    }
+    monkeypatch.setattr(
+        token_usage,
+        "cached_daily_counts",
+        lambda _start, _end: rows,
+    )
+
+    dashboard = token_usage.dashboard(
+        datetime(2026, 7, 5, 20, tzinfo=token_usage.LOCAL_TZ)
+    )
+    week = dashboard["headline"][1]
+
+    assert week["tokens"] == 1400
+    assert week["comparison_tokens"] == 700
+    assert week["comparison_label"] == "Last week"
+    assert week["change"] == "+100%"
 
 
 def test_token_report_groups_by_local_calendar_ranges(tmp_path, monkeypatch):

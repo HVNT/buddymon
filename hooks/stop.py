@@ -30,9 +30,9 @@ def main():
             if s["pokemon"]:
                 sessions = s.setdefault("xp_sessions", {})
                 sess = sessions.setdefault(session_id, {})
-                totals, anchor = transcript.collect_since(transcript_path, sess.get("last_uuid"))
-                if anchor:
-                    sess["last_uuid"] = anchor
+                last_uuid = sess.get("last_uuid")
+                totals, anchor = transcript.collect_since(transcript_path, last_uuid)
+                sess["last_uuid"] = anchor or last_uuid or ""
                 sess["updated"] = time.time()
                 state.prune_sessions(s)
 

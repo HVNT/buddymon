@@ -52,3 +52,31 @@ def test_stop_hook_tracks_raw_tokens(tmp_path, monkeypatch):
     loaded = state.load()
     assert loaded["trainer"]["total_tokens"] == 10_000
     assert loaded["xp_sessions"]["s1"]["last_uuid"] == "a"
+
+
+def test_stop_hook_persists_complete_session_for_empty_transcript(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(paths, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.setattr(paths, "SESSIONS_DIR", tmp_path / "sessions")
+    monkeypatch.setattr(paths, "JOURNAL_FILE", tmp_path / "journal.jsonl")
+
+    s = state.default_state()
+    engine.create_starter(s, "Pikachu")
+    state.save(s)
+    transcript = tmp_path / "empty-transcript.jsonl"
+    transcript.write_text("", encoding="utf-8")
+
+    stop = _load_stop_hook()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({
+        "session_id": "empty",
+        "transcript_path": str(transcript),
+    })))
+
+    stop.main()
+
+    session = state.load()["xp_sessions"]["empty"]
+    assert session["last_uuid"] == ""
+    assert isinstance(session["updated"], float)
