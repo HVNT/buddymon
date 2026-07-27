@@ -78,9 +78,19 @@ def test_native_app_keeps_first_launch_offline_and_uses_shared_scheduling():
         app_source,
         "private func presentStarterSetupIfNeeded()",
     )
+    refresh_status = swift_function_body(
+        app_source,
+        "private func refreshStatus() async",
+    )
     assert "presentStarterSetup" in first_setup
     assert "chooseStarter()" not in first_setup
     assert "installAssets" not in first_setup
+    assert "if awaitsInitialStatus" in refresh_status
+    assert "awaitsInitialStatus = false" in refresh_status
+    assert "_ = presentStarterSetupIfNeeded()" in refresh_status
+    assert refresh_status.index("hasConfirmedStatus = true") < refresh_status.index(
+        "_ = presentStarterSetupIfNeeded()"
+    )
     assert '["collect", "--scheduled"]' in app_source
     assert "installAssets" not in app_source
     assert "try runner." not in app_source

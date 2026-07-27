@@ -73,7 +73,7 @@ codesign \
 codesign --verify --deep --strict --verbose=2 "${APP}"
 
 mkdir -p "${OUTPUT_DIR}"
-ARCHIVE="${OUTPUT_DIR}/BuddyMon-${VERSION}-${ARCH}.zip"
+ARCHIVE="${OUTPUT_DIR}/BuddyMon-macOS-${ARCH}.zip"
 rm -f "${ARCHIVE}" "${ARCHIVE}.sha256"
 ditto -c -k --keepParent "${APP}" "${ARCHIVE}"
 xcrun notarytool submit \

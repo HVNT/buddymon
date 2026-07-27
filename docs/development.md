@@ -143,9 +143,10 @@ BUDDYMON_NOTARY_PROFILE="buddymon-notary" \
 scripts/package-macos-release.sh
 ```
 
-The output is `.build/release/BuddyMon-VERSION-ARCH.zip` plus its checksum.
-Build on each architecture you intend to publish; do not label one archive
-universal.
+The output is `.build/release/BuddyMon-macOS-ARCH.zip` plus its checksum. The
+stable asset name supports the README's `/releases/latest/download/` link while
+the app bundle keeps the canonical version in its metadata. Build on each
+architecture you intend to publish; do not label one archive universal.
 
 Before changing native UI, read [Brand Styles](brand.md) and use
 `BuddyMonBrand`. `BrandStylesPreview.swift` is the living reference for the

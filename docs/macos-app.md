@@ -8,6 +8,12 @@ need Homebrew, Terminal setup, Ghostty, or their own Python install.
 
 ## Open It
 
+Download `BuddyMon-macOS-arm64.zip` from the latest GitHub release, open it,
+move **BuddyMon.app** to Applications, and open the app. The published archive
+is self-contained, signed, and notarized.
+
+For a source build:
+
 ```bash
 scripts/build-macos-app.sh --friend --install --open
 ```
@@ -116,8 +122,8 @@ colored rarity letter immediately after the copy carries the rarity signal.
 
 ## First Run
 
-First run shows a menu-bar egg without opening a panel. Click it to open **First
-Signal** in the anchored panel:
+After BuddyMon gets one confirmed local status showing that no buddy exists,
+first run automatically opens **First Signal** in the anchored panel:
 
 1. Choose a starter.
 2. BuddyMon is ready immediately with built-in fallback art.

@@ -7,20 +7,23 @@ runs as a Claude Code plugin, a terminal game, or a local macOS app.
 
 ## Install
 
-### macOS app
+### macOS app — Apple silicon
 
-Build and install the self-contained app:
+[Download BuddyMon for Apple silicon](https://github.com/HVNT/buddymon/releases/latest/download/BuddyMon-macOS-arm64.zip).
 
-```bash
-scripts/build-macos-app.sh --friend --install --open
-```
+Open the zip, move **BuddyMon.app** to Applications, and open it. First Signal
+opens automatically; choose a starter and BuddyMon is ready. No Terminal,
+Python installation, account, or optional art download is required.
 
 The app includes its own Python runtime and lives in the menu bar without a
-Dock icon or standalone app window. Launching it starts the buddy without
-opening UI. On first run, click the egg to open **First Signal** and choose a
-starter inside the same compact anchored panel. Built-in fallback art works
-immediately. Optional art is downloaded only when you explicitly run
-`/buddymon:official` or `install-assets`.
+Dock icon or standalone app window. Existing trainers launch quietly; a new
+trainer gets the compact First Signal panel after BuddyMon confirms there is no
+existing buddy. Built-in fallback art works immediately. Optional art is
+downloaded only when you explicitly run `/buddymon:official` or
+`install-assets`.
+
+Source builds and release instructions live in
+[Development](docs/development.md).
 
 Click the menu-bar buddy for the compact everyday dropdown. A waiting wild
 Pokémon becomes its first action; otherwise the panel stays focused on your

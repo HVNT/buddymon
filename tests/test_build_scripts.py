@@ -401,6 +401,7 @@ def test_release_packager_signs_notarizes_and_checksums_the_exact_app():
         assert token in source
     assert 'PRODUCTION_BUNDLE_ID="com.hvnt.buddymon"' in source
     assert 'BUDDYMON_BUNDLE_ID="${PRODUCTION_BUNDLE_ID}"' in source
+    assert 'ARCHIVE="${OUTPUT_DIR}/BuddyMon-macOS-${ARCH}.zip"' in source
     assert source.count("scripts/validate-release-metadata.py") >= 2
     assert 'cd "${OUTPUT_DIR}"' in source
     assert (

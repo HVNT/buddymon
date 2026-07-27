@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPreviewSignalSource: DispatchSourceSignal?
     private var statusRefreshGeneration = 0
     private var hasConfirmedStatus = false
+    private var awaitsInitialStatus = true
     private static let openPanelNotification = Notification.Name(
         "com.hunt.buddymon.open-menu-panel"
     )
@@ -120,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hasConfirmedStatus = true
             menuBarBuddyController.apply(status: status)
             refreshRootPanelIfVisible()
+            if awaitsInitialStatus {
+                awaitsInitialStatus = false
+                _ = presentStarterSetupIfNeeded()
+            }
         } catch {
             guard generation == statusRefreshGeneration else { return }
             latestStatus = ["error": runner.diagnosticText(error: error)]

@@ -79,6 +79,9 @@ git tags and matching plugin metadata versions.
   standard 304-by-210 Field Guide panel. The legacy hidden titled flow window,
   generic expanded-content host, and its special keyboard plumbing were
   removed.
+- First launch now opens First Signal automatically after one confirmed
+  no-buddy status. Existing trainers still launch quietly, and the published
+  archive uses a stable Apple-silicon download name.
 - Starter setup now requires one confirmed, internally consistent no-buddy
   status before it appears. State-recovery errors and active-buddy payloads
   cannot be mistaken for a new game.
@@ -231,10 +234,10 @@ git tags and matching plugin metadata versions.
   every status refresh.
 - Made the menu-bar buddy the current native quality gate; further dropdown and
   expanded-surface work follows only after the status item is finalized.
-- Made BuddyMon a true menu-bar companion again: launching the app installs the
-  buddy without opening UI, clicking it opens the anchored panel, normal use
-  creates no Dock icon or standalone product window, and a later launch signals
-  the already-running copy to reopen its panel.
+- Made BuddyMon a true menu-bar companion again: returning trainers launch
+  without opening UI, new trainers get the anchored First Signal panel, normal
+  use creates no Dock icon or standalone product window, and a later launch
+  signals the already-running copy to reopen its panel.
 - Added quiet native-panel motion: a cursor blink, sprite bob, and encounter
   alert, all disabled by macOS Reduce Motion.
 - Replaced the first-run starter alert with a native First Signal screen and

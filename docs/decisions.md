@@ -252,15 +252,18 @@ accounts, uploads, or persistent export history.
 
 ## Onboarding invites without interrupting work
 
-**Decision:** Native first run starts with a quiet menu-bar egg. Clicking it
-opens First Signal as a 304-by-210 Field Guide card in the anchored panel: five
-compact starter choices and one simple first mission. Choosing, loading, and
-failure stay in that same compact panel. There is no hidden titled setup window,
-standalone window, automatic optional-art download, or scheduled prompt.
+**Decision:** After the first confirmed, internally consistent no-buddy status,
+native first run automatically opens First Signal as a 304-by-210 Field Guide
+card in the anchored panel: five compact starter choices and one simple first
+mission. Existing trainers still launch quietly. Choosing, loading, and failure
+stay in that same compact panel. There is no hidden titled setup window,
+standalone window, automatic optional-art download, or recurring prompt.
 
 **Why:** BuddyMon should feel like a little game from the first click while
-remaining a calm local companion. Delight belongs to the player's own work and
-collection, not attention-harvesting loops.
+remaining a calm local companion. A new trainer should not have to discover a
+tiny menu-bar egg before onboarding, while returning trainers should not be
+interrupted. Delight belongs to the player's own work and collection, not
+attention-harvesting loops.
 
 ## The current native experience is the compact dropdown
 
