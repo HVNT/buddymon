@@ -75,6 +75,9 @@ git tags and matching plugin metadata versions.
 
 ### Changed
 
+- Removed every AppleScript notification fallback. Finder-launched builds now
+  find `terminal-notifier` in standard Homebrew locations or skip the optional
+  banner, so BuddyMon can never open Script Editor from a notification.
 - First Signal, starter selection progress, and setup errors now stay inside the
   standard 304-by-210 Field Guide panel. The legacy hidden titled flow window,
   generic expanded-content host, and its special keyboard plumbing were

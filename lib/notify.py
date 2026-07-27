@@ -1,19 +1,21 @@
-"""macOS notifications for rare moments. Must never raise: callers are hooks.
+"""Best-effort macOS notifications for rare moments.
 
-Plain AppleScript `display notification` banners are owned by Script Editor, so
-clicking one opens Script Editor instead of the game (AppleScript can't attach a
-click action). When `terminal-notifier` is installed we post through it with
-`-execute`, so a click opens the buddy's menu — which jumps straight into a
-pending encounter. Fallback chain:
-
-  terminal-notifier + launcher   → Ghostty, then iTerm2, then Terminal.app
-  no terminal-notifier          → plain banner (shows, but isn't clickable)
+AppleScript notification banners belong to Script Editor and can open it when
+clicked, so BuddyMon never uses them. Finder-launched apps also have a minimal
+PATH, so probe the common Homebrew locations before quietly skipping delivery.
+Callers are hooks; notification failures must never escape.
 """
 import shutil
 import subprocess
 
 from . import menu_launcher
 from . import state as st
+
+_TERMINAL_NOTIFIER_CANDIDATES = (
+    "terminal-notifier",
+    "/opt/homebrew/bin/terminal-notifier",
+    "/usr/local/bin/terminal-notifier",
+)
 
 
 def open_menu_cmd(initial_screen=None):
@@ -49,42 +51,42 @@ def _notification_mode(state=None, notifications=None):
     return st.DEFAULT_PREFERENCES["notifications"]
 
 
+def _terminal_notifier():
+    for candidate in _TERMINAL_NOTIFIER_CANDIDATES:
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return None
+
+
+def _deliver(title, text, *, sound=False, execute=None):
+    notifier = _terminal_notifier()
+    if not notifier:
+        return False
+    args = [notifier, "-title", title, "-message", text]
+    if sound:
+        args += ["-sound", "Glass"]
+    if execute:
+        args += ["-execute", execute]
+    try:
+        result = subprocess.run(args, capture_output=True, timeout=3)
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def notify(title, text, state=None, notifications=None):
     mode = _notification_mode(state, notifications)
     if mode == "off":
         return
-    tn = shutil.which("terminal-notifier")
-    if tn:
-        try:
-            args = [tn, "-title", title, "-message", text]
-            if mode == "on":
-                args += ["-sound", "Glass"]
-            args += ["-execute", open_menu_cmd()]
-            subprocess.run(
-                args,
-                capture_output=True, timeout=3)
-            return
-        except Exception:
-            pass
-    script = f'display notification "{_esc(text)}" with title "{_esc(title)}"'
-    if mode == "on":
-        script += ' sound name "Glass"'
-    try:
-        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=3)
-    except Exception:
-        pass
+    _deliver(
+        title,
+        text,
+        sound=mode == "on",
+        execute=open_menu_cmd(),
+    )
 
 
 def banner(title, text, sound=False):
     """Best-effort one-way banner for explicit user actions."""
-    script = f'display notification "{_esc(text)}" with title "{_esc(title)}"'
-    if sound:
-        script += ' sound name "Glass"'
-    try:
-        subprocess.run(["osascript", "-e", script], capture_output=True, timeout=3)
-    except Exception:
-        pass
-
-
-def _esc(s):
-    return s.replace("\\", "\\\\").replace('"', '\\"')
+    _deliver(title, text, sound=sound)

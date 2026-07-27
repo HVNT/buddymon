@@ -236,10 +236,14 @@ sprite-pack fallback path keeps the feature available without network assets.
 
 **Decision:** Store only validated values for encounter mode, notifications,
 menu launcher, terminal menu replacement, terminal graphics, share reveal, and
-share banner behavior.
+share banner behavior. External banners use `terminal-notifier` when it is
+available in the shell or a standard Homebrew location. They are skipped
+otherwise; BuddyMon never falls back to AppleScript notifications.
 
 **Why:** Settings should accept an explicit validated value from every client
-and recover cleanly from old or invalid state.
+and recover cleanly from old or invalid state. AppleScript banners are owned by
+Script Editor and can launch it when clicked, which is never an acceptable
+BuddyMon side effect.
 
 ## Showcase is curated and local
 

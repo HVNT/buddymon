@@ -23,6 +23,10 @@ The app is intentionally visible only in the menu bar. Opening it again asks
 the already-running copy to show its panel. Add BuddyMon in **System Settings >
 General > Login Items** if you want it to reopen after login.
 
+BuddyMon never uses Script Editor for notifications. Optional external banners
+use `terminal-notifier` when it is already installed; without it, rare moments
+remain visible in BuddyMon instead of falling back to an AppleScript banner.
+
 If the installed app is missing, rebuild, install, and open a self-contained build:
 
 ```bash

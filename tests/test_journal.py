@@ -137,7 +137,7 @@ def test_notify_on_keeps_glass_sound(monkeypatch):
     assert calls[0][calls[0].index("-sound") + 1] == "Glass"
 
 
-def test_notify_silent_applescript_omits_sound(monkeypatch):
+def test_notify_skips_delivery_without_safe_notifier(monkeypatch):
     from lib import notify
 
     calls = []
@@ -146,22 +146,55 @@ def test_notify_silent_applescript_omits_sound(monkeypatch):
 
     notify.notify("buddymon", "rare catch", notifications="silent")
 
-    assert "display notification" in calls[0][2]
-    assert "sound name" not in calls[0][2]
+    assert calls == []
 
 
-def test_banner_uses_plain_notification_without_click_action(monkeypatch):
+def test_notify_finds_homebrew_notifier_outside_gui_path(monkeypatch):
     from lib import notify
 
     calls = []
+
+    def find_notifier(candidate):
+        if candidate == "/opt/homebrew/bin/terminal-notifier":
+            return candidate
+        return None
+
+    monkeypatch.setattr(notify.shutil, "which", find_notifier)
+    monkeypatch.setattr(notify.subprocess, "run", lambda args, **_kwargs: calls.append(args))
+
+    notify.notify("buddymon", "rare catch", notifications="silent")
+
+    assert calls[0][0] == "/opt/homebrew/bin/terminal-notifier"
+
+
+def test_banner_uses_safe_notification_without_click_action(monkeypatch):
+    from lib import notify
+
+    calls = []
+    monkeypatch.setattr(
+        notify.shutil,
+        "which",
+        lambda _name: "/usr/local/bin/terminal-notifier",
+    )
     monkeypatch.setattr(notify.subprocess, "run", lambda args, **_kwargs: calls.append(args))
 
     notify.banner("BuddyMon Showcase", "Saved BuddyMon Showcase.png")
 
-    assert calls[0][:2] == ["osascript", "-e"]
-    assert "display notification" in calls[0][2]
-    assert "BuddyMon Showcase" in calls[0][2]
-    assert "Saved BuddyMon Showcase.png" in calls[0][2]
+    assert calls[0][0] == "/usr/local/bin/terminal-notifier"
+    assert "-execute" not in calls[0]
+    assert calls[0][calls[0].index("-title") + 1] == "BuddyMon Showcase"
+    assert calls[0][calls[0].index("-message") + 1] == (
+        "Saved BuddyMon Showcase.png"
+    )
+
+
+def test_notification_delivery_never_invokes_applescript():
+    from lib import notify
+
+    source = Path(notify.__file__).read_text(encoding="utf-8")
+
+    assert "osascript" not in source
+    assert "display notification" not in source
 
 
 def test_open_menu_cmd_runs_stateful_launcher():
