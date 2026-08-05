@@ -15,6 +15,7 @@ APP_BUILDER = ROOT / "scripts" / "build-macos-app.sh"
 RUNTIME_BUILDER = ROOT / "scripts" / "build-python-runtime.sh"
 RELEASE_VALIDATOR = ROOT / "scripts" / "validate-release-metadata.py"
 RELEASE_PACKAGER = ROOT / "scripts" / "package-macos-release.sh"
+RELEASE_ARCHIVE_VERIFIER = ROOT / "scripts" / "verify-release-archive.py"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
@@ -397,6 +398,7 @@ def test_release_packager_signs_notarizes_and_checksums_the_exact_app():
         "xcrun stapler staple",
         "spctl --assess",
         "shasum -a 256",
+        "verify-release-archive.py",
     ]:
         assert token in source
     assert 'PRODUCTION_BUNDLE_ID="com.hvnt.buddymon"' in source
@@ -409,6 +411,21 @@ def test_release_packager_signs_notarizes_and_checksums_the_exact_app():
         in source
     )
     assert 'shasum -a 256 "${ARCHIVE}"' not in source
+    assert source.index("verify-release-archive.py") > source.index(
+        'shasum -a 256 "${ARCHIVE_NAME}"'
+    )
+
+
+def test_release_archive_verifier_is_tracked():
+    assert RELEASE_ARCHIVE_VERIFIER.is_file()
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    development = (ROOT / "docs" / "development.md").read_text(encoding="utf-8")
+    release_qa = (ROOT / "docs" / "release-qa.md").read_text(encoding="utf-8")
+
+    assert "docs/release-qa.md" in readme
+    assert "Public Release QA" in development
+    assert "Fresh-user acceptance" in release_qa
+    assert "Optional actions and expected prompts" in release_qa
 
 
 def test_ci_uses_immutable_actions_and_runs_the_release_gate():

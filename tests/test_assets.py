@@ -1,11 +1,15 @@
 """Optional art-pack lifecycle tests; all installers are local fakes."""
 
+import base64
+import hashlib
 import json
 import os
 import runpy
+import struct
 import subprocess
 import sys
 import threading
+import zlib
 from pathlib import Path
 
 import pytest
@@ -34,6 +38,39 @@ def expect_species(monkeypatch, kind, *names):
 
 def species_pack(name, version):
     return {name: {"version": version}}
+
+
+def png_chunk(kind, data):
+    checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
+    return (
+        struct.pack(">I", len(data))
+        + kind
+        + data
+        + struct.pack(">I", checksum)
+    )
+
+
+def trainer_png(width=64, height=64):
+    header = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    pixels = b"".join(b"\x00" + (b"\x00" * width) for _ in range(height))
+    return (
+        assets.PNG_SIGNATURE
+        + png_chunk(b"IHDR", header)
+        + png_chunk(b"IDAT", zlib.compress(pixels))
+        + png_chunk(b"IEND", b"")
+    )
+
+
+@pytest.mark.parametrize(
+    ("portrait", "message"),
+    [
+        (b"not-a-png", "not a PNG"),
+        (trainer_png(width=63), "must be 64x64"),
+    ],
+)
+def test_trainer_portrait_validation_rejects_invalid_image(portrait, message):
+    with pytest.raises(ValueError, match=message):
+        assets.validate_trainer_portrait(portrait)
 
 
 def test_install_missing_skips_existing_pack(tmp_path, monkeypatch):
@@ -101,6 +138,69 @@ def test_refresh_replaces_existing_pack(tmp_path, monkeypatch):
     assert json.loads(current.read_text(encoding="utf-8")) == species_pack(
         "Pikachu", "new"
     )
+
+
+def test_trainer_pack_promotes_and_exposes_valid_portrait(tmp_path, monkeypatch):
+    state_dir = use_temp_state(monkeypatch, tmp_path)
+    portrait = trainer_png()
+    encoded = base64.b64encode(portrait).decode("ascii")
+
+    def install_trainer(destination):
+        write_pack(
+            destination,
+            "trainer",
+            {"red": {"portrait_base64": encoded}},
+        )
+
+    monkeypatch.setattr(
+        assets,
+        "ASSET_INSTALLERS",
+        {"trainer": install_trainer},
+    )
+
+    result = assets.install(
+        operation=assets.INSTALL_MISSING,
+        kinds=["trainer"],
+    )
+
+    assert result["ok"] is True
+    assert result["results"][0]["status"] == "installed"
+    assert assets.trainer_portrait_base64() == encoded
+    assert state_dir.joinpath("packs", "trainer.json").is_file()
+
+
+def test_invalid_trainer_pack_is_rejected_without_breaking_fallback(
+    tmp_path, monkeypatch,
+):
+    state_dir = use_temp_state(monkeypatch, tmp_path)
+    write_pack(
+        state_dir / "packs",
+        "trainer",
+        {"red": {"portrait_base64": "not-base64"}},
+    )
+
+    def install_invalid_trainer(destination):
+        write_pack(
+            destination,
+            "trainer",
+            {"red": {"portrait_base64": "still-not-base64"}},
+        )
+
+    monkeypatch.setattr(
+        assets,
+        "ASSET_INSTALLERS",
+        {"trainer": install_invalid_trainer},
+    )
+
+    result = assets.install(
+        operation=assets.INSTALL_MISSING,
+        kinds=["trainer"],
+    )
+
+    assert result["ok"] is False
+    assert "trainer pack is invalid" in result["results"][0]["message"]
+    assert result["packs"]["trainer"]["installed"] is False
+    assert assets.trainer_portrait_base64() is None
 
 
 def test_failed_refresh_preserves_last_good_pack(tmp_path, monkeypatch):
@@ -396,6 +496,7 @@ def test_asset_cli_plain_failure_includes_actual_error():
         ("fetch_official.py", "gen2"),
         ("fetch_box.py", "box"),
         ("fetch_gen5.py", "gen5"),
+        ("fetch_trainer.py", "trainer"),
     ],
 )
 def test_direct_asset_tools_use_staged_lifecycle(monkeypatch, tool, kind):
@@ -412,6 +513,40 @@ def test_direct_asset_tools_use_staged_lifecycle(monkeypatch, tool, kind):
 
     assert exc.value.code == 7
     assert calls == [kind]
+
+
+def test_trainer_installer_writes_pinned_local_pack(tmp_path, monkeypatch):
+    from tools import fetch_trainer
+
+    portrait = trainer_png()
+    digest = hashlib.sha256(portrait).hexdigest()
+    monkeypatch.setattr(fetch_trainer, "TRAINER_SHA256", digest)
+    monkeypatch.setattr(fetch_trainer, "fetch", lambda _url: portrait)
+
+    fetch_trainer.main(pack_root=tmp_path)
+
+    pack = json.loads(
+        (tmp_path / "trainer.json").read_text(encoding="utf-8")
+    )
+    entry = pack["red"]
+    assert base64.b64decode(entry["portrait_base64"]) == portrait
+    assert entry["source_url"] == fetch_trainer.TRAINER_SOURCE
+    assert entry["source_commit"] == fetch_trainer.TRAINER_SOURCE_COMMIT
+    assert entry["sha256"] == digest
+
+
+def test_trainer_installer_rejects_unexpected_source_bytes(
+    tmp_path, monkeypatch,
+):
+    from tools import fetch_trainer
+
+    monkeypatch.setattr(fetch_trainer, "fetch", lambda _url: trainer_png())
+    monkeypatch.setattr(fetch_trainer, "TRAINER_SHA256", "0" * 64)
+
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        fetch_trainer.main(pack_root=tmp_path)
+
+    assert not (tmp_path / "trainer.json").exists()
 
 
 def test_box_installer_fails_on_required_regular_species(tmp_path, monkeypatch):

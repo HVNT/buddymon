@@ -9,6 +9,12 @@ git tags and matching plugin metadata versions.
 
 ### Added
 
+- Added Trainer Red as an optional local art pack. Explicit asset installation
+  fetches one pinned, SHA-256-verified FireRed/LeafGreen portrait into BuddyMon's
+  XDG state directory; it is never bundled, and the original two-tone
+  silhouette remains the safe fallback.
+- Added final-download verification for signed release ZIPs and a clean-user
+  public-release QA checklist covering First Signal and optional macOS prompts.
 - Added macOS pull-request CI, one canonical release version, immutable
   per-architecture Python/Pillow runtime locks, release metadata validation,
   and an explicit Developer ID signing/notarization/checksum packager.
@@ -75,6 +81,8 @@ git tags and matching plugin metadata versions.
 
 ### Changed
 
+- Clarified client support: Claude Code hooks award progress automatically,
+  Codex CLI and Auggie use collection, and Gemini CLI is Token Usage only.
 - Removed every AppleScript notification fallback. Finder-launched builds now
   find `terminal-notifier` in standard Homebrew locations or skip the optional
   banner, so BuddyMon can never open Script Editor from a notification.

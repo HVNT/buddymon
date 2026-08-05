@@ -192,8 +192,10 @@ trailing column. The status rail occupies the
 space between those facts and the bottom-anchored badge rail; flexible space is
 used only as a compatibility fallback for older payloads that do not provide
 trainer stats, and never appears below the badge rail.
-The trainer portrait is BuddyMon's original two-tone silhouette, drawn directly
-with shared `BuddyMonBrand` ink colors. No external trainer portrait is bundled.
+The Trainer Card may show the explicitly installed local Trainer Red portrait.
+Without that pack, it draws BuddyMon's original two-tone silhouette directly
+with shared `BuddyMonBrand` ink colors. No external trainer portrait is bundled;
+both states keep the same portrait geometry and surrounding card treatment.
 Inside the buddy identity column, the level and XP percentage share the same
 right edge. The XP bar flexes to fill all space between its label and value.
 The active-buddy group is a full-width raised row inside the Field Guide frame.

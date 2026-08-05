@@ -14,6 +14,7 @@ They include:
 - Gen 2 menu icons from `pret/pokecrystal`
 - box icons/palettes from PokéSprite-derived sources
 - Gen 5 animated sprites from PokeAPI sprite mirrors
+- Trainer Red's 64-by-64 front portrait from a pinned `pret/pokefirered` commit
 
 When `XDG_STATE_HOME` is set, BuddyMon uses
 `$XDG_STATE_HOME/buddymon/packs/` instead. Packs are local-only; do not commit
@@ -33,17 +34,23 @@ Refresh every installed pack with:
 python3 buddymon.py install-assets --refresh
 ```
 
+Install or refresh only the Trainer Red portrait with:
+
+```
+python3 buddymon.py install-assets --only=trainer
+python3 buddymon.py install-assets --refresh --only=trainer
+```
+
 `--force` remains an alias for `--refresh` for older scripts.
 
 Both commands use the network. A failed install or refresh keeps the last
 working copy of each pack.
 
-Runtime uses local packs when present and otherwise falls back to the original
-sprites in `lib/sprites.py`.
-
-The native Trainer Card draws BuddyMon's original two-tone trainer silhouette
-with `BuddyMonBrand` colors. It does not bundle or fetch an external trainer
-portrait.
+Runtime uses local Pokémon packs when present and otherwise falls back to the
+original sprites in `lib/sprites.py`. The native Trainer Card uses the local
+Trainer Red pack when present and otherwise draws BuddyMon's original two-tone
+silhouette with `BuddyMonBrand` colors. No external trainer portrait is bundled,
+and the app never fetches it without an explicit asset command.
 
 The native status item prioritizes compacted, species-specific Gen 5 frames so
 its buddy matches the Pokémon shown in the native panel. If that pack is not

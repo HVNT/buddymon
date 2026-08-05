@@ -44,16 +44,18 @@ SwiftBar, tmux, and the macOS app are presentation shells over the same state.
 **Why:** One rules engine prevents clients from drifting. The native app uses
 stable JSON views and actions instead of parsing human-readable output.
 
-## Token Usage reports only supported local AI tools
+## Client support is explicit and intentionally uneven
 
-**Decision:** Token Usage recognizes Claude Code, Codex CLI, Auggie, and Gemini
-CLI only. Unknown log shapes are ignored rather than grouped under a vague
-catch-all source, and model names remain hidden until their local record format
-provides them reliably.
+**Decision:** Claude Code is the only automatic plugin source for progress.
+Codex CLI and Auggie earn progress through the explicit `collect` path, which
+the app and optional collector service can run. Token Usage recognizes those
+three sources plus Gemini CLI; Gemini is report-only and never earns progress.
+Unknown log shapes are ignored rather than grouped under a vague catch-all, and
+model names remain hidden until their local record format provides them reliably.
 
-**Why:** A dashboard should describe what BuddyMon actually supports. Guessing
-at providers or models makes the product feel more capable than its local data
-can prove.
+**Why:** Each client gets only the integration the local data can prove.
+Pretending every source has a Claude-style hook or awards progress would make
+BuddyMon feel more capable than it is.
 
 ## Python owns native-menu policy
 
@@ -117,6 +119,16 @@ and checksummed by the release packager.
 **Why:** A release tag should identify source and rebuildable inputs rather than
 whatever a mutable `latest` endpoint or package range returned that day.
 
+## Public releases prove the downloaded artifact
+
+**Decision:** The release packager verifies its final ZIP and checksum after
+signing and notarization. Publication also requires a recorded clean-user
+acceptance pass for first run and every permission-adjacent optional action.
+
+**Why:** Source checks and a signed bundle do not prove that the exact download
+opens cleanly on a new Mac or reveal the system dialogs users see. The final
+archive and a disposable account are the release boundary users actually meet.
+
 ## The native app has one process per user
 
 **Decision:** Allow only one running BuddyMon native app across development,
@@ -178,8 +190,10 @@ operation preserves the last working pack.
 **Why:** Normal play should remain local-only and dependable. Optional art packs
 should not be downloaded silently.
 
-The Trainer Card uses an original two-tone silhouette drawn in code with
-`BuddyMonBrand` colors, so no external trainer portrait is bundled or fetched.
+The Trainer Card always includes an original two-tone silhouette drawn in code
+with `BuddyMonBrand` colors. A confirmed optional-art command may install one
+pinned, checksum-verified Trainer Red portrait in local XDG state. No external
+trainer portrait is bundled, and normal app use remains network-free.
 
 ## Scheduled collection has one gate
 

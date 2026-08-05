@@ -148,6 +148,10 @@ stable asset name supports the README's `/releases/latest/download/` link while
 the app bundle keeps the canonical version in its metadata. Build on each
 architecture you intend to publish; do not label one archive universal.
 
+The packager verifies the final ZIP after signing and notarization. Complete
+the documented [Public Release QA](release-qa.md) in a clean macOS user before
+uploading either artifact.
+
 Before changing native UI, read [Brand Styles](brand.md) and use
 `BuddyMonBrand`. `BrandStylesPreview.swift` is the living reference for the
 shared system. `MenuPanelStateHarnessView.swift` renders the shipping compact
@@ -184,6 +188,10 @@ That path uses one locked five-minute gate, so overlapping clients do not award
 the same activity twice. `python3 buddymon.py collect` is an immediate manual
 run and bypasses the schedule gate.
 
+The collection path reads Codex CLI and Auggie logs. Claude Code progress comes
+from the plugin's hooks; Gemini CLI is Token Usage only and never awards
+progress.
+
 Manage the per-user service with:
 
 ```bash
@@ -209,6 +217,7 @@ python3 buddymon.py install-assets --refresh
 uv run --with pillow --no-project python3 tools/fetch_official.py
 uv run --with pillow --no-project python3 tools/fetch_box.py
 uv run --with pillow --no-project python3 tools/fetch_gen5.py
+python3 tools/fetch_trainer.py
 ```
 
 See [Assets](assets.md) for sources, validation, and fallback behavior.

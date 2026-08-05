@@ -102,8 +102,10 @@ Run one immediate collection:
 python3 buddymon.py collect
 ```
 
-Then check that a starter exists, Claude hooks came from the plugin, and the
-BuddyMon state directory is writable. State lives under
+Then check that a starter exists and the BuddyMon state directory is writable.
+For Claude Code, confirm its hooks came from the plugin. For Codex CLI or
+Auggie, the first `collect` only anchors existing logs; create new activity, then
+run it again. Gemini CLI contributes to Token Usage only, not XP. State lives under
 `$XDG_STATE_HOME/buddymon`, defaulting to
 `~/.local/state/buddymon`.
 

@@ -68,7 +68,10 @@ def choose(args):
                    {"name": buddy["name"]})
     grid, palette = sprites.sprite_for(buddy["name"], buddy["type"])
     art = "\n".join(pixels.render(grid, palette))
-    return f"{art}\n\n{buddy['emoji']} {buddy['name']} chose YOU! Tokens from every Claude Code turn feed your buddy."
+    return (
+        f"{art}\n\n{buddy['emoji']} {buddy['name']} chose YOU! Claude Code is "
+        "automatic; collect adds Codex CLI and Auggie activity."
+    )
 
 
 def switch(args):

@@ -93,6 +93,9 @@ ARCHIVE_NAME="$(basename "${ARCHIVE}")"
   cd "${OUTPUT_DIR}"
   shasum -a 256 "${ARCHIVE_NAME}" > "${ARCHIVE_NAME}.sha256"
 )
+python3 "${ROOT}/scripts/verify-release-archive.py" \
+  "${ARCHIVE}" \
+  "${ARCHIVE}.sha256"
 
 echo "release archive: ${ARCHIVE}"
 echo "release checksum: ${ARCHIVE}.sha256"

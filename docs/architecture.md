@@ -67,10 +67,12 @@ still rejecting malformed values that are present.
 
 ## Data Flow
 
-Claude Code hooks collect new transcript usage, apply game rules, and save the
-result. Codex and Auggie activity can be collected from the CLI, app, or
-optional service. All state-changing paths hold the shared lock across a fresh
-load, mutation, and save.
+Claude Code is the only plugin integration: its hooks collect new transcript
+usage, apply game rules, and save the result automatically. Activity from Codex
+CLI and Auggie is collected through `collect`, run manually or by the app and
+optional service. Gemini CLI contributes to the read-only Token Usage report
+only; it never awards progress. All state-changing paths hold the shared lock
+across a fresh load, mutation, and save.
 
 Interactive screens release the lock while waiting for input. After a keypress
 they resolve the selected Pokémon against current state again, avoiding stale
@@ -146,9 +148,10 @@ Optional packs are installed or refreshed only after an explicit user action.
 Downloads are staged and validated before replacement; a failure leaves the
 last working pack in place.
 
-The native Trainer Card draws BuddyMon's original two-tone trainer silhouette
-with `BuddyMonBrand` colors. It neither bundles nor fetches an external trainer
-portrait.
+The native Trainer Card reads an optional Trainer Red portrait from the local
+trainer pack. Without it, the card draws BuddyMon's original two-tone silhouette
+with `BuddyMonBrand` colors. The portrait is never bundled and is fetched only
+by an explicit asset command.
 
 Showcase selection stores only Pokémon ids in normal state. PNG export reads
 those ids and writes a local file on demand without storing export history.

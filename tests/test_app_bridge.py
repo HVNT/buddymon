@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import (
     app_bridge,
+    assets,
     engine,
     packs,
     paths,
@@ -42,7 +43,12 @@ def test_app_status_reports_missing_buddy_and_pack_paths(tmp_path, monkeypatch):
     assert status["setup"]["needs_assets"] is True
     assert status["setup"]["assets_optional"] is True
     assert status["setup"]["ready"] is False
-    assert status["setup"]["asset_kinds"] == ["gen2", "box", "gen5"]
+    assert status["setup"]["asset_kinds"] == [
+        "gen2",
+        "box",
+        "gen5",
+        "trainer",
+    ]
     assert status["sources"]["native_desktop_apps"]["kind"] == "unsupported_v1"
 
 
@@ -258,6 +264,11 @@ def test_compact_menu_harness_covers_all_review_states_without_expansion():
 
 def test_app_view_trainer_has_compact_card_contract(tmp_path, monkeypatch):
     use_temp_state(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        assets,
+        "trainer_portrait_base64",
+        lambda: "local-trainer-red",
+    )
     s = state.default_state()
     engine.create_starter(s, "Charmander")
     s["trainer"]["total_tokens"] = 123456
@@ -269,6 +280,7 @@ def test_app_view_trainer_has_compact_card_contract(tmp_path, monkeypatch):
     assert view["kind"] == "app_view"
     assert view["screen"] == "trainer"
     assert view["title"] == "Trainer Card"
+    assert view["portrait_base64"] == "local-trainer-red"
     assert [fact["id"] for fact in view["facts"]] == [
         "name",
         "tokens",

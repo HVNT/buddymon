@@ -1,7 +1,9 @@
 # BuddyMon
 
-BuddyMon turns local AI coding activity into a small Pokémon-style companion. It
-runs as a Claude Code plugin, a terminal game, or a local macOS app.
+BuddyMon turns local AI coding activity into a small Pokémon-style companion.
+Its Claude Code plugin automatically turns Claude activity into progress; the
+terminal game and local macOS app can also collect Codex CLI and Auggie activity.
+Gemini CLI appears in Token Usage only and does not earn game progress.
 
 ![BuddyMon battle screen](docs/screenshots/buddymon-main.png)
 
@@ -30,7 +32,9 @@ Pokémon becomes its first action; otherwise the panel stays focused on your
 buddy, progress, latest catch, compact Token Usage, native Trainer Card, six
 quick links, Refresh, and Quit. There is no separate expanded native dashboard.
 The Trainer Card includes live mode, streak, ball inventory, shiny count, and
-collection-backed achievement badges without inventing a trainer level.
+collection-backed achievement badges without inventing a trainer level. It uses
+the built-in trainer silhouette unless you explicitly install the optional
+local Trainer Red portrait.
 Recent catches show their small pixel sprite plus one colored rarity letter.
 Waiting encounters, their minimal move buttons, and results stay inside the
 same dropdown; arrow keys move and Return or Space selects. Tokens, Today, and
@@ -57,10 +61,11 @@ Local builds are development artifacts, so macOS may ask you to approve them.
 Published app archives are built through the signed and notarized release path
 documented in [Development](docs/development.md).
 
-### Claude Code plugin
+### Claude Code plugin — automatic Claude progress
 
-The plugin invokes `python3`; make sure Python 3 is available on your `PATH`
-before launching Claude Code.
+This is BuddyMon's only client-specific plugin. It invokes `python3`; make sure
+Python 3 is available on your `PATH` before launching Claude Code. Its hooks
+automatically collect new Claude Code transcript activity.
 
 ```bash
 git clone https://github.com/HVNT/buddymon.git ~/buddymon
@@ -80,7 +85,7 @@ Other starters: `charmander`, `squirtle`, `pikachu`, and `eevee`.
 
 ## What It Does
 
-- Converts local token use into XP and levels.
+- Converts supported local coding activity into XP and levels.
 - Starts wild encounters while you work.
 - Supports Quick, Safari, and Battle encounter modes.
 - Tracks a party, storage box, Pokédex, journal, and token totals.
@@ -95,16 +100,20 @@ Other starters: `charmander`, `squirtle`, `pikachu`, and `eevee`.
 
 ## Works With
 
-| Client | Progress | Token report |
+| Client | What it contributes | How it reaches BuddyMon |
 | --- | --- | --- |
-| Claude Code | Yes | Yes |
-| Codex CLI | Yes | Yes |
-| Auggie | Yes | Yes |
-| Gemini CLI | No | Yes |
+| Claude Code | Progress and Token Usage | Plugin hooks collect activity automatically. |
+| Codex CLI | Progress and Token Usage | Run `collect`; the macOS app and optional collector service use it too. |
+| Auggie | Progress and Token Usage | Run `collect`; the macOS app and optional collector service use it too. |
+| Gemini CLI | Token Usage only | Read-only reporting; it never earns game progress. |
 
 Token Usage is intentionally limited to those four local tools. It does not
 guess at unknown sources or show model names unless their local records expose
 them reliably.
+
+The first `collect` run only anchors existing Codex CLI and Auggie logs so old
+history does not create a surprise level-up. New activity is counted on later
+runs.
 
 ## Privacy
 
@@ -128,6 +137,7 @@ Persistent background collection is opt-in through `collector install`.
 | `/buddymon:mode <quick\|safari\|battle>` | Change encounter mode |
 | `/buddymon:official` | Install optional art |
 | `python3 buddymon.py menu` | Open the terminal menu |
+| `python3 buddymon.py collect` | Collect new Codex CLI and Auggie activity |
 | `python3 buddymon.py tokens` | Show local token totals |
 | `python3 buddymon.py install-assets [--refresh]` | Install optional art |
 | `python3 buddymon.py collector install\|status\|uninstall` | Manage background collection |
@@ -149,6 +159,7 @@ State, journal history, and optional asset packs live under
 - [Assets](docs/assets.md)
 - [Architecture](docs/architecture.md)
 - [Development](docs/development.md)
+- [Public release QA](docs/release-qa.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Decisions](docs/decisions.md)
 - [Changelog](CHANGELOG.md)

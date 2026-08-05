@@ -2,9 +2,10 @@
 description: Download the nicer local sprite packs (one-time, network)
 ---
 
-Tell the user this downloads Nintendo sprite assets from GitHub into BuddyMon's
-local XDG state directory (normally `~/.local/state/buddymon/packs/`) and never
-commits them. If they confirm, run:
+Tell the user this downloads Nintendo sprite assets, including the optional
+Trainer Red portrait, from GitHub into BuddyMon's local XDG state directory
+(normally `~/.local/state/buddymon/packs/`) and never commits them. If they
+confirm, run:
 
 `python3 "${CLAUDE_PLUGIN_ROOT}/buddymon.py" install-assets`
 

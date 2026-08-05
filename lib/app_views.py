@@ -2,7 +2,7 @@
 
 import time
 
-from . import state, token_usage, trainer_card
+from . import assets, state, token_usage, trainer_card
 from .app_payloads import _build_encounter_view_payload
 
 
@@ -68,7 +68,10 @@ def _build_trainer_view(s):
     return _build_view_payload(
         "trainer",
         "Trainer Card",
-        **trainer_card.build(s),
+        **trainer_card.build(
+            s,
+            portrait_base64=assets.trainer_portrait_base64(),
+        ),
     )
 
 

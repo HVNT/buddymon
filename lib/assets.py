@@ -1,5 +1,7 @@
 """Lifecycle management for optional local art packs."""
 
+import base64
+import binascii
 import contextlib
 import fcntl
 import importlib
@@ -7,7 +9,9 @@ import io
 import json
 import os
 import shutil
+import struct
 import tempfile
+import zlib
 from pathlib import Path
 
 from . import paths, species
@@ -16,17 +20,22 @@ from . import paths, species
 INSTALL_MISSING = "install_missing"
 REFRESH = "refresh"
 OPERATIONS = (INSTALL_MISSING, REFRESH)
-PACK_ORDER = ("gen2", "box", "gen5")
+PACK_ORDER = ("gen2", "box", "gen5", "trainer")
 ASSET_INSTALLERS = {
     "gen2": "tools.fetch_official",
     "box": "tools.fetch_box",
     "gen5": "tools.fetch_gen5",
+    "trainer": "tools.fetch_trainer",
 }
 PACK_SPECIES = {
     "gen2": species.GEN2_SPECIES,
     "box": species.ALL_SPECIES,
     "gen5": species.ALL_SPECIES,
+    "trainer": ("red",),
 }
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+TRAINER_PORTRAIT_SIZE = (64, 64)
+MAX_TRAINER_PORTRAIT_BYTES = 1_000_000
 
 
 class AssetRecoveryError(RuntimeError):
@@ -69,14 +78,96 @@ def pack_installed(kind, root=None):
     return any(_path_has_pack(kind, path) for path in _pack_candidates(kind, root))
 
 
+def pack_ready(kind, root=None):
+    """Return whether a present pack is valid enough for normal use."""
+    if not pack_installed(kind, root):
+        return False
+    if kind == "trainer":
+        return trainer_portrait_base64(root) is not None
+    return True
+
+
 def pack_status():
     return {
         kind: {
-            "installed": pack_installed(kind),
+            "installed": pack_ready(kind),
             "path": str(pack_path(kind)),
         }
         for kind in PACK_ORDER
     }
+
+
+def validate_trainer_portrait(png):
+    """Validate the small PNG accepted by the native Trainer Card."""
+    if not isinstance(png, bytes):
+        raise ValueError("trainer portrait must be PNG bytes")
+    if len(png) > MAX_TRAINER_PORTRAIT_BYTES:
+        raise ValueError("trainer portrait is too large")
+    if not png.startswith(PNG_SIGNATURE):
+        raise ValueError("trainer portrait is not a PNG")
+
+    offset = len(PNG_SIGNATURE)
+    width = height = None
+    saw_idat = False
+    saw_iend = False
+    while offset < len(png):
+        if offset + 12 > len(png):
+            raise ValueError("trainer portrait has a truncated PNG chunk")
+        length = struct.unpack(">I", png[offset:offset + 4])[0]
+        chunk_end = offset + 12 + length
+        if chunk_end > len(png):
+            raise ValueError("trainer portrait has a truncated PNG chunk")
+
+        chunk_type = png[offset + 4:offset + 8]
+        chunk_data = png[offset + 8:offset + 8 + length]
+        expected_crc = struct.unpack(">I", png[offset + 8 + length:chunk_end])[0]
+        actual_crc = zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF
+        if actual_crc != expected_crc:
+            raise ValueError("trainer portrait has an invalid PNG checksum")
+
+        if chunk_type == b"IHDR":
+            if offset != len(PNG_SIGNATURE) or length != 13:
+                raise ValueError("trainer portrait has an invalid PNG header")
+            width, height = struct.unpack(">II", chunk_data[:8])
+        elif chunk_type == b"IDAT":
+            saw_idat = True
+        elif chunk_type == b"IEND":
+            if length != 0 or chunk_end != len(png):
+                raise ValueError("trainer portrait has an invalid PNG ending")
+            saw_iend = True
+            break
+        offset = chunk_end
+
+    if (width, height) != TRAINER_PORTRAIT_SIZE:
+        expected = "x".join(str(value) for value in TRAINER_PORTRAIT_SIZE)
+        actual = f"{width}x{height}" if width is not None else "unknown"
+        raise ValueError(
+            f"trainer portrait must be {expected} pixels, got {actual}"
+        )
+    if not saw_idat or not saw_iend:
+        raise ValueError("trainer portrait is missing required PNG data")
+    return png
+
+
+def trainer_portrait_base64(root=None):
+    """Return the installed Trainer Red portrait, or None for safe fallback."""
+    try:
+        pack = _load_json_object(pack_path("trainer", root))
+        entry = pack["red"]
+        encoded = entry["portrait_base64"]
+        if not isinstance(encoded, str) or not encoded:
+            return None
+        png = base64.b64decode(encoded, validate=True)
+        validate_trainer_portrait(png)
+    except (
+        OSError,
+        KeyError,
+        TypeError,
+        ValueError,
+        binascii.Error,
+    ):
+        return None
+    return encoded
 
 
 def _run_installer(installer, destination):
@@ -126,6 +217,15 @@ def _validate_entries(kind, entries, expected):
         raise ValueError(
             f"{kind} pack has {len(invalid)} invalid entries ({sample})"
         )
+    if kind == "trainer":
+        entry = entries["red"]
+        try:
+            encoded = entry["portrait_base64"]
+            if not isinstance(encoded, str) or not encoded:
+                raise ValueError("trainer portrait is missing")
+            validate_trainer_portrait(base64.b64decode(encoded, validate=True))
+        except (KeyError, TypeError, ValueError, binascii.Error) as exc:
+            raise ValueError(f"trainer pack is invalid: {exc}") from exc
 
 
 def _validated_candidate(kind, staging_root):
@@ -211,7 +311,7 @@ def install(operation=INSTALL_MISSING, kinds=None):
     results = []
 
     for kind in selected:
-        if operation == INSTALL_MISSING and pack_installed(kind, live_root):
+        if operation == INSTALL_MISSING and pack_ready(kind, live_root):
             results.append({
                 "kind": kind,
                 "status": "skipped",
@@ -230,7 +330,7 @@ def install(operation=INSTALL_MISSING, kinds=None):
             with _promotion_lock(kind, live_root):
                 if (
                     operation == INSTALL_MISSING
-                    and pack_installed(kind, live_root)
+                    and pack_ready(kind, live_root)
                 ):
                     results.append({
                         "kind": kind,

@@ -90,7 +90,8 @@ chevron shares the title row, matching Trainer, Battle, and Battle Result. Back
 returns to the buddy dropdown; it never opens a standalone dashboard.
 
 Trainer opens a 3:2 Field Guide card in the same panel. It shows NAME, TOKENS,
-POKÉDEX, and CAUGHT beside BuddyMon's original two-tone trainer silhouette. A
+POKÉDEX, and CAUGHT beside an explicitly installed local Trainer Red portrait,
+or BuddyMon's original two-tone trainer silhouette when that pack is absent. A
 compact status rail adds the current encounter mode, activity streak, available
 balls, and owned shiny count without changing the card size. Battle mode shows
 unlimited balls because Battle throws do not consume Safari inventory. There is
@@ -189,6 +190,9 @@ The app calls the same Python boundaries as every other BuddyMon client:
 Python owns game rules, progression, state, and encounter logic. Swift owns the
 status item, anchored panel, native rendering, and safe routing. Collection, setup,
 sharing, and game commands run asynchronously so they do not freeze the panel.
+Claude Code progress comes from its plugin hooks. The app's collection path reads
+Codex CLI and Auggie activity; Gemini CLI stays in the read-only Token Usage
+report.
 
 ## Where Data Lives
 
