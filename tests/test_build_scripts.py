@@ -526,6 +526,7 @@ def test_ci_uses_immutable_actions_and_runs_the_release_gate():
     assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in source
     assert 'python-version: "3.12"' in source
     assert 'python-version: "3.12.13"' not in source
+    assert "cache-dependency-path: requirements-test.txt" in source
     assert "Pillow==12.3.0" in requirements
     assert "python3 -m pytest tests/ -q" in source
     assert "scripts/validate-release-metadata.py" in source
