@@ -122,6 +122,48 @@ def run_script(
     )
 
 
+def run_release_validator_fixture(
+    tmp_path: Path,
+    changelog_date: str,
+    *,
+    require_dated_changelog: bool,
+) -> subprocess.CompletedProcess:
+    fixture_root = tmp_path / "release-metadata"
+    scripts = fixture_root / "scripts"
+    plugin = fixture_root / ".claude-plugin"
+    scripts.mkdir(parents=True)
+    plugin.mkdir()
+
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    files = (
+        (RELEASE_VALIDATOR, scripts / RELEASE_VALIDATOR.name),
+        (ROOT / "VERSION", fixture_root / "VERSION"),
+        (ROOT / ".claude-plugin" / "plugin.json", plugin / "plugin.json"),
+        (
+            ROOT / ".claude-plugin" / "marketplace.json",
+            plugin / "marketplace.json",
+        ),
+        (ROOT / "scripts" / "runtime-lock.json", scripts / "runtime-lock.json"),
+    )
+    for source, destination in files:
+        destination.write_bytes(source.read_bytes())
+    (fixture_root / "CHANGELOG.md").write_text(
+        f"# Changelog\n\n## [{version}] - {changelog_date}\n",
+        encoding="utf-8",
+    )
+
+    command = [sys.executable, str(scripts / RELEASE_VALIDATOR.name)]
+    if require_dated_changelog:
+        command.append("--require-dated-changelog")
+    return subprocess.run(
+        command,
+        cwd=fixture_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 @pytest.mark.parametrize(
     ("script", "option", "message"),
     [
@@ -355,6 +397,7 @@ def test_app_builder_requires_explicit_escape_hatch_for_external_runtime(tmp_pat
 
 
 def test_release_metadata_is_consistent():
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     result = subprocess.run(
         [sys.executable, str(RELEASE_VALIDATOR)],
         cwd=ROOT,
@@ -364,7 +407,45 @@ def test_release_metadata_is_consistent():
     )
 
     assert result.returncode == 0, result.stderr
-    assert "release metadata ok: 0.2.0" in result.stdout
+    assert f"release metadata ok: {version}" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("changelog_date", "require_dated_changelog", "expected_success"),
+    [
+        ("unreleased", False, True),
+        ("2026-08-07", False, True),
+        ("unreleased", True, False),
+        ("2026-08-07", True, True),
+    ],
+)
+def test_release_metadata_changelog_date_policy_is_state_independent(
+    tmp_path,
+    changelog_date,
+    require_dated_changelog,
+    expected_success,
+):
+    result = run_release_validator_fixture(
+        tmp_path,
+        changelog_date,
+        require_dated_changelog=require_dated_changelog,
+    )
+
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    if expected_success:
+        assert result.returncode == 0, result.stderr
+        assert f"release metadata ok: {version}" in result.stdout
+    else:
+        assert result.returncode != 0
+        assert f"requires a dated {version} release heading" in result.stderr
+
+
+def test_release_packager_preflights_dated_changelog_before_building():
+    source = RELEASE_PACKAGER.read_text(encoding="utf-8")
+    assert source.count("--require-dated-changelog") == 3
+    assert source.index("scripts/validate-release-metadata.py") < source.index(
+        "scripts/build-python-runtime.sh"
+    )
 
 
 def test_release_packager_requires_explicit_signing_configuration():

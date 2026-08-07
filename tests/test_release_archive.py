@@ -80,3 +80,4 @@ def test_release_archive_verifier_checks_downloaded_bundle_integrity():
         '"app-status"',
     ):
         assert token in source
+    assert '"--require-dated-changelog"' in source

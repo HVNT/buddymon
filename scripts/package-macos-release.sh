@@ -32,6 +32,9 @@ for command in codesign ditto file shasum spctl xcrun; do
   fi
 done
 
+python3 "${ROOT}/scripts/validate-release-metadata.py" \
+  --require-dated-changelog
+
 "${ROOT}/scripts/build-python-runtime.sh" \
   --runtime-dir "${RUNTIME}" \
   --force
@@ -43,6 +46,7 @@ BUDDYMON_BUILD_NUMBER="${PRODUCTION_BUILD_NUMBER}" \
   --no-bootstrap-runtime \
   --runtime-dir "${RUNTIME}"
 python3 "${ROOT}/scripts/validate-release-metadata.py" \
+  --require-dated-changelog \
   --app "${APP}" \
   --bundle-id "${PRODUCTION_BUNDLE_ID}" \
   --build-number "${PRODUCTION_BUILD_NUMBER}"
@@ -84,6 +88,7 @@ xcrun stapler staple "${APP}"
 xcrun stapler validate "${APP}"
 spctl --assess --type execute --verbose=2 "${APP}"
 python3 "${ROOT}/scripts/validate-release-metadata.py" \
+  --require-dated-changelog \
   --app "${APP}" \
   --bundle-id "${PRODUCTION_BUNDLE_ID}" \
   --build-number "${PRODUCTION_BUILD_NUMBER}"

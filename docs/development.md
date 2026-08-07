@@ -126,6 +126,11 @@ python3 scripts/validate-release-metadata.py
 python3 scripts/validate-release-metadata.py --app .build/macos/BuddyMon.app
 ```
 
+These development checks accept either a dated version heading or
+`## [VERSION] - unreleased`, so release-candidate work does not claim a false
+publication date. Public packaging and archive verification require a real
+date; the packager checks that before rebuilding the embedded runtime.
+
 ### Signed release archive
 
 The release packager rebuilds the embedded runtime from the lock, verifies it,

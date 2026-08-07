@@ -115,6 +115,7 @@ def verify_bundle(app, temporary_root):
         [
             sys.executable,
             ROOT / "scripts" / "validate-release-metadata.py",
+            "--require-dated-changelog",
             "--app",
             app,
         ]

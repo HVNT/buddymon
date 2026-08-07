@@ -18,7 +18,7 @@ def load_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def validate_version():
+def validate_version(*, require_dated_changelog=False):
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError("VERSION must contain a three-part numeric version")
@@ -40,11 +40,16 @@ def validate_version():
 
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     release_heading = re.compile(
-        rf"^## \[{re.escape(version)}\] - [0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$",
+        rf"^## \[{re.escape(version)}\] - (?P<date>[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}|unreleased)$",
         re.MULTILINE,
     )
-    if not release_heading.search(changelog):
-        raise ValueError(f"CHANGELOG.md is missing a dated {version} release heading")
+    match = release_heading.search(changelog)
+    if not match:
+        raise ValueError(
+            f"CHANGELOG.md is missing a dated or unreleased {version} heading"
+        )
+    if require_dated_changelog and match.group("date") == "unreleased":
+        raise ValueError(f"CHANGELOG.md requires a dated {version} release heading")
     return version
 
 
@@ -96,10 +101,15 @@ def validate_app(app_path, version, bundle_id, build_number):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", type=Path)
+    parser.add_argument(
+        "--require-dated-changelog",
+        action="store_true",
+        help="require the version heading to contain a publication date",
+    )
     parser.add_argument("--bundle-id", default=PRODUCTION_BUNDLE_ID)
     parser.add_argument("--build-number")
     args = parser.parse_args()
-    version = validate_version()
+    version = validate_version(require_dated_changelog=args.require_dated_changelog)
     validate_runtime_lock()
     if args.app:
         validate_app(

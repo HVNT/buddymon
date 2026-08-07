@@ -5,7 +5,7 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
-## [0.2.0] - 2026-07-26
+## [0.2.0] - unreleased
 
 ### Added
 
@@ -292,6 +292,9 @@ git tags and matching plugin metadata versions.
 
 ### Fixed
 
+- Kept prerelease metadata truthful by allowing the current version to remain
+  marked `unreleased` during development while requiring a real publication
+  date before packaging or verifying a public archive.
 - Stopped the open native dropdown from shifting as animated menu-bar frames
   changed width. Each closed-to-open session now locks one screen-space anchor
   until the panel closes.

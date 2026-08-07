@@ -5,6 +5,10 @@ native-harness, and CI coverage with the real prompts a new macOS user sees.
 
 ## Release artifact
 
+Replace the version's `unreleased` changelog marker with its publication date
+before packaging. Both the packager and standalone archive verifier reject an
+undated public release; the packager checks before rebuilding the runtime.
+
 On the authorized release Mac, package the app with the existing Developer ID
 identity and notary profile:
 
