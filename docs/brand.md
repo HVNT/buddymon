@@ -256,8 +256,8 @@ panel capture reads local `app-status`; the compact-panel harness covers no
 starter, compact First Signal, flow loading/error, ready, recent, encounter,
 shiny, long-value, unavailable, state-recovery-required, Tokens,
 all-preferences Settings and Settings loading, minimal battle, caught and ran-away battle
-results, Trainer, and National-complete Trainer states. None changes game
-state. The macOS test suite renders these surfaces twice and requires
+results, local-portrait Trainer, and National-complete Trainer states. None
+changes game state. The macOS test suite renders these surfaces twice and requires
 byte-identical output and their canonical dimensions. It also enforces the
 component inventory and contrast rules.
 

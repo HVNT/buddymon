@@ -633,8 +633,9 @@ def test_native_trainer_action_uses_read_only_compact_card():
     )
     assert "BuddyMonBrand.Menu.trainerCardWidth" in trainer_status_preview
     assert "BuddyMonBrand.Menu.cardPadding" not in trainer_status_preview
-    assert '"trainer_standard"' in harness_source
+    assert '"trainer_local_portrait_fixture"' in harness_source
     assert '"trainer_national_complete"' in harness_source
+    assert '"portrait_base64"' in harness_source
     assert '"trainer_stats"' in harness_source
     assert '("shiny_legend", "Shiny Legend Badge"' in harness_source
     assert '"id": "shiny_national"' in harness_source

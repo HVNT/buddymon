@@ -535,6 +535,10 @@ final class MenuPanelStateHarnessView: NSView {
     }
 
     private func trainerCard(nationalComplete: Bool) -> NSView {
+        // Deterministic repository fixture for the optional portrait payload path.
+        // This is an existing built-in sprite, not the optional third-party pack.
+        let localPortraitFixture =
+            "iVBORw0KGgoAAAANSUhEUgAAAGAAAABICAYAAAAJZ/BjAAAA60lEQVR42u3auw2AMAwFwMzCBNSsxHJswyL0sAAfBWFi0Fl6bRT5mshOKQ9V1w1rTda5T5Xa+5dsBQAAAAAAAABoVNkaGh0AAAAAAAAAAAAAAAAAAAAAAAAAFTmox4Z3wecDAAAAAAAAAADcA4heYUafDwAAAAAAAAAAcAEwjvvJNmCrvCcAAAAAAAAAAMA7q8pW39/L1wsAAAAAAAAA4CNX00anAwYAAAAAAAAAZANYptgEN+L701MAAAAAAAAAAIBfNBoAAAAAAAAAAOCVZygAAAAAAAAAAMBFo4NXhj5mAQAAAAAAAABOawPSDZCM4/jv4AAAAABJRU5ErkJggg=="
         let definitions: [(String, String, String, Bool)] = [
             ("bond", "Bond Badge", "♥", true),
             ("safari", "Safari Badge", "◎", true),
@@ -602,18 +606,22 @@ final class MenuPanelStateHarnessView: NSView {
             "badges": badges,
             "selected_badge_id": nationalComplete ? "shiny_national" : "shiny_legend",
         ]
+        var harnessPayload = payload
+        if !nationalComplete {
+            harnessPayload["portrait_base64"] = localPortraitFixture
+        }
         let panel = BuddyMonCompactTrainerView(
-            view: payload,
+            view: harnessPayload,
             target: self,
             backAction: #selector(noop(_:))
         )
         return drillInCard(
             title: nationalComplete
                 ? "TRAINER CARD / NATIONAL COMPLETE"
-                : "TRAINER CARD / SHINY LEGEND",
+                : "TRAINER CARD / LOCAL PORTRAIT FIXTURE",
             stateID: nationalComplete
                 ? "trainer_national_complete"
-                : "trainer_standard",
+                : "trainer_local_portrait_fixture",
             panel: panel,
             height: panel.preferredSize.height
         )
