@@ -259,6 +259,8 @@ def test_native_menu_bar_uses_a_short_pokemon_style_menu():
         "BuddyMonBrand.Geometry.menuBarIconHeight",
     ]:
         assert token in buddy_source
+    assert buddy_source.count(") { [weak self] _ in") == 2
+    assert buddy_source.count("Task { @MainActor [weak self] in") == 2
     for token in [
         "installMenuBarPreviewSignal()",
         "DispatchSource.makeSignalSource(signal: SIGWINCH",

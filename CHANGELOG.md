@@ -292,6 +292,9 @@ git tags and matching plugin metadata versions.
 
 ### Fixed
 
+- Kept GitHub CI portable across available Python 3.12 patch releases and older
+  Swift concurrency checking. Native binaries now actually target macOS 13 as
+  declared instead of inheriting the build machine's current macOS version.
 - Kept prerelease metadata truthful by allowing the current version to remain
   marked `unreleased` during development while requiring a real publication
   date before packaging or verifying a public archive.

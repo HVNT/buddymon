@@ -211,7 +211,7 @@ final class MenuBarBuddyPlayer {
             withTimeInterval: TimeInterval(milliseconds) / 1_000,
             repeats: false
         ) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self, self.generation == activeGeneration else { return }
                 completion?()
             }
@@ -322,7 +322,7 @@ final class MenuBarBuddyController {
             withTimeInterval: TimeInterval(holdMilliseconds) / 1_000,
             repeats: false
         ) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.finishPreview()
             }
         }

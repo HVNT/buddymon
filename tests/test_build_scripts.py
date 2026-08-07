@@ -55,6 +55,15 @@ def test_native_app_install_stops_and_reopens_the_installed_copy():
     assert 'open "${OPEN_TARGET}"' in source
 
 
+def test_native_app_binary_target_matches_declared_minimum_macos():
+    source = APP_BUILDER.read_text(encoding="utf-8")
+
+    assert 'MINIMUM_MACOS_VERSION="13.0"' in source
+    assert 'SWIFT_TARGET="$(uname -m)-apple-macosx${MINIMUM_MACOS_VERSION}"' in source
+    assert 'SWIFTC_ARGS=(-target "${SWIFT_TARGET}" -framework AppKit)' in source
+    assert '<string>${MINIMUM_MACOS_VERSION}</string>' in source
+
+
 def write_python_stub(path: Path, *, succeeds: bool = True) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if succeeds:
@@ -515,7 +524,8 @@ def test_ci_uses_immutable_actions_and_runs_the_release_gate():
 
     assert "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683" in source
     assert "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065" in source
-    assert 'python-version: "3.12.13"' in source
+    assert 'python-version: "3.12"' in source
+    assert 'python-version: "3.12.13"' not in source
     assert "Pillow==12.3.0" in requirements
     assert "python3 -m pytest tests/ -q" in source
     assert "scripts/validate-release-metadata.py" in source

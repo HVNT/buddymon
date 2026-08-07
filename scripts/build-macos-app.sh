@@ -108,6 +108,8 @@ DEFAULT_RUNTIME_DIR="${ROOT}/.build/python-runtime"
 VERSION="$(tr -d '\r\n' < "${ROOT}/VERSION")"
 BUNDLE_ID="${BUDDYMON_BUNDLE_ID:-com.hvnt.buddymon}"
 BUILD_NUMBER="${BUDDYMON_BUILD_NUMBER:-${VERSION}}"
+MINIMUM_MACOS_VERSION="13.0"
+SWIFT_TARGET="$(uname -m)-apple-macosx${MINIMUM_MACOS_VERSION}"
 APP="${BUILD_DIR}/BuddyMon.app"
 CONTENTS="${APP}/Contents"
 MACOS="${CONTENTS}/MacOS"
@@ -253,7 +255,7 @@ SWIFT_SOURCES=(
   "${SWIFT_SOURCE_DIR}/ProcessExecutor.swift"
   "${SWIFT_SOURCE_DIR}/SingleInstanceGuard.swift"
 )
-SWIFTC_ARGS=(-framework AppKit)
+SWIFTC_ARGS=(-target "${SWIFT_TARGET}" -framework AppKit)
 
 if [[ "${REQUIRE_RUNTIME}" != "1" ]]; then
   SWIFTC_ARGS+=(-D BUDDYMON_DEVELOPMENT)
@@ -288,7 +290,7 @@ cat > "${CONTENTS}/Info.plist" <<PLIST
   <key>CFBundleVersion</key>
   <string>${BUILD_NUMBER}</string>
   <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
+  <string>${MINIMUM_MACOS_VERSION}</string>
   <key>LSUIElement</key>
   <true/>
 </dict>
