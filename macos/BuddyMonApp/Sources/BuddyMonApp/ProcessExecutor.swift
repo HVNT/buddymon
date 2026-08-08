@@ -317,6 +317,11 @@ final class ProcessExecutor: @unchecked Sendable {
                 underlying: error
             )
         }
+        // Foundation versions on older supported macOS releases can retain the
+        // parent's writer handles after launch. Close those copies so the
+        // concurrent readers observe EOF when the child exits.
+        outputPipe.fileHandleForWriting.closeFile()
+        errorPipe.fileHandleForWriting.closeFile()
         execution.processDidStart()
 
         let capture = ProcessOutputCapture()

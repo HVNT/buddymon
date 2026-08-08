@@ -23,6 +23,18 @@ def test_process_executor_drains_simultaneous_large_streams(native_runner_harnes
     assert result["stderr_bytes"] >= 1_100_000
 
 
+def test_process_executor_closes_parent_pipe_writers_after_launch():
+    source = (SWIFT_DIR / "ProcessExecutor.swift").read_text(encoding="utf-8")
+
+    launched = source.index("try process.run()")
+    stdout_closed = source.index("outputPipe.fileHandleForWriting.closeFile()")
+    stderr_closed = source.index("errorPipe.fileHandleForWriting.closeFile()")
+    readers_wait = source.index("readers.wait()")
+
+    assert launched < stdout_closed < readers_wait
+    assert launched < stderr_closed < readers_wait
+
+
 def test_buddymon_runner_async_decodes_large_valid_json(
     native_runner_harness, tmp_path
 ):

@@ -1,6 +1,12 @@
+import time
+
 import buddymon
 
 from lib import backups, paths
+
+
+def local_backup_timestamp():
+    return time.mktime((2026, 7, 25, 10, 0, 0, 0, 0, -1))
 
 
 def test_backup_copies_the_active_state_directory(tmp_path, monkeypatch):
@@ -16,7 +22,7 @@ def test_backup_copies_the_active_state_directory(tmp_path, monkeypatch):
 
     backup = backups.create_backup(
         destination_root=tmp_path / "backups",
-        now=1_784_998_800,
+        now=local_backup_timestamp(),
     )
 
     assert backup.name == "2026-07-25_10-00-00"
@@ -34,8 +40,9 @@ def test_backup_uses_a_new_folder_when_timestamp_collides(tmp_path, monkeypatch)
     paths.STATE_FILE.write_text("{}", encoding="utf-8")
 
     root = tmp_path / "backups"
-    first = backups.create_backup(destination_root=root, now=1_784_998_800)
-    second = backups.create_backup(destination_root=root, now=1_784_998_800)
+    now = local_backup_timestamp()
+    first = backups.create_backup(destination_root=root, now=now)
+    second = backups.create_backup(destination_root=root, now=now)
 
     assert first.name == "2026-07-25_10-00-00"
     assert second.name == "2026-07-25_10-00-00-1"

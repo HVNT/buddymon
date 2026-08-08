@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -92,7 +93,10 @@ enum HarnessFailure: Error, LocalizedError {
 
 @main
 struct NativeRunnerHarness {
-    static let pythonURL = URL(fileURLWithPath: "/usr/bin/python3")
+    static let pythonURL = URL(fileURLWithPath:
+        ProcessInfo.processInfo.environment["BUDDYMON_TEST_PYTHON"]
+            ?? "/usr/bin/python3"
+    )
     static let stubbornScript = "import signal, time; signal.signal(signal.SIGTERM, lambda *_: None); time.sleep(10)"
 
     static func emit(_ object: [String: Any]) throws {
@@ -605,17 +609,31 @@ def menu_bar_state_snapshot_harness(tmp_path_factory):
 
 
 def run_harness(executable, mode, *, env=None, timeout=15):
-    result = subprocess.run(
+    child_env = os.environ.copy() if env is None else env.copy()
+    child_env["BUDDYMON_TEST_PYTHON"] = sys.executable
+    process = subprocess.Popen(
         [str(executable), mode],
         cwd=ROOT,
-        env=env,
+        env=child_env,
         text=True,
-        capture_output=True,
-        timeout=timeout,
-        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
     )
-    assert result.returncode == 0, result.stderr
-    return json.loads(result.stdout)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        stdout, stderr = process.communicate()
+        pytest.fail(
+            f"native harness mode {mode!r} timed out after {timeout} seconds\n"
+            f"stdout:\n{stdout}\nstderr:\n{stderr}"
+        )
+    assert process.returncode == 0, stderr
+    return json.loads(stdout)
 
 
 def fixture_repo(tmp_path, mode):
