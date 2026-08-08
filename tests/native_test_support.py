@@ -376,8 +376,7 @@ struct LocalStateObserverHarness {
                 to: stateURL,
                 options: .atomic
             )
-        }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.27) {
+            Thread.sleep(forTimeInterval: 0.03)
             try? Data("{\"version\":2}".utf8).write(
                 to: stateURL,
                 options: .atomic

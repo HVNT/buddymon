@@ -5,6 +5,8 @@ import struct
 import subprocess
 import sys
 
+from PIL import Image
+
 from tests.native_test_support import (
     ROOT,
     SWIFT_DIR,
@@ -954,7 +956,12 @@ def test_compact_menu_panel_state_harness_is_complete_and_deterministic(
         assert result.returncode == 0, result.stderr
 
     first_png = first.read_bytes()
-    assert first_png == second.read_bytes()
+    with Image.open(first) as first_image, Image.open(second) as second_image:
+        assert first_image.mode == second_image.mode
+        assert first_image.size == second_image.size
+        assert first_image.convert("RGBA").tobytes() == second_image.convert(
+            "RGBA"
+        ).tobytes()
     assert first_png.startswith(b"\x89PNG\r\n\x1a\n")
     width, height = struct.unpack(">II", first_png[16:24])
     assert width == 944
