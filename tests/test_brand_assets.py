@@ -69,7 +69,7 @@ def test_readme_uses_current_shipping_screenshots():
         "encounter.png": (608, 448),
         "trainer-card.png": (608, 416),
         "token-usage.png": (608, 420),
-        "showcase.png": (864, 600),
+        "showcase-export.png": (864, 600),
     }
     assert {path.name for path in SCREENSHOTS.glob("*.png")} == set(expected)
     for name, size in expected.items():
@@ -78,6 +78,18 @@ def test_readme_uses_current_shipping_screenshots():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for name in expected:
         assert f"docs/screenshots/{name}" in readme
+
+
+def test_readme_distinguishes_native_views_from_showcase_export():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "### Curate your favorites" in readme
+    assert "Open Showcase in the\nterminal game" in readme
+    assert "Actual BuddyMon Showcase export rendered locally" in readme
+    assert "docs/screenshots/showcase.png" not in readme
+    showcase_section = readme.index("### Curate your favorites")
+    for native_image in ("encounter.png", "trainer-card.png", "token-usage.png"):
+        assert readme.index(native_image) < showcase_section
+    assert readme.index("showcase-export.png") > showcase_section
 
 
 def test_readme_capture_tool_instantiates_shipping_views():
@@ -97,3 +109,4 @@ def test_readme_capture_tool_instantiates_shipping_views():
     )
     assert '"Mewtwo"' in generator
     assert "shiny=True" in generator
+    assert "showcase_export.render_showcase_png" in generator

@@ -12,6 +12,15 @@ These repository assets are part of BuddyMon itself. They are separate from
 optional Pokémon and trainer packs in local XDG state and never require a
 network download.
 
+## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> README Visuals
+
+Tracked README images are regenerated with
+`python3 scripts/generate-readme-screenshots.py`. The compact panel, encounter,
+Trainer Card, and Token Usage images instantiate shipping native views with
+deterministic demo state. The Showcase image uses the shipping local PNG
+exporter with the same kind of demo collection; it is an export, not a native
+panel or a player's personal save.
+
 ## <img src="assets/brand/icons/encounter.png" width="22" height="22" alt=""> Optional Game Art
 
 Art packs are optional. BuddyMon uses its built-in sprites when they are not

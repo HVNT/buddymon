@@ -98,12 +98,26 @@ Other starters: `charmander`, `squirtle`, `pikachu`, and `eevee`.
 
 <p>
   <img src="docs/screenshots/encounter.png" width="49%" alt="BuddyMon's native battle panel with Charizard facing a shiny Mewtwo">
-  <img src="docs/screenshots/showcase.png" width="49%" alt="BuddyMon Showcase featuring shiny Mewtwo, Rayquaza, Dragonite, Gengar, Pikachu, and shiny Staryu">
+  <img src="docs/screenshots/trainer-card.png" width="49%" alt="BuddyMon native Trainer Card with collection-backed badges">
 </p>
 
-<p>
-  <img src="docs/screenshots/trainer-card.png" width="49%" alt="BuddyMon native Trainer Card with collection-backed badges">
-  <img src="docs/screenshots/token-usage.png" width="49%" alt="BuddyMon native Token Usage panel with seven-day activity and supported-tool share">
+<p align="center">
+  <img src="docs/screenshots/token-usage.png" width="608" alt="BuddyMon native Token Usage panel with seven-day activity and supported-tool share">
+</p>
+
+### Curate your favorites
+
+Every catch can become part of a six-slot trophy room. Open Showcase in the
+terminal game, choose individual Pokémon from your Box, and swap them whenever
+your collection changes. Sharing saves a labeled PNG to your Desktop; BuddyMon
+never uploads it or requires an account.
+
+<p align="center">
+  <img src="docs/screenshots/showcase-export.png" width="720" alt="Locally exported BuddyMon Showcase featuring shiny Mewtwo, Rayquaza, Dragonite, Gengar, Pikachu, and shiny Staryu">
+</p>
+
+<p align="center">
+  <sub>Actual BuddyMon Showcase export rendered locally from a deterministic demo collection.</sub>
 </p>
 
 ## <img src="docs/assets/brand/icons/native-app.png" width="24" height="24" alt=""> Works With

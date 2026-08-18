@@ -251,7 +251,7 @@ def main() -> int:
     _capture("encounter", _build_encounter_view(encounter), "encounter.png")
     _capture("trainer", _trainer_payload(menu), "trainer-card.png")
     _capture("tokens", _tokens_payload(), "token-usage.png")
-    (OUT / "showcase.png").write_bytes(showcase_export.render_showcase_png(
+    (OUT / "showcase-export.png").write_bytes(showcase_export.render_showcase_png(
         menu,
         generated_at=datetime(2026, 8, 17, 13, 42),
     ))
@@ -261,7 +261,7 @@ def main() -> int:
         "encounter.png",
         "trainer-card.png",
         "token-usage.png",
-        "showcase.png",
+        "showcase-export.png",
     ):
         print(OUT / name)
     return 0
