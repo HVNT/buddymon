@@ -1,8 +1,19 @@
-# Decisions
+# <img src="assets/brand/icons/brand.png" width="28" height="28" alt=""> Decisions
 
 These are BuddyMon's current durable choices and the reasons behind them.
 Implementation history belongs in the changelog and Git history; current game
 numbers belong in code.
+
+## The Signal Buddy owns product identity
+
+**Decision:** Use BuddyMon's original mint Signal Buddy and the Signal Peek
+terminal composition for the app icon, primary lockup, documentation graphics,
+and semantic icon family. Pokémon art may appear inside real gameplay captures,
+but never substitutes for BuddyMon's own product identity.
+
+**Why:** The product should remain recognizable when optional art is absent and
+should not depend on a specific Pokémon species for its brand. One deterministic
+hand-pixel source keeps the lockup, icon, and documentation family coherent.
 
 ## Plugin wiring stays plugin-owned
 

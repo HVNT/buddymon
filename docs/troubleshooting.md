@@ -1,4 +1,4 @@
-# Troubleshooting
+# <img src="assets/brand/icons/setup.png" width="28" height="28" alt=""> Troubleshooting
 
 ## The statusline shows an egg
 

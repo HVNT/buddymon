@@ -1,9 +1,9 @@
-# Public Release QA
+# <img src="assets/brand/icons/setup.png" width="28" height="28" alt=""> Public Release QA
 
 Use this checklist for every public BuddyMon.app archive. It supplements unit,
 native-harness, and CI coverage with the real prompts a new macOS user sees.
 
-## Release artifact
+## <img src="assets/brand/icons/native-app.png" width="22" height="22" alt=""> Release artifact
 
 Replace the version's `unreleased` changelog marker with its publication date
 before packaging. Both the packager and standalone archive verifier reject an
@@ -26,7 +26,7 @@ The verifier checks the checksum, archive layout, release metadata, embedded
 runtime lock, code signature, Gatekeeper assessment, and a disposable-state
 app-status run from the embedded Python runtime.
 
-## Fresh-user acceptance
+## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> Fresh-user acceptance
 
 Use a clean, non-admin macOS 13-or-newer Apple-silicon user account or VM. Do
 not copy BuddyMon state, optional packs, a LaunchAgent, or a Claude profile
@@ -51,7 +51,7 @@ system dialog.
    BuddyMon plugin, run one Claude Code turn, and verify the hook records only
    local activity. Do not edit the user's global Claude settings file.
 
-## Optional actions and expected prompts
+## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Optional actions and expected prompts
 
 Exercise each action deliberately. A denied or cancelled system dialog must
 leave BuddyMon usable and must not lose state.
@@ -64,7 +64,7 @@ leave BuddyMon usable and must not lose state.
 | Open a terminal handoff through Ghostty, iTerm2, and Terminal.app where installed | Record any macOS Automation consent dialog. Test both Allow and Do Not Allow, then confirm BuddyMon remains usable. |
 | Export and reveal a Showcase | Record any Desktop/Finder permission dialog and verify cancellation leaves the game state intact. |
 
-## Publish gate
+## <img src="assets/brand/icons/privacy.png" width="22" height="22" alt=""> Publish gate
 
 Publish only when the artifact verifier, clean-user checklist, and PR CI are
 all recorded as passing. Attach the Apple-silicon ZIP and matching .sha256 file

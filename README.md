@@ -1,13 +1,17 @@
-# BuddyMon
+<h1 align="center">
+  <img src="docs/assets/brand/buddymon-lockup.png" width="720" alt="BuddyMon">
+</h1>
 
 BuddyMon turns local AI coding activity into a small Pokémon-style companion.
 Its Claude Code plugin automatically turns Claude activity into progress; the
 terminal game and local macOS app can also collect Codex CLI and Auggie activity.
 Gemini CLI appears in Token Usage only and does not earn game progress.
 
-![BuddyMon battle screen](docs/screenshots/buddymon-main.png)
+<p align="center">
+  <img src="docs/screenshots/buddymon-main.png" width="608" alt="BuddyMon menu-bar panel with a shiny Mewtwo buddy and a recent Rayquaza catch">
+</p>
 
-## Install
+## <img src="docs/assets/brand/icons/setup.png" width="24" height="24" alt=""> Install
 
 ### macOS app — Apple silicon
 
@@ -83,7 +87,7 @@ Then run:
 
 Other starters: `charmander`, `squirtle`, `pikachu`, and `eevee`.
 
-## What It Does
+## <img src="docs/assets/brand/icons/activity.png" width="24" height="24" alt=""> What It Does
 
 - Converts supported local coding activity into XP and levels.
 - Starts wild encounters while you work.
@@ -92,13 +96,17 @@ Other starters: `charmander`, `squirtle`, `pikachu`, and `eevee`.
 - Includes a curated Showcase with local PNG sharing.
 - Keeps preferences, progress, and history on your machine.
 
-![BuddyMon Showcase](docs/screenshots/showcase.png)
+<p>
+  <img src="docs/screenshots/encounter.png" width="49%" alt="BuddyMon's native battle panel with Charizard facing a shiny Mewtwo">
+  <img src="docs/screenshots/showcase.png" width="49%" alt="BuddyMon Showcase featuring shiny Mewtwo, Rayquaza, Dragonite, Gengar, Pikachu, and shiny Staryu">
+</p>
 
-![Terminal menu](docs/screenshots/terminal-menu.png)
+<p>
+  <img src="docs/screenshots/trainer-card.png" width="49%" alt="BuddyMon native Trainer Card with collection-backed badges">
+  <img src="docs/screenshots/token-usage.png" width="49%" alt="BuddyMon native Token Usage panel with seven-day activity and supported-tool share">
+</p>
 
-![Token report](docs/screenshots/token-report.png)
-
-## Works With
+## <img src="docs/assets/brand/icons/native-app.png" width="24" height="24" alt=""> Works With
 
 | Client | What it contributes | How it reaches BuddyMon |
 | --- | --- | --- |
@@ -115,7 +123,7 @@ The first `collect` run only anchors existing Codex CLI and Auggie logs so old
 history does not create a surprise level-up. New activity is counted on later
 runs.
 
-## Privacy
+## <img src="docs/assets/brand/icons/privacy.png" width="24" height="24" alt=""> Privacy
 
 Normal play reads local transcripts and local BuddyMon state. It does not upload
 game state, rewrite AI-tool settings, or require a BuddyMon account.
@@ -126,7 +134,7 @@ packaging. Those Python and Pillow inputs are pinned per architecture and
 verified by SHA-256 before use.
 Persistent background collection is opt-in through `collector install`.
 
-## Common Commands
+## <img src="docs/assets/brand/icons/development.png" width="24" height="24" alt=""> Common Commands
 
 | Command | Purpose |
 | --- | --- |
@@ -146,13 +154,13 @@ The collector command creates a per-user LaunchAgent only when you ask for it.
 Manual `collect` runs immediately; app and background collection share a
 locked five-minute schedule gate.
 
-## Local Data
+## <img src="docs/assets/brand/icons/collection.png" width="24" height="24" alt=""> Local Data
 
 State, journal history, and optional asset packs live under
 `$XDG_STATE_HOME/buddymon`, or `~/.local/state/buddymon` when
 `XDG_STATE_HOME` is unset.
 
-## Docs
+## <img src="docs/assets/brand/icons/brand.png" width="24" height="24" alt=""> Docs
 
 - [Brand styles](docs/brand.md)
 - [macOS app](docs/macos-app.md)

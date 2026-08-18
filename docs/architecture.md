@@ -1,8 +1,8 @@
-# Architecture
+# <img src="assets/brand/icons/development.png" width="28" height="28" alt=""> Architecture
 
 BuddyMon is a local Python game with several small presentation shells.
 
-## Components
+## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Components
 
 - `hooks/stop.py` reads Claude Code activity.
 - `lib/engine.py` owns progression, encounters, catches, and evolution.
@@ -65,7 +65,7 @@ preserve the original under `recovery/`. State v5 treats preference and session
 fields missing from historical v4 files as additive migration inputs, while
 still rejecting malformed values that are present.
 
-## Data Flow
+## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Data Flow
 
 Claude Code is the only plugin integration: its hooks collect new transcript
 usage, apply game rules, and save the result automatically. Activity from Codex
@@ -129,7 +129,7 @@ Native encounter payloads can include one locally rendered pixel battle PNG.
 The bridge produces it only when the native screen or an encounter action is
 requested; SwiftBar keeps its lightweight static and transient-art behavior.
 
-## Scheduled Collection
+## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Scheduled Collection
 
 The app timer and generated LaunchAgent both run `collect --scheduled`. That
 command checks one timestamp while holding the state lock and allows at most one
@@ -141,7 +141,7 @@ generates it from the current Python runtime, repo or bundled script path, and
 `XDG_STATE_HOME`. `collector status` and `collector uninstall` provide the
 rest of its lifecycle.
 
-## Assets
+## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Assets
 
 Built-in fallback art is sufficient for every screen and for app readiness.
 Optional packs are installed or refreshed only after an explicit user action.
@@ -156,7 +156,7 @@ by an explicit asset command.
 Showcase selection stores only Pokémon ids in normal state. PNG export reads
 those ids and writes a local file on demand without storing export history.
 
-## Boundaries
+## <img src="assets/brand/icons/privacy.png" width="22" height="22" alt=""> Boundaries
 
 - Code lives in this repository.
 - Self-contained builds copy code and a private Python runtime into the app bundle.
