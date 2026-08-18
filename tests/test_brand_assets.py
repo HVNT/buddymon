@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 import struct
 
@@ -44,6 +45,21 @@ def test_brand_rasters_have_expected_dimensions():
     ).size == (1024, 1024)
 
 
+def test_app_icon_is_a_palette_limited_step_tile():
+    image = Image.open(
+        ROOT / "macos" / "BuddyMonApp" / "Resources" / "AppIcon.png"
+    ).convert("RGBA")
+    colors = set(image.get_flattened_data())
+    assert colors - {(0, 0, 0, 0)} <= PALETTE
+    assert image.getpixel((0, 0))[3] == 0
+    assert image.getpixel((512, 512))[3] == 255
+
+    generator = (ROOT / "scripts" / "render-brand-assets.swift").read_text(
+        encoding="utf-8"
+    )
+    assert "let appIcon = drawAppIcon()" in generator
+
+
 def test_semantic_icons_are_hard_alpha_and_palette_limited():
     assert {path.stem for path in ICONS.glob("*.png")} == ICON_NAMES
     for path in ICONS.glob("*.png"):
@@ -61,6 +77,17 @@ def test_app_icon_icns_contains_modern_pixel_sizes():
     assert struct.unpack(">I", blob[4:8])[0] == len(blob)
     for chunk in (b"icp4", b"icp5", b"icp6", b"ic07", b"ic08", b"ic09", b"ic10"):
         assert chunk in blob
+
+    small_offset = blob.index(b"icp4")
+    small_length = struct.unpack(">I", blob[small_offset + 4:small_offset + 8])[0]
+    small = Image.open(BytesIO(blob[small_offset + 8:small_offset + small_length])).convert(
+        "RGBA"
+    )
+    assert small.size == (16, 16)
+    colors = set(small.get_flattened_data())
+    assert (114, 199, 169, 255) in colors
+    assert (217, 84, 98, 255) in colors
+    assert small.getpixel((0, 0))[3] == 0
 
 
 def test_readme_uses_current_shipping_screenshots():

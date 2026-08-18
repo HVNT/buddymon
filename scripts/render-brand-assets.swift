@@ -527,6 +527,93 @@ func drawFrontTerminal(on canvas: inout PixelCanvas) {
     canvas.rect(97, 114, 9, 3, Palette.ink)
 }
 
+func drawAppIcon() -> PixelCanvas {
+    var canvas = PixelCanvas(width: 128, height: 128)
+
+    // A stepped rounded tile follows the silhouette of a modern macOS app icon
+    // without softening BuddyMon's hard-edged pixel language.
+    canvas.polygon([
+        Point(x: 18, y: 5), Point(x: 110, y: 5),
+        Point(x: 122, y: 17), Point(x: 122, y: 110),
+        Point(x: 110, y: 122), Point(x: 18, y: 122),
+        Point(x: 5, y: 109), Point(x: 5, y: 18),
+    ], Palette.ink)
+    canvas.polygon([
+        Point(x: 19, y: 10), Point(x: 109, y: 10),
+        Point(x: 117, y: 18), Point(x: 117, y: 109),
+        Point(x: 109, y: 117), Point(x: 19, y: 117),
+        Point(x: 10, y: 108), Point(x: 10, y: 19),
+    ], Palette.surface)
+
+    // Sparse signal accents keep the tile recognizable at Dock size without
+    // turning it back into a miniature interface screenshot.
+    canvas.rect(18, 14, 27, 4, Palette.red)
+    canvas.rect(14, 18, 4, 21, Palette.red)
+    canvas.rect(97, 16, 10, 4, Palette.water)
+    canvas.rect(109, 20, 4, 8, Palette.water)
+
+    // The buddy peeks over one thin ledge. Draw it behind the paws so the face
+    // remains the unmistakable subject instead of the terminal furniture.
+    canvas.polygon([
+        Point(x: 14, y: 87), Point(x: 114, y: 87),
+        Point(x: 118, y: 91), Point(x: 118, y: 98),
+        Point(x: 114, y: 102), Point(x: 14, y: 102),
+        Point(x: 10, y: 98), Point(x: 10, y: 91),
+    ], Palette.ink)
+    canvas.rect(17, 92, 94, 5, Palette.raised)
+    canvas.rect(21, 93, 49, 3, Palette.grass)
+    canvas.rect(75, 93, 20, 3, Palette.water)
+    canvas.rect(100, 93, 6, 3, Palette.red)
+    canvas.blit(
+        buddySprite(pose: .peeking).resized(width: 80, height: 80),
+        x: 24,
+        y: 12
+    )
+    return canvas
+}
+
+func drawSmallAppIcon() -> PixelCanvas {
+    var canvas = PixelCanvas(width: 16, height: 16)
+
+    // Finder list rows and small Spotlight results need their own drawing. A
+    // scaled-down tile reads as a tiny terminal, so these sizes use the Signal
+    // Buddy's face alone with a hard outline and transparent breathing room.
+    canvas.rect(7, 3, 2, 3, Palette.ink)
+    canvas.rect(5, 0, 3, 2, Palette.ink)
+    canvas.rect(9, 0, 3, 2, Palette.ink)
+    canvas.rect(4, 1, 9, 2, Palette.ink)
+    canvas.rect(6, 3, 5, 2, Palette.ink)
+    canvas.rect(6, 1, 2, 1, Palette.red)
+    canvas.rect(9, 1, 2, 1, Palette.red)
+    canvas.rect(5, 2, 7, 1, Palette.red)
+    canvas.rect(7, 3, 3, 1, Palette.red)
+
+    canvas.polygon([
+        Point(x: 4, y: 4), Point(x: 11, y: 4),
+        Point(x: 14, y: 7), Point(x: 14, y: 12),
+        Point(x: 11, y: 15), Point(x: 4, y: 15),
+        Point(x: 1, y: 12), Point(x: 1, y: 7),
+    ], Palette.ink)
+    canvas.polygon([
+        Point(x: 5, y: 5), Point(x: 10, y: 5),
+        Point(x: 13, y: 8), Point(x: 13, y: 11),
+        Point(x: 10, y: 14), Point(x: 5, y: 14),
+        Point(x: 2, y: 11), Point(x: 2, y: 8),
+    ], Palette.buddy)
+    canvas.rect(2, 9, 2, 3, Palette.buddyShadow)
+    canvas.rect(12, 9, 2, 3, Palette.buddyShadow)
+    canvas.rect(5, 8, 2, 3, Palette.ink)
+    canvas.rect(9, 8, 2, 3, Palette.ink)
+    canvas.set(5, 8, Palette.buddyFace)
+    canvas.set(9, 8, Palette.buddyFace)
+    canvas.rect(5, 11, 6, 2, Palette.buddyFace)
+    canvas.set(4, 11, Palette.red)
+    canvas.set(11, 11, Palette.red)
+    canvas.set(7, 11, Palette.ink)
+    canvas.set(8, 12, Palette.red)
+    return canvas
+}
+
 func drawScene(_ direction: Direction, framed: Bool) -> PixelCanvas {
     var canvas = PixelCanvas(width: 128, height: 128)
     if framed { drawFrame(on: &canvas) }
@@ -920,10 +1007,12 @@ try FileManager.default.createDirectory(
     withIntermediateDirectories: true
 )
 
-let appIcon = drawScene(.signalPeek, framed: true)
+let appIcon = drawAppIcon()
+let smallAppIcon = drawSmallAppIcon()
 let mark = drawScene(.signalPeek, framed: false)
 let lockup = makeProductionLockup()
 try validate(appIcon, name: "app icon")
+try validate(smallAppIcon, name: "small app icon")
 try validate(mark, name: "brand mark")
 try validate(lockup, name: "brand lockup")
 
@@ -945,28 +1034,28 @@ for icon in SemanticIcon.allCases {
     )
 }
 
-let iconsetSizes: [(String, Int)] = [
-    ("icon_16x16.png", 16),
-    ("icon_16x16@2x.png", 32),
-    ("icon_32x32.png", 32),
-    ("icon_32x32@2x.png", 64),
-    ("icon_128x128.png", 128),
-    ("icon_128x128@2x.png", 256),
-    ("icon_256x256.png", 256),
-    ("icon_256x256@2x.png", 512),
-    ("icon_512x512.png", 512),
-    ("icon_512x512@2x.png", 1024),
+let iconsetCanvases: [(String, PixelCanvas)] = [
+    ("icon_16x16.png", smallAppIcon),
+    ("icon_16x16@2x.png", smallAppIcon.scaled(2)),
+    ("icon_32x32.png", smallAppIcon.scaled(2)),
+    ("icon_32x32@2x.png", smallAppIcon.scaled(4)),
+    ("icon_128x128.png", appIcon),
+    ("icon_128x128@2x.png", appIcon.scaled(2)),
+    ("icon_256x256.png", appIcon.scaled(2)),
+    ("icon_256x256@2x.png", appIcon.scaled(4)),
+    ("icon_512x512.png", appIcon.scaled(4)),
+    ("icon_512x512@2x.png", appIcon.scaled(8)),
 ]
-for (name, size) in iconsetSizes {
-    try appIcon.resized(width: size, height: size).write(
+for (name, canvas) in iconsetCanvases {
+    try canvas.write(
         to: iconsetDirectory.appendingPathComponent(name)
     )
 }
 
 try writeICNS([
-    ("icp4", appIcon.resized(width: 16, height: 16)),
-    ("icp5", appIcon.resized(width: 32, height: 32)),
-    ("icp6", appIcon.resized(width: 64, height: 64)),
+    ("icp4", smallAppIcon),
+    ("icp5", smallAppIcon.scaled(2)),
+    ("icp6", smallAppIcon.scaled(4)),
     ("ic07", appIcon.resized(width: 128, height: 128)),
     ("ic08", appIcon.resized(width: 256, height: 256)),
     ("ic09", appIcon.resized(width: 512, height: 512)),

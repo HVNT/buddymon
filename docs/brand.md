@@ -24,7 +24,11 @@ The **Signal Buddy** is BuddyMon's original product mascot: a round mint
 companion with a coral heart antenna, sea-glass muzzle, blueberry outline, and
 small sky-blue signal sparks. The primary composition is **Signal Peek**, where
 the buddy rises from a friendly retro terminal. Use that composition for the
-app icon, primary lockup, and standalone product mark. Supporting compositions
+primary lockup and standalone product mark. The app icon uses **Signal Tile**:
+a close-up of the same face and paws over one quiet ledge inside a stepped,
+rounded tile. It must stay readable at Dock size and must not compress a full
+terminal scene into the icon. Its 16-, 32-, and 64-pixel entries use a dedicated
+face-only drawing rather than shrinking the large tile. Supporting compositions
 may change the terminal or signal context, but must not redraw the mascot's
 face, silhouette, or colors.
 

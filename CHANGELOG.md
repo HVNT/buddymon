@@ -10,9 +10,13 @@ git tags and matching plugin metadata versions.
 ### Added
 
 - Added BuddyMon's original mint Signal Buddy identity across the primary
-  lockup, semantic documentation icons, and macOS app icon. README imagery now
-  comes from reproducible captures of the shipping native views and features a
-  shiny Mewtwo, Rayquaza, the current Trainer Card, Token Usage, and Showcase.
+  lockup, semantic documentation icons, and close-up Signal Tile macOS app
+  icon. README imagery now
+  comes from reproducible captures of the shipping native views, while the
+  collection-first Showcase image comes from the real local PNG exporter. The
+  resulting visual set features shiny Mewtwo and Rayquaza alongside the current
+  Trainer Card and Token Usage views without presenting Showcase as a native
+  panel.
 - Added Trainer Red as an optional local art pack. Explicit asset installation
   fetches one pinned, SHA-256-verified FireRed/LeafGreen portrait into BuddyMon's
   XDG state directory; it is never bundled, and the original two-tone
