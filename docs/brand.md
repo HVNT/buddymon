@@ -1,4 +1,4 @@
-# Brand Styles
+# <img src="assets/brand/icons/brand.png" width="28" height="28" alt=""> Brand Styles
 
 BuddyMon's native brand system is **BuddyMon Brand**. Its primary menu-bar
 expression is the **Field Guide** skin. The older **Redline Mono** explorations
@@ -17,6 +17,31 @@ the compact dropdown is covered by `MenuPanelStateHarnessView.swift`.
 `StyleArchivePreview.swift` preserves the three older explorations for history
 only; archived values are never implementation tokens. Neither preview is
 reachable from the shipping menu-bar panel.
+
+## <img src="assets/brand/icons/brand.png" width="22" height="22" alt=""> Identity Artwork
+
+The **Signal Buddy** is BuddyMon's original product mascot: a round mint
+companion with a coral heart antenna, sea-glass muzzle, blueberry outline, and
+small sky-blue signal sparks. The primary composition is **Signal Peek**, where
+the buddy rises from a friendly retro terminal. Use that composition for the
+app icon, primary lockup, and standalone product mark. Supporting compositions
+may change the terminal or signal context, but must not redraw the mascot's
+face, silhouette, or colors.
+
+Tracked identity artwork uses this exact raster palette:
+
+- warm paper `#F7F1DF` and surface `#FFF9E8`
+- deep blueberry ink `#262236`
+- mint body `#72C7A9`, mint shadow `#3B826F`, and sea-glass muzzle `#B6E4CF`
+- coral signal `#D95462` and sky signal `#4F8FC7`
+- supporting grass `#398978`, electric `#D39A2C`, rule `#B9AEBD`, muted
+  `#6D6678`, and raised paper `#E7DFC9`
+
+Identity files are deterministic outputs of `scripts/render-brand-assets.sh`.
+Keep hard alpha, nearest-neighbor scaling, and the limited palette. Do not use
+Pokémon silhouettes or downloaded pack art as BuddyMon's product identity.
+This identity palette belongs to the tracked raster artwork and app icon; it
+does not add generic native interface meanings or permit local view palettes.
 
 ## Foundation
 
@@ -39,7 +64,7 @@ reachable from the shipping menu-bar panel.
   syntax, and the reduced-motion-aware blinking block—not a black canvas or
   ASCII decoration on every element.
 
-## Motion
+## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Motion
 
 - Compact screens and drill-ins render completely and immediately. Do not add
   whole-view, card, or row entrance fades, staggers, scale effects, or geometry
@@ -48,7 +73,7 @@ reachable from the shipping menu-bar panel.
   hover feedback remain separate brand-owned behaviors. They must honor macOS
   Reduce Motion and must never delay navigation or content visibility.
 
-## Color
+## <img src="assets/brand/icons/brand.png" width="22" height="22" alt=""> Color
 
 The Field Guide dropdown uses warm Pokémon off-white, charcoal ink, and neutral
 gray rules. It must remain readable without accent color.
@@ -69,7 +94,7 @@ categories. Views choose semantic tokens such as `focus`, `alert`,
 `xpProgress`, `dataProgress`, and `pokemonColor`; they do not choose colors by
 appearance.
 
-## Required Workflow
+## <img src="assets/brand/icons/development.png" width="22" height="22" alt=""> Required Workflow
 
 All shipping native UI must use `BuddyMonBrand`. Never add a local palette,
 theme enum, hard-coded `NSColor`, direct font choice, one-off corner radius, or
@@ -237,7 +262,7 @@ When the dropdown opens, it snapshots the status item's screen-space anchor.
 Refreshes, animation frames, and compact drill-ins reuse that anchor until the
 panel closes; the next closed-to-open transition captures a fresh position.
 
-## Visual QA
+## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> Visual QA
 
 Capture the entire scrollable reference as a PNG:
 
@@ -261,7 +286,7 @@ changes game state. The macOS test suite renders these surfaces twice and requir
 byte-identical output and their canonical dimensions. It also enforces the
 component inventory and contrast rules.
 
-## Review Checklist
+## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> Review Checklist
 
 - The screen and every component are left aligned.
 - Section spacing follows the shared rhythm and remains comfortably scannable.

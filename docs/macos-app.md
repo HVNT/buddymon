@@ -1,4 +1,4 @@
-# BuddyMon.app, ELI5
+# <img src="assets/brand/icons/native-app.png" width="28" height="28" alt=""> BuddyMon.app, ELI5
 
 BuddyMon.app is a tiny menu-bar companion. The Python game inside it is the
 brain; the native app is a very thin shell around that shared core.
@@ -6,7 +6,7 @@ brain; the native app is a very thin shell around that shared core.
 The self-contained build carries a private Python runtime, so the user does not
 need Homebrew, Terminal setup, Ghostty, or their own Python install.
 
-## Open It
+## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> Open It
 
 Download `BuddyMon-macOS-arm64.zip` from the latest GitHub release, open it,
 move **BuddyMon.app** to Applications, and open the app. The published archive
@@ -22,7 +22,7 @@ BuddyMon appears only in the menu bar. It does not create a Dock icon or open a
 standalone product window. Opening the app again signals the existing copy to
 open its panel instead of creating a duplicate buddy.
 
-## The Menu-Bar Buddy
+## <img src="assets/brand/icons/native-app.png" width="22" height="22" alt=""> The Menu-Bar Buddy
 
 The buddy itself is the first product surface. Its Python-owned state model
 covers startup, no-starter, idle, working, resting, shiny, XP, level-up,
@@ -121,7 +121,7 @@ renderer remains in the native app.
 Battle names and caught, fled, or ran-away result titles use neutral ink. One
 colored rarity letter immediately after the copy carries the rarity signal.
 
-## First Run
+## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> First Run
 
 After BuddyMon gets one confirmed local status showing that no buddy exists,
 first run automatically opens **First Signal** in the anchored panel:
@@ -137,7 +137,7 @@ blocks setup. First Signal, its working state, and any setup error all use the
 same 304-by-210 Field Guide panel as the everyday dropdown. There is no dark
 console-style setup window. A failed refresh keeps the last working copy.
 
-## Compact Dropdown
+## <img src="assets/brand/icons/native-app.png" width="22" height="22" alt=""> Compact Dropdown
 
 Compact is the complete native product surface. A waiting encounter is exposed
 as the first compact action; choosing it, taking every move, and seeing its
@@ -158,7 +158,7 @@ While the panel remains open, it keeps the screen position captured at that
 closed-to-open transition. Menu-bar animation and refreshes cannot shift it;
 closing and reopening captures the buddy's current position again.
 
-## Terminal Is Optional
+## <img src="assets/brand/icons/development.png" width="22" height="22" alt=""> Terminal Is Optional
 
 Party, Box, Pokédex, and Activity launch the existing terminal client at that
 exact destination using the saved launcher preference. Trainer and Settings
@@ -177,7 +177,7 @@ provisional Ghostty window or closes one during frame verification, so a single
 handoff cannot fan out into an alert plus a second terminal. Ghostty's pixel
 dimensions may vary slightly with font metrics.
 
-## Local and Shared
+## <img src="assets/brand/icons/privacy.png" width="22" height="22" alt=""> Local and Shared
 
 The app calls the same Python boundaries as every other BuddyMon client:
 
@@ -194,7 +194,7 @@ Claude Code progress comes from its plugin hooks. The app's collection path read
 Codex CLI and Auggie activity; Gemini CLI stays in the read-only Token Usage
 report.
 
-## Where Data Lives
+## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Where Data Lives
 
 Progress, journal history, and optional packs live under
 `$XDG_STATE_HOME/buddymon`, or `~/.local/state/buddymon` when

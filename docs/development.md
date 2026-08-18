@@ -1,4 +1,4 @@
-# Development
+# <img src="assets/brand/icons/development.png" width="28" height="28" alt=""> Development
 
 BuddyMon keeps its normal runtime stdlib-only where practical. Tests add pytest
 and Pillow:
@@ -9,7 +9,7 @@ uv run --with pytest --with pillow --no-project python3 -m pytest tests/ -q
 
 Pillow covers image import, export, and sprite-pack tooling.
 
-## Useful Commands
+## <img src="assets/brand/icons/development.png" width="22" height="22" alt=""> Useful Commands
 
 ```bash
 python3 buddymon.py app-status --pretty
@@ -35,7 +35,7 @@ python3 buddymon.py tiny --collect
 owns game rules and state mutations. Party, Box, Pokédex, Activity, and
 Showcase are terminal screens, not native bridge views.
 
-## macOS App
+## <img src="assets/brand/icons/native-app.png" width="22" height="22" alt=""> macOS App
 
 For the user flow, see [BuddyMon.app, ELI5](macos-app.md).
 
@@ -181,7 +181,7 @@ Native Python commands run asynchronously through `ProcessExecutor`. It drains
 stdout and stderr while the process runs and applies timeout and cancellation
 handling so large payloads or a slow child process cannot freeze the app.
 
-## Collection Service
+## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Collection Service
 
 The app timer and optional LaunchAgent both call:
 
@@ -211,7 +211,7 @@ current script path and active Python runtime. It also preserves
 `XDG_STATE_HOME` when set. Do not install the real service in tests; use a
 temporary home and the injected command runner.
 
-## Optional Assets
+## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Optional Assets
 
 Generated packs belong under `$XDG_STATE_HOME/buddymon/packs`, or
 `~/.local/state/buddymon/packs` by default. Do not commit them.
@@ -227,7 +227,7 @@ python3 tools/fetch_trainer.py
 
 See [Assets](assets.md) for sources, validation, and fallback behavior.
 
-## Before Pushing
+## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> Before Pushing
 
 ```bash
 python3 -m pip install --requirement requirements-test.txt
