@@ -2,7 +2,7 @@
 
 import time
 
-from . import box, data, render
+from . import box, data, iv, render
 from . import tui_runtime as runtime
 from .tui_layout import (
     BOX_LIST_W,
@@ -149,7 +149,7 @@ def _box_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=8
     caught = s.get("pokemon", [])
     mons = _box_roster(s, sort_key, descending, fav_only=fav_only)
     if query:
-        mons = _filter_pokemon_query(mons, query)
+        mons = _filter_pokemon_query(mons, query, include_iv=True)
     active = s.get("active")
     selected = max(0, min(selected, len(mons) - 1)) if mons else 0
     species = len(box.group_by_species(caught))
@@ -189,7 +189,8 @@ def _box_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=8
                 if p.get("caught_at") else "—")
         copy = (f" · copy {p['copy_index']}/{p['copy_total']}"
                 if p.get("copy_total", 1) > 1 else "")
-        panel = [*_pokemon_detail_card_lines(p, active, art_h, f"caught {when}{copy}"),
+        panel = [*_pokemon_detail_card_lines(
+                     p, active, art_h, f"caught {when}{copy}", show_iv=True),
                  _detail_action_line(p, active)]
     if width >= _detail_two_col_min_width(BOX_LIST_W):
         lines += _two_col(rows, panel, BOX_LIST_W)
@@ -328,6 +329,12 @@ def _sort_pokemon(mons, sort_key, descending):
         def key(p):
             caught = p.get("caught_at", 0)
             return (-caught if descending else caught, *name_key(p))
+        return sorted(mons, key=key)
+    if sort_key == "iv":
+        def key(p):
+            total = iv.appraise(p["id"]).total
+            caught = p.get("caught_at", 0)
+            return (total if descending else -total, *name_key(p), -caught)
         return sorted(mons, key=key)
     # default / "name"
     return sorted(mons, key=name_key, reverse=descending)

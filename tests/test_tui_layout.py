@@ -1,4 +1,4 @@
-from lib import state
+from lib import iv, state
 from lib import tui_layout as layout
 from tests.tui_test_support import ANSI_RE, fresh, visible_width
 
@@ -98,6 +98,68 @@ def test_pokemon_detail_card_attaches_metadata_inside_one_border():
     assert "XP " in plain
     assert "active buddy" not in plain
     assert "press enter to make active" not in plain
+
+
+def test_appraisal_block_uses_inset_dots_and_fixed_width_for_every_value():
+    appraisals = [
+        iv.Appraisal(value, value, value, value * 3, (value * 300 + 22) // 45,
+                     iv._stars_for_total(value * 3))
+        for value in range(16)
+    ] + [
+        iv.Appraisal(0, 0, 0, total, (total * 100 + 22) // 45,
+                     iv._stars_for_total(total))
+        for total in range(46)
+    ]
+
+    for appraisal in appraisals:
+        lines = layout._appraisal_lines(appraisal, layout.SELECT_CARD_INNER_W)
+        plain = [ANSI_RE.sub("", line) for line in lines]
+        assert all(visible_width(line) == layout.SELECT_CARD_INNER_W + 4 for line in lines)
+        assert plain[0] == "|  " + "." * 40 + "  |"
+        assert "Appraisal" not in "\n".join(plain)
+
+
+def test_appraisal_block_renders_perfect_score_and_grouped_bars():
+    lines = layout._appraisal_lines(
+        iv.Appraisal(15, 15, 15, 45, 100, 4),
+        layout.SELECT_CARD_INNER_W,
+    )
+    plain = "\n".join(ANSI_RE.sub("", line) for line in lines)
+
+    assert "IV 100%" in plain
+    assert "TOTAL 45/45" in plain
+    assert "[****]" in plain
+    assert "ATK 15 [#####|#####|#####]" in plain
+    assert "DEF 15 [#####|#####|#####]" in plain
+    assert "HP  15 [#####|#####|#####]" in plain
+
+
+def test_box_detail_card_fits_longest_name_level_shiny_and_perfect_iv():
+    pokemon = {
+        "id": "perfect-16325",
+        "name": "Hitmonchan",
+        "type": "Fighting",
+        "rarity": "rare",
+        "level": 100,
+        "xp": 0,
+        "next_xp": 100,
+        "shiny": True,
+        "gender": "male",
+    }
+
+    card = layout._pokemon_detail_card_lines(
+        pokemon,
+        active_id=None,
+        art_h=24,
+        caught_line="caught September 03, 2026 · copy 999/999",
+        show_iv=True,
+    )
+    plain = "\n".join(ANSI_RE.sub("", line) for line in card)
+
+    assert "+-- shiny Hitmonchan Lv.100" in plain
+    assert "#107 · Fighting · rare" in plain
+    assert "IV 100%" in plain and "[****]" in plain
+    assert all(visible_width(line) == layout.SELECT_CARD_INNER_W + 4 for line in card)
 
 
 def test_encounter_title_accepts_legacy_battle_wild_level():

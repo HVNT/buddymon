@@ -237,6 +237,18 @@ wild levels, fixed special-Pokémon levels, and visible evolution moments.
 stay varied and readable instead of immediately matching endgame progress.
 Exact values live in the game data and engine.
 
+## Individual values are collectible-only
+
+**Decision:** Give every caught copy stable 0–15 Attack, Defense, and HP values
+derived from its immutable id. Show, sort, and search those appraisals only in
+the terminal Box; do not persist them or use them for catch odds, XP, leveling,
+evolution, or battle.
+
+**Why:** Per-copy variation makes duplicate catches worth inspecting without a
+state migration or a hidden balance change. Deriving the values from an id and
+a versioned hash namespace keeps old and new catches deterministic while
+leaving room for an explicitly designed stat system later.
+
 ## Encounter styles are explicit
 
 **Decision:** Quick is the default. Safari and Battle are opt-in modes. Every

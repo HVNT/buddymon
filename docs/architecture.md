@@ -65,6 +65,11 @@ preserve the original under `recovery/`. State v5 treats preference and session
 fields missing from historical v4 files as additive migration inputs, while
 still rejecting malformed values that are present.
 
+Individual values are a Box-only read model derived from each caught copy's
+immutable id by `lib/iv.py`. Attack, Defense, and HP are never written to state,
+so existing catches gain stable appraisals without a migration and state stays
+at v5. The values do not feed encounter, XP, evolution, or battle rules.
+
 ## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Data Flow
 
 Claude Code is the only plugin integration: its hooks collect new transcript

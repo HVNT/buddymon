@@ -618,7 +618,7 @@ def _box_screen():
         base_mons = collections_ui._box_roster(s, sort_key, descending, fav_only=fav_only)
         mons = list(base_mons)
         if query:
-            mons = layout._filter_pokemon_query(mons, query)
+            mons = layout._filter_pokemon_query(mons, query, include_iv=True)
         if not s.get("pokemon") and not fav_only:
             _scroll_screen("box", [f"{DIM}No pokémon in your box yet.{RESET}"])
             return
@@ -641,7 +641,7 @@ def _box_screen():
         if handled:
             mons = collections_ui._box_roster(s, sort_key, descending, fav_only=fav_only)
             if query:
-                mons = layout._filter_pokemon_query(mons, query)
+                mons = layout._filter_pokemon_query(mons, query, include_iv=True)
             sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
             top = 0
             continue
@@ -668,7 +668,7 @@ def _box_screen():
             fav_only = not fav_only
             mons = collections_ui._box_roster(s, sort_key, descending, fav_only=fav_only)
             if query:
-                mons = layout._filter_pokemon_query(mons, query)
+                mons = layout._filter_pokemon_query(mons, query, include_iv=True)
             sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
             top = 0
         elif key == "f" and mons:
@@ -678,14 +678,14 @@ def _box_screen():
             sort_key = layout._next_box_sort(sort_key)
             mons = collections_ui._box_roster(s, sort_key, descending, fav_only=fav_only)
             if query:
-                mons = layout._filter_pokemon_query(mons, query)
+                mons = layout._filter_pokemon_query(mons, query, include_iv=True)
             sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
         elif key == "r":
             selected_id = mons[sel]["id"] if mons else None
             descending = not descending
             mons = collections_ui._box_roster(s, sort_key, descending, fav_only=fav_only)
             if query:
-                mons = layout._filter_pokemon_query(mons, query)
+                mons = layout._filter_pokemon_query(mons, query, include_iv=True)
             sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
         elif key == "enter" and mons:
             cid = mons[sel]["id"]  # activate THIS specific copy

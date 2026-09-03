@@ -1,4 +1,4 @@
-from lib import data, engine, render, state, tui
+from lib import data, engine, iv, render, state, tui
 from lib import tui_collections as collections_ui
 from lib import tui_layout as layout
 from lib import tui_runtime as runtime
@@ -40,6 +40,21 @@ def test_box_detail_reflects_the_selected_copy():
     assert "| caught " in plain and "copy" in plain
     assert "+-" in frame and "-+" in frame
     assert "selected" not in frame
+
+
+def test_box_detail_shows_copy_appraisal_but_party_does_not():
+    s = fresh()
+    pokemon = state.active_pokemon(s)
+    appraisal = iv.appraise(pokemon["id"])
+
+    box_frame = ANSI_RE.sub("", collections_ui._box_frame(s, 0, width=100))
+    party_frame = ANSI_RE.sub("", collections_ui._party_frame(s, 0, width=100))
+
+    assert f"IV {appraisal.percent:>3}%" in box_frame
+    assert f"TOTAL {appraisal.total:>2}/45" in box_frame
+    assert "ATK " in box_frame and "DEF " in box_frame and "HP  " in box_frame
+    assert "IV " not in party_frame
+    assert "ATK " not in party_frame
 
 
 def test_box_narrow_terminal_stacks_without_overflow():
@@ -128,6 +143,50 @@ def test_box_frame_shows_sort_controls_and_respects_sort():
     assert [p["name"] for p in collections_ui._box_roster(s, "dex", True)] == ["Abra", "Zubat", "Pidgey"]
 
 
+def test_box_iv_sort_is_best_first_and_reverses_to_worst_first():
+    s = state.default_state()
+    ids_and_names = [
+        ("copy-001", "Pidgey"),        # 28/45
+        ("stable-copy-id", "Abra"),   # 18/45
+        ("hitmonchan-100", "Zubat"),  # 31/45
+    ]
+    for pokemon_id, name in ids_and_names:
+        pokemon = engine.new_pokemon(name, "Normal", "•", "common", level=5)
+        pokemon["id"] = pokemon_id
+        s["pokemon"].append(pokemon)
+
+    best = collections_ui._box_roster(s, "iv", False)
+    worst = collections_ui._box_roster(s, "iv", True)
+
+    assert [p["id"] for p in best] == ["hitmonchan-100", "copy-001", "stable-copy-id"]
+    assert [p["id"] for p in worst] == ["stable-copy-id", "copy-001", "hitmonchan-100"]
+    assert "by IV best first" in collections_ui._box_frame(
+        s, 0, width=100, sort_key="iv", descending=False)
+    assert "by IV worst first" in collections_ui._box_frame(
+        s, 0, width=100, sort_key="iv", descending=True)
+    assert layout._next_box_sort("caught") == "iv"
+    assert layout._next_box_sort("iv") == "rarity"
+
+
+def test_box_iv_sort_ties_by_species_then_newest_copy(monkeypatch):
+    s = state.default_state()
+    older = engine.new_pokemon("Pidgey", "Flying", "🐦", "common")
+    newer = engine.new_pokemon("Pidgey", "Flying", "🐦", "common")
+    abra = engine.new_pokemon("Abra", "Psychic", "🔮", "common")
+    older["caught_at"], newer["caught_at"], abra["caught_at"] = 1, 2, 3
+    s["pokemon"] = [older, newer, abra]
+    monkeypatch.setattr(
+        collections_ui.iv,
+        "appraise",
+        lambda _pokemon_id: iv.Appraisal(10, 10, 10, 30, 67, 2),
+    )
+
+    ordered = collections_ui._box_roster(s, "iv", False)
+
+    assert [p["name"] for p in ordered] == ["Abra", "Pidgey", "Pidgey"]
+    assert [p["id"] for p in ordered[1:]] == [newer["id"], older["id"]]
+
+
 def test_box_frame_search_filters_by_name_type_and_empty_state():
     s = state.default_state()
     s["pokemon"] = [
@@ -142,6 +201,26 @@ def test_box_frame_search_filters_by_name_type_and_empty_state():
 
     empty = collections_ui._box_frame(s, 0, top=0, list_height=20, width=80, query="water")
     assert "No Pokemon match 'water'" in ANSI_RE.sub("", empty)
+
+
+def test_box_search_supports_structured_iv_terms_without_leaking_to_party():
+    s = state.default_state()
+    perfect = engine.new_pokemon("Hitmonchan", "Fighting", "🥊", "rare", level=100)
+    perfect["id"] = "perfect-16325"
+    ordinary = engine.new_pokemon("Pidgey", "Flying", "🐦", "common", level=5)
+    ordinary["id"] = "copy-001"
+    s["pokemon"] = [ordinary, perfect]
+
+    for query in ("perfect", "stars:4", "iv:100", "atk:15 def:15 hp:15"):
+        frame = ANSI_RE.sub("", collections_ui._box_frame(s, 0, width=100, query=query))
+        assert "Hitmonchan" in frame
+        assert "Pidgey" not in frame
+
+    frame = ANSI_RE.sub("", collections_ui._box_frame(s, 0, width=100, query="iv:62"))
+    assert "Pidgey" in frame and "Hitmonchan" not in frame
+
+    party = ANSI_RE.sub("", collections_ui._party_frame(s, 0, width=100, query="iv:62"))
+    assert "No Pokemon match 'iv:62'" in party
 
 
 def test_party_frame_search_filters_visible_rows():

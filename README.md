@@ -92,7 +92,9 @@ Other starters: `charmander`, `squirtle`, `pikachu`, and `eevee`.
 - Converts supported local coding activity into XP and levels.
 - Starts wild encounters while you work.
 - Supports Quick, Safari, and Battle encounter modes.
-- Tracks a party, storage box, Pokédex, journal, and token totals.
+- Tracks a party, storage box, Pokédex, journal, and token totals. Every caught
+  copy gets a stable 0–15 IV appraisal in the Box, with IV sorting and searches
+  such as `iv:82`, `stars:3`, or `perfect`.
 - Includes a curated Showcase with local PNG sharing.
 - Keeps preferences, progress, and history on your machine.
 

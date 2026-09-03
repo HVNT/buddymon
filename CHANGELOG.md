@@ -9,6 +9,11 @@ git tags and matching plugin metadata versions.
 
 ### Added
 
+- Added deterministic Pokemon GO-style IV appraisals to terminal Box details.
+  Each caught copy now has stable 0–15 Attack, Defense, and HP values, a total,
+  percentage, and star tier derived from its existing id. Box sorting and
+  structured searches (`iv:82`, `stars:3`, `atk:13`, `def:9`, `hp:15`, and
+  `perfect`) use the same values without changing saved state or gameplay.
 - Added BuddyMon's original mint Signal Buddy identity across the primary
   lockup, semantic documentation icons, and close-up Signal Tile macOS app
   icon. README imagery now

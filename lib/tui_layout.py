@@ -2,7 +2,7 @@
 
 import re
 
-from . import data, packs, pixels, png, render
+from . import data, iv, packs, pixels, png, render
 from . import tui_runtime as runtime
 
 
@@ -42,8 +42,8 @@ PARTY_SORT_LABEL = {
     "active": "active first", "rarity": "rarity", "name": "name",
     "dex": "dex #", "caught": "date caught",
 }
-BOX_SORT_FIELDS = PARTY_SORT_FIELDS
-BOX_SORT_LABEL = PARTY_SORT_LABEL
+BOX_SORT_FIELDS = PARTY_SORT_FIELDS + ("iv",)
+BOX_SORT_LABEL = {**PARTY_SORT_LABEL, "iv": "IV"}
 PARTY_RARITY_ORDER = {
     "common": 0, "uncommon": 1, "rare": 2,
     "legendary": 3, "mythic": 4, "starter": 5,
@@ -142,6 +142,8 @@ def _next_party_sort(sort_key):
 
 def _box_sort_label(sort_key, descending):
     label = BOX_SORT_LABEL.get(sort_key, sort_key)
+    if sort_key == "iv":
+        return f"{label} {'worst' if descending else 'best'} first"
     return f"{label} {'desc' if descending else 'asc'}"
 
 
@@ -182,7 +184,7 @@ def _query_matches(query, *values):
     return all(term in haystack for term in terms)
 
 
-def _pokemon_query_values(pokemon):
+def _pokemon_query_values(pokemon, include_iv=False):
     values = [
         pokemon.get("name"),
         pokemon.get("type"),
@@ -196,11 +198,26 @@ def _pokemon_query_values(pokemon):
         values.append("shiny")
     if pokemon.get("favorite"):
         values.append("favorite")
+    if include_iv:
+        appraisal = iv.appraise(pokemon["id"])
+        values += [
+            f"iv:{appraisal.percent}",
+            f"iv:{appraisal.percent}%",
+            f"stars:{appraisal.stars}",
+            f"atk:{appraisal.attack}",
+            f"def:{appraisal.defense}",
+            f"hp:{appraisal.hp}",
+        ]
+        if appraisal.total == 45:
+            values.append("perfect")
     return values
 
 
-def _filter_pokemon_query(mons, query):
-    return [p for p in mons if _query_matches(query, *_pokemon_query_values(p))]
+def _filter_pokemon_query(mons, query, include_iv=False):
+    return [
+        p for p in mons
+        if _query_matches(query, *_pokemon_query_values(p, include_iv=include_iv))
+    ]
 
 
 def _dex_query_values(entry):
@@ -541,7 +558,34 @@ def _detail_title(pokemon):
     return f"{shiny}{pokemon['name']}{level}"
 
 
-def _pokemon_detail_card_lines(pokemon, active_id, art_h=SELECT_ART_H, caught_line=None):
+def _iv_bar(value):
+    cells = "#" * value + "-" * (15 - value)
+    return "|".join(cells[index:index + 5] for index in range(0, 15, 5))
+
+
+def _appraisal_lines(appraisal, inner_w):
+    marks = "*" * appraisal.stars + "-" * (4 - appraisal.stars)
+    left = f"IV {appraisal.percent:>3}%"
+    middle = f"TOTAL {appraisal.total:>2}/45"
+    right = f"[{marks}]"
+    score = f"{left:<12}{middle:^18}{right:>12}"
+    return [
+        _detail_card_line(" " + "." * max(0, inner_w - 2) + " ", inner_w),
+        _detail_card_line(score, inner_w),
+        _detail_card_line("", inner_w),
+        *[
+            _detail_card_line(f"{label} {value:02d} [{_iv_bar(value)}]", inner_w)
+            for label, value in (
+                ("ATK", appraisal.attack),
+                ("DEF", appraisal.defense),
+                ("HP ", appraisal.hp),
+            )
+        ],
+    ]
+
+
+def _pokemon_detail_card_lines(pokemon, active_id, art_h=SELECT_ART_H, caught_line=None,
+                               show_iv=False):
     """Full right-side Party/Box detail card: centered sprite plus attached
     metadata. The card owns the border so details do not float below the art."""
     grid, palette = packs.gen5_frames(
@@ -573,6 +617,8 @@ def _pokemon_detail_card_lines(pokemon, active_id, art_h=SELECT_ART_H, caught_li
     ]
     if caught_line:
         lines.append(_detail_card_line(f"{DIM}{caught_line}{RESET}", inner_w))
+    if show_iv:
+        lines += _appraisal_lines(iv.appraise(pokemon["id"]), inner_w)
     lines += [
         _detail_card_line(f"XP {CYAN}{render.xp_bar(pokemon, 16)}{RESET}", inner_w),
         edge,
