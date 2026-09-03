@@ -81,6 +81,8 @@ git tags and matching plugin metadata versions.
 
 ### Changed
 
+- Quick mode now pauses only shiny and legendary/mythical encounters in Safari.
+  Non-shiny rare wilds auto-resolve alongside common and uncommon wilds.
 - Clarified client support: Claude Code hooks award progress automatically,
   Codex CLI and Auggie use collection, and Gemini CLI is Token Usage only.
 - Removed every AppleScript notification fallback. Finder-launched builds now

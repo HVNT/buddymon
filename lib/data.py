@@ -83,10 +83,11 @@ LEGENDARY_LEVELS = {
     "Keldeo": 30, "Meloetta": 30, "Genesect": 30,
 }
 
-# Safari Zone: rare/legendary spawns are interactive in Quick mode; every rarity
-# is interactive in Safari mode. Tuning per rarity — base_c is the starting
+# Safari Zone: legendary/mythical and all shiny spawns are interactive in
+# Quick mode; every encounter is interactive in Safari mode. The roster folds
+# mythicals into the legendary rarity. Tuning per rarity — base_c is the starting
 # catch rate (0-255, Gen 1 scale), flee_base the neutral per-turn flee chance.
-INTERACTIVE_RARITIES = {"rare", "legendary"}
+INTERACTIVE_RARITIES = {"legendary"}
 SAFARI = {
     "common": {"base_c": 210, "flee_base": 0.04},
     "uncommon": {"base_c": 150, "flee_base": 0.07},

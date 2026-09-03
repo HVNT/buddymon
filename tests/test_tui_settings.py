@@ -101,7 +101,7 @@ def test_settings_screen_preserves_state_written_while_waiting(
 
 def test_settings_explains_each_encounter_mode():
     expected = {
-        "auto": ("Quick", "common quick · rare Safari"),
+        "auto": ("Quick", "ordinary quick · shiny/legendary/mythic Safari"),
         "safari": ("Safari", "every wild: rock · bait · ball"),
         "battle": ("Battle", "every wild: fight · ball · run"),
     }

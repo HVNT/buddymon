@@ -228,12 +228,14 @@ Exact values live in the game data and engine.
 
 ## Encounter styles are explicit
 
-**Decision:** Quick is the default. Safari and Battle are opt-in modes. Rare and
-legendary moments remain interactive even when ordinary Quick encounters can
-resolve automatically.
+**Decision:** Quick is the default. Safari and Battle are opt-in modes. Every
+shiny and legendary/mythical moment remains interactive even when common,
+uncommon, and non-shiny rare Quick encounters can resolve automatically.
 
 **Why:** The default should not interrupt work, while players who want more game
-decisions can choose them without changing the underlying collection.
+decisions can choose them without changing the underlying collection. A shiny
+or legendary/mythical is too exceptional to risk on an automatic catch or flee
+roll; the broader rare tier is not exceptional enough to interrupt work.
 
 ## Rich encounter art is native and on demand
 

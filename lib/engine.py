@@ -206,16 +206,17 @@ def award_xp(state, base_xp, rng):
     }
 
 
-def encounter_resolution(mode, rarity):
-    """Return the mechanic used by one mode/rarity pair.
+def encounter_resolution(mode, rarity, *, shiny=False):
+    """Return the mechanic used by one encounter.
 
-    The stored ``auto`` value is the player-facing Quick mode: common and
-    uncommon spawns resolve immediately, while rare and legendary spawns use
-    Safari. Explicit Safari and Battle modes make every wild interactive.
+    The stored ``auto`` value is the player-facing Quick mode: non-shiny common,
+    uncommon, and rare spawns resolve immediately, while every shiny and the
+    legendary rarity (which includes mythicals) use Safari. Explicit Safari and
+    Battle modes make every wild interactive.
     """
     if mode == "battle":
         return "battle"
-    if mode == "safari" or rarity in data.INTERACTIVE_RARITIES:
+    if mode == "safari" or shiny or rarity in data.INTERACTIVE_RARITIES:
         return "safari"
     return "auto"
 
@@ -253,7 +254,7 @@ def roll_encounter(state, rng):
         "shiny": shiny, "level": level,
     }
 
-    resolution = encounter_resolution(state.get("mode"), rarity)
+    resolution = encounter_resolution(state.get("mode"), rarity, shiny=shiny)
     if resolution == "battle":
         from . import battle
         state["pending_battle"] = battle.start(spawn, buddy)

@@ -142,27 +142,35 @@ def test_run_ends_without_catch():
     assert out["done"] and out.get("ran") and not out["caught"]
 
 
-def test_roll_encounter_creates_pending_for_rare(monkeypatch):
+def test_quick_mode_creates_pending_for_non_shiny_legendary(monkeypatch):
+    monkeypatch.setattr(data, "ENCOUNTER_CHANCE", 1.0)
+    monkeypatch.setattr(data, "RARITY_WEIGHTS", [("legendary", 100)])
     s = state.default_state()
     engine.create_starter(s, "Charmander")
     state.active_pokemon(s)["level"] = 25
-    # Use a real Random seed that yields a Quick-mode Safari rarity.
-    import random as _r
-    found = False
-    for seed in range(200):
-        s2 = state.default_state()
-        engine.create_starter(s2, "Charmander")
-        state.active_pokemon(s2)["level"] = 25
-        res = engine.roll_encounter(s2, _r.Random(seed))
-        if res and res.get("outcome") == "appeared":
-            assert s2.get("pending_encounter")
-            assert s2["pending_encounter"]["rarity"] in data.INTERACTIVE_RARITIES
-            # second roll must not overwrite the pending one
-            res2 = engine.roll_encounter(s2, _r.Random(seed))
-            assert res2 is None
-            found = True
-            break
-    assert found, "no interactive spawn in 200 seeds"
+
+    result = engine.roll_encounter(s, random.Random(4))
+
+    assert result["outcome"] == "appeared"
+    assert result["rarity"] == "legendary"
+    assert result["shiny"] is False
+    assert s["pending_encounter"]["rarity"] == "legendary"
+    # A second roll must not overwrite the pending encounter.
+    assert engine.roll_encounter(s, random.Random(4)) is None
+
+
+def test_quick_mode_auto_resolves_non_shiny_rare(monkeypatch):
+    monkeypatch.setattr(data, "ENCOUNTER_CHANCE", 1.0)
+    monkeypatch.setattr(data, "RARITY_WEIGHTS", [("rare", 100)])
+    s = state.default_state()
+    engine.create_starter(s, "Charmander")
+
+    result = engine.roll_encounter(s, random.Random(4))
+
+    assert result["rarity"] == "rare"
+    assert result["shiny"] is False
+    assert result["outcome"] in ("caught", "fled", "no_balls")
+    assert "pending_encounter" not in s
 
 
 def test_roll_encounter_auto_resolves_common():

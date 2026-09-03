@@ -208,5 +208,5 @@ BUDDYMON_NO_GRAPHICS=1 python3 buddymon.py menu
 ## A wild is waiting
 
 Open the app, SwiftBar menu, or terminal menu and finish the encounter. Quick
-mode pauses only for rare and legendary encounters; Safari and Battle pause for
-every wild.
+mode pauses for every shiny and legendary/mythical encounter; Safari and Battle
+pause for every wild. Non-shiny rare encounters resolve automatically in Quick.

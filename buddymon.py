@@ -267,8 +267,8 @@ def mode(args):
     labels = {"auto": "Quick", "safari": "Safari", "battle": "Battle"}
     descriptions = {
         "auto": (
-            "common and uncommon catches resolve automatically; "
-            "rare and legendary encounters use Safari"
+            "non-shiny common, uncommon, and rare catches resolve automatically; "
+            "shiny and legendary/mythical encounters use Safari"
         ),
         "safari": "every wild waits for Rock, Bait, Ball, or Run",
         "battle": "every wild waits for Fight, Ball, or Run",

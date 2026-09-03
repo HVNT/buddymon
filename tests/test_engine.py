@@ -150,7 +150,7 @@ def test_encounter_chance_is_tuned_for_visible_cadence():
 def test_encounter_resolution_routes_each_mode_by_rarity():
     rarities = ("common", "uncommon", "rare", "legendary")
     expected = {
-        "auto": ("auto", "auto", "safari", "safari"),
+        "auto": ("auto", "auto", "auto", "safari"),
         "safari": ("safari", "safari", "safari", "safari"),
         "battle": ("battle", "battle", "battle", "battle"),
     }
@@ -160,6 +160,29 @@ def test_encounter_resolution_routes_each_mode_by_rarity():
                      for rarity in rarities) == resolutions
     assert tuple(engine.encounter_resolution("invalid", rarity)
                  for rarity in rarities) == expected["auto"]
+
+
+def test_quick_mode_routes_every_shiny_rarity_to_safari():
+    for rarity in ("common", "uncommon", "rare", "legendary"):
+        assert engine.encounter_resolution("auto", rarity, shiny=True) == "safari"
+
+
+def test_quick_mode_persists_shiny_common_without_auto_resolving(monkeypatch):
+    monkeypatch.setattr(data, "ENCOUNTER_CHANCE", 1)
+    monkeypatch.setattr(data, "RARITY_WEIGHTS", [("common", 100)])
+    monkeypatch.setattr(data, "SHINY_ODDS", 1)
+    s = fresh_state()
+    balls_before = s["trainer"]["balls"]
+
+    result = engine.roll_encounter(s, random.Random(0))
+
+    assert result["outcome"] == "appeared"
+    assert result["rarity"] == "common"
+    assert result["shiny"] is True
+    assert s["pending_encounter"]["shiny"] is True
+    assert s["pending_encounter"]["rarity"] == "common"
+    assert s["trainer"]["balls"] == balls_before
+    assert len(s["pokemon"]) == 1
 
 
 def test_pending_wild_blocks_new_encounters_across_mode_switches():
@@ -390,7 +413,9 @@ def test_mode_cli_cycles_presets_and_accepts_quick_alias(tmp_path, monkeypatch):
 
     assert buddymon.mode(["safari"]).startswith("encounter mode: Safari")
     assert state.load()["mode"] == "safari"
-    assert buddymon.mode(["quick"]).startswith("encounter mode: Quick")
+    quick_message = buddymon.mode(["quick"])
+    assert quick_message.startswith("encounter mode: Quick")
+    assert "shiny and legendary/mythical encounters use Safari" in quick_message
     assert state.load()["mode"] == "auto"
     assert buddymon.mode(["surprise"]) == "Usage: mode quick|auto|safari|battle"
     assert state.load()["mode"] == "auto"

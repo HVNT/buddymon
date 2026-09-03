@@ -37,7 +37,7 @@ SETTINGS_HELP = {
     "terminal_support": "current terminal support",
 }
 ENCOUNTER_MODE_HELP = {
-    "auto": "common quick · rare Safari",
+    "auto": "ordinary quick · shiny/legendary/mythic Safari",
     "safari": "every wild: rock · bait · ball",
     "battle": "every wild: fight · ball · run",
 }

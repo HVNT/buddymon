@@ -432,6 +432,10 @@ def test_app_view_settings_and_tokens(tmp_path, monkeypatch):
 
     assert settings["rows"][0]["key"] == "mode"
     assert settings["rows"][0]["display_value"] == "Quick"
+    assert settings["rows"][0]["help"] == (
+        "Quick auto-resolves ordinary wilds; shiny and legendary/mythical "
+        "wilds wait in Safari."
+    )
     assert [row["key"] for row in settings["rows"]] == [
         "mode",
         "notifications",

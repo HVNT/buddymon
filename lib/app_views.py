@@ -20,7 +20,7 @@ SETTING_LABELS = {
     "share_banner": "Share banners",
 }
 SETTING_HELP = {
-    "mode": "Quick catches common wilds; Safari and Battle make every wild interactive.",
+    "mode": "Quick auto-resolves ordinary wilds; shiny and legendary/mythical wilds wait in Safari.",
     "notifications": "Rare-event banner behavior.",
     "menu_launcher": "Preferred terminal app for deep BuddyMon screens.",
     "menu_replace": "Close the prior BuddyMon Ghostty menu before opening a new one.",
