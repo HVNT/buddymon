@@ -610,6 +610,10 @@ def test_native_trainer_action_uses_read_only_compact_card():
         'forKey: "buddymon-trainer-badge-hover"',
     ]:
         assert token in trainer_section
+    assert (
+        "grid.setContentCompressionResistancePriority(.required, for: .vertical)"
+        in trainer_section
+    )
     assert "BuddyMonBrand.Menu.applyFieldGuideCardSurface" in panel_source
     assert 'view["level"]' not in trainer_section
     assert 'view["total_xp"]' not in trainer_section
