@@ -939,11 +939,19 @@ final class BrandStylesWindowController: NSWindowController {
             controlSample("QUIET", brandButton("ESC  CANCEL", role: .quiet)),
             controlSample("DESTRUCTIVE", brandButton("[ ! RELEASE ]", role: .destructive)),
         ])
+        let waitingAction = menuActionButtonWithSprite()
+        waitingAction.widthAnchor.constraint(
+            equalToConstant: BuddyMonBrand.Menu.trainerCardWidth
+        ).isActive = true
 
         let stack = vertical(spacing: BuddyMonBrand.Spacing.medium)
         stack.alignment = .leading
         stack.addArrangedSubview(controls)
         stack.addArrangedSubview(actions)
+        stack.addArrangedSubview(controlSample(
+            "FIELD GUIDE / LEADING SPRITE",
+            waitingAction
+        ))
         return specimenSection(
             "06",
             "COMMAND CONTROLS",
@@ -1148,6 +1156,15 @@ final class BrandStylesWindowController: NSWindowController {
             """,
             color: BuddyMonBrand.pikachu
         )
+        let acting = stateBlock(
+            "ACTION PENDING",
+            """
+            input:  CATCH
+            signal: Throwing a Ball…
+            moves:  locked
+            """,
+            color: BuddyMonBrand.textPrimary
+        )
         let caught = stateBlock(
             "CAUGHT",
             """
@@ -1170,7 +1187,7 @@ final class BrandStylesWindowController: NSWindowController {
             "10",
             "ENCOUNTER STATES",
             "Waiting, active, catching/loading, caught, escaped, and action affordances use the same command language.",
-            sampleRow([waiting, active, caught, escaped])
+            sampleRow([waiting, active, acting, caught, escaped])
         )
     }
 
@@ -1689,7 +1706,7 @@ final class BrandStylesWindowController: NSWindowController {
             """
             KEYBOARD    ⌘1..⌘4 sections   ⌘K commands   ESC back   ↵ select
             FOCUS       > visible row     [[ focused control ]]   never color-only
-            MOTION      cursor blinks     Reduce Motion => cursor remains solid
+            MOTION      response arrow jiggles   Reduce Motion => pending copy remains
             CONTRAST    paper on black    muted copy remains readable
             VOICEOVER   action + state + Pokemon name + shortcut
             RESIZE      780px minimum     vertical scroll before content clipping
@@ -1800,6 +1817,26 @@ final class BrandStylesWindowController: NSWindowController {
         state: BuddyMonBrand.ControlState = .normal
     ) -> NSButton {
         BuddyMonBrand.makeButton(title, role: role, state: state)
+    }
+
+    private func menuActionButtonWithSprite() -> NSButton {
+        let button = BuddyMonBrand.Menu.makeActionButton(
+            "E  /  WILD PIKACHU IS WAITING",
+            target: nil,
+            action: nil,
+            role: .secondary
+        )
+        if
+            let encoded = BrandPreviewSpriteData.base64["PIKACHU"],
+            let data = Data(base64Encoded: encoded),
+            let image = NSImage(data: data)
+        {
+            BuddyMonBrand.Menu.configureActionButton(
+                button,
+                leadingImage: image
+            )
+        }
+        return button
     }
 
     private func brandField(

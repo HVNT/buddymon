@@ -171,9 +171,20 @@ def test_brand_styles_are_the_canonical_native_visual_system():
     assert "accessibilityDisplayShouldReduceMotion" in quick_link_motion
     assert 'CABasicAnimation(keyPath: "transform.translation.y")' in quick_link_motion
     assert "quickLinkHoverDuration" in quick_link_motion
+    encounter_feedback = swift_function_body(
+        brand_source,
+        "static func animateEncounterFeedback",
+    )
+    assert "accessibilityDisplayShouldReduceMotion" in encounter_feedback
+    assert 'CAKeyframeAnimation(keyPath: "transform.translation.x")' in (
+        encounter_feedback
+    )
+    assert "encounterFeedbackDuration" in encounter_feedback
     assert "fieldGuideQuickLinkSample()" in preview_source
     assert "BuddyMonBrand.Menu.makeQuickLink(" in preview_source
     assert "no separate Open label" in brand_docs
+    assert "Encounter moves are single-flight" in brand_docs
+    assert "ACTION PENDING" in preview_source
     for token in [
         "canvas",
         "surface",

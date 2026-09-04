@@ -148,11 +148,7 @@ final class MenuPanelStateHarnessView: NSView {
         encounterRow.alignment = .top
         encounterRow.spacing = BuddyMonBrand.Spacing.large
         encounterRow.addArrangedSubview(encounterCard(fixtures: fixtures))
-        let encounterSpacer = NSView()
-        encounterSpacer.widthAnchor.constraint(
-            equalToConstant: Layout.cardWidth
-        ).isActive = true
-        encounterRow.addArrangedSubview(encounterSpacer)
+        encounterRow.addArrangedSubview(encounterCard(fixtures: fixtures, pending: true))
         stack.addArrangedSubview(encounterRow)
 
         let trainerRow = NSStackView()
@@ -470,38 +466,56 @@ final class MenuPanelStateHarnessView: NSView {
         )
     }
 
-    private func encounterCard(fixtures: [[String: Any]]) -> NSView {
+    private func encounterCard(
+        fixtures: [[String: Any]],
+        pending: Bool = false
+    ) -> NSView {
         let fixture = fixtures.first { $0["id"] as? String == "pending" } ?? [:]
         let status = fixture["status"] as? [String: Any] ?? [:]
         let buddy = status["active"] as? [String: Any] ?? [:]
         var wild = status["pending"] as? [String: Any] ?? [:]
         wild["wild_level"] = 8
         wild["rarity"] = wild["rarity"] as? String ?? "rare"
-        let payload: [String: Any] = [
-            "encounter": [
-                "mode": "battle",
-                "state": "waiting",
-                "buddy": buddy,
-                "wild": wild,
-                "message": "A wild Eevee blocks the path.",
-                "hp": ["buddy_percent": 82, "wild_percent": 64],
-                "actions": [
-                    ["id": "attack", "compact_label": "Fight", "shortcut": "f"],
-                    ["id": "ball", "compact_label": "Catch", "shortcut": "c"],
-                    ["id": "run", "compact_label": "Run", "shortcut": "r"],
-                ],
-            ],
+        let actions: [[String: Any]] = pending
+            ? [
+                ["id": "rock", "compact_label": "Rock", "shortcut": "k"],
+                ["id": "bait", "compact_label": "Bait", "shortcut": "b"],
+                ["id": "ball", "compact_label": "Catch", "shortcut": "c"],
+                ["id": "run", "compact_label": "Run", "shortcut": "r"],
+            ]
+            : [
+                ["id": "attack", "compact_label": "Fight", "shortcut": "f"],
+                ["id": "ball", "compact_label": "Catch", "shortcut": "c"],
+                ["id": "run", "compact_label": "Run", "shortcut": "r"],
+            ]
+        var encounter: [String: Any] = [
+            "mode": pending ? "safari" : "battle",
+            "state": "waiting",
+            "buddy": buddy,
+            "wild": wild,
+            "message": "A wild Eevee blocks the path.",
+            "actions": actions,
         ]
+        if !pending {
+            encounter["hp"] = ["buddy_percent": 82, "wild_percent": 64]
+        }
+        let payload: [String: Any] = ["encounter": encounter]
         let panel = BuddyMonCompactEncounterView(
             view: payload,
             message: nil,
+            preferredActionID: pending ? "ball" : nil,
             target: self,
             action: #selector(noop(_:)),
             backAction: #selector(noop(_:))
         )
+        if pending {
+            panel.beginAction("ball")
+        }
         return drillInCard(
-            title: "BATTLE / COMPACT DRILL-IN",
-            stateID: "encounter_battle",
+            title: pending
+                ? "SAFARI / ACTION PENDING"
+                : "BATTLE / COMPACT DRILL-IN",
+            stateID: pending ? "encounter_action_pending" : "encounter_battle",
             panel: panel,
             height: panel.preferredSize.height
         )

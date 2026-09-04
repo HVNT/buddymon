@@ -110,7 +110,7 @@ final class BuddyMonCompactMenuView: NSView {
                 : (
                     isUtility
                         ? "\(shortcut.uppercased()) \(label.uppercased())"
-                        : "  \(shortcut.uppercased())  /  \(label.uppercased())"
+                        : "\(shortcut.uppercased())  /  \(label.uppercased())"
                 )
             let role: BuddyMonBrand.ButtonRole = descriptor["emphasis"] as? String == "primary"
                 ? .primary
@@ -139,9 +139,10 @@ final class BuddyMonCompactMenuView: NSView {
                 let data = Data(base64Encoded: encoded),
                 let image = NSImage(data: data)
             {
-                image.size = NSSize(width: 24, height: 24)
-                button.image = image
-                button.imagePosition = .imageLeft
+                BuddyMonBrand.Menu.configureActionButton(
+                    button,
+                    leadingImage: image
+                )
             }
             if firstAction == nil, !isUtility {
                 firstAction = button

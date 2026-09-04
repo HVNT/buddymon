@@ -5,6 +5,13 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+- Fixed compact encounter input so rapid clicks cannot overlap moves or replace
+  a catch/flee result with the empty encounter screen. Every move now shows
+  immediate pending copy, continuing encounters keep focus on the chosen move,
+  and repeated response text replays a Reduce Motion-aware dialogue cue. The
+  root waiting-encounter row now keeps its sprite inside a dedicated leading
+  column so the shortcut and label remain visible.
+
 ## [0.2.0] - unreleased
 
 ### Added

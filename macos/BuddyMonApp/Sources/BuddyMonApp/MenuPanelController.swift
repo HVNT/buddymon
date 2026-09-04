@@ -34,6 +34,7 @@ final class MenuPanelController: NSObject {
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
     private var openSessionAnchor: OpenSessionAnchor?
+    private var encounterActionPending = false
 
     private(set) var displayMode: DisplayMode = .menu
 
@@ -65,6 +66,7 @@ final class MenuPanelController: NSObject {
         panel.orderOut(nil)
         openSessionAnchor = nil
         compactControls = []
+        encounterActionPending = false
         removeKeyboardMonitor()
         removeOutsideClickMonitors()
     }
@@ -263,6 +265,7 @@ final class MenuPanelController: NSObject {
     func presentEncounter(
         view: [String: Any],
         message: String? = nil,
+        preferredActionID: String? = nil,
         target: AnyObject,
         action: Selector,
         backAction: Selector
@@ -270,6 +273,7 @@ final class MenuPanelController: NSObject {
         let content = BuddyMonCompactEncounterView(
             view: view,
             message: message,
+            preferredActionID: preferredActionID,
             target: target,
             action: action,
             backAction: backAction
@@ -278,6 +282,18 @@ final class MenuPanelController: NSObject {
         displayMode = .encounter
         install(content, preferredSize: content.preferredSize)
         panel.makeFirstResponder(content.initialResponder)
+    }
+
+    @discardableResult
+    func beginEncounterAction(_ actionID: String) -> Bool {
+        guard
+            displayMode == .encounter,
+            !encounterActionPending,
+            let content = panel.contentView as? BuddyMonCompactEncounterView
+        else { return false }
+        encounterActionPending = true
+        content.beginAction(actionID)
+        return true
     }
 
     func presentEncounterResult(
@@ -306,6 +322,7 @@ final class MenuPanelController: NSObject {
     }
 
     private func activateCompactFocus() {
+        guard !encounterActionPending else { return }
         if let button = panel.firstResponder as? NSButton, button.isEnabled {
             button.performClick(nil)
         } else if let first = compactControls.first(where: \.isEnabled) {
@@ -315,6 +332,7 @@ final class MenuPanelController: NSObject {
     }
 
     private func install(_ content: NSView, preferredSize: NSSize) {
+        encounterActionPending = false
         let size = constrainedSize(preferredSize)
         content.frame = NSRect(origin: .zero, size: size)
         content.autoresizingMask = [.width, .height]

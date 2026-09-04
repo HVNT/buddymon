@@ -76,6 +76,9 @@ does not add generic native interface meanings or permit local view palettes.
 - Pokémon state playback, sprite motion, badge feedback, and direct control
   hover feedback remain separate brand-owned behaviors. They must honor macOS
   Reduce Motion and must never delay navigation or content visibility.
+- Completed encounter moves may replay the dialogue arrow with one short
+  horizontal jiggle. Reduce Motion removes the jiggle; the action-specific
+  pending copy remains the required feedback in every accessibility mode.
 
 ## <img src="assets/brand/icons/brand.png" width="22" height="22" alt=""> Color
 
@@ -130,6 +133,11 @@ use two sprite identities, optional HP bars, one dialogue line, one move row,
 and a single compact result. Keep Pokémon identity and the current signal ahead
 of setup or repair controls. No expanded native dashboard is part of the
 shipping product surface.
+Encounter moves are single-flight. Selecting one immediately replaces the
+dialogue with action-specific working copy, keeps the selected move visually
+primary, disables every move until the response returns, and restores focus to
+that move when the encounter continues. Back, Escape, and closing the panel
+remain available; a late response never reopens a panel the player left.
 
 The latest-catch row starts with its chevron at the content edge, then uses
 explicit spacing columns for the caught sprite, neutral-ink `LAST CATCH` label,
@@ -236,7 +244,9 @@ perimeter. There is no nested background or rounded sprite well.
 
 When a wild is waiting, its field message and primary action collapse into one
 dark clickable row with the wild sprite, shortcut, name, and waiting state. Do
-not repeat the encounter as a separate signal line above it.
+not repeat the encounter as a separate signal line above it. The sprite owns a
+dedicated 24-point leading column inside the row padding; it must never overlap
+or crop the shortcut and label.
 
 The root masthead stays visually subordinate and begins directly with the small
 FireRed/LeafGreen-style `BUDDYMON` wordmark—there is no decorative leading icon.

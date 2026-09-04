@@ -20,10 +20,14 @@ final class BuddyMonCompactEncounterView: NSView {
     )
     private(set) weak var initialResponder: NSView?
     private(set) var focusableControls: [NSButton] = []
+    private weak var messageIndicator: NSTextField?
+    private weak var messageField: NSTextField?
+    private var actionButtonsByID: [String: NSButton] = [:]
 
     init(
         view: [String: Any],
         message: String?,
+        preferredActionID: String? = nil,
         target: AnyObject,
         action: Selector,
         backAction: Selector
@@ -31,6 +35,8 @@ final class BuddyMonCompactEncounterView: NSView {
         let encounter = view["encounter"] as? [String: Any] ?? [:]
         var controls: [NSButton] = []
         var firstControl: NSView?
+        var messageViews: (indicator: NSTextField, field: NSTextField)?
+        var actionButtonsByID: [String: NSButton] = [:]
         let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
@@ -54,9 +60,11 @@ final class BuddyMonCompactEncounterView: NSView {
         root.addArrangedSubview(navigation.view)
 
         if encounter["state"] as? String == "empty" {
-            root.addArrangedSubview(Self.messageLine(
+            let line = Self.messageLine(
                 encounter["message"] as? String ?? "No wild Pokémon is waiting."
-            ))
+            )
+            root.addArrangedSubview(line.view)
+            messageViews = (line.indicator, line.field)
             controls = [back]
             firstControl = back
         } else {
@@ -65,7 +73,9 @@ final class BuddyMonCompactEncounterView: NSView {
                 ?? encounter["message"] as? String
                 ?? encounter["status"] as? String
                 ?? "Choose your next move."
-            root.addArrangedSubview(Self.messageLine(signal))
+            let line = Self.messageLine(signal)
+            root.addArrangedSubview(line.view)
+            messageViews = (line.indicator, line.field)
 
             let actionRow = NSStackView()
             actionRow.orientation = .horizontal
@@ -92,6 +102,7 @@ final class BuddyMonCompactEncounterView: NSView {
                 button.keyEquivalent = shortcut
                 button.keyEquivalentModifierMask = []
                 actionButtons.append(button)
+                actionButtonsByID[identifier] = button
                 actionRow.addArrangedSubview(button)
             }
             Self.sizeButtons(actionButtons, availableWidth: Layout.contentWidth)
@@ -99,7 +110,9 @@ final class BuddyMonCompactEncounterView: NSView {
                 root.addArrangedSubview(actionRow)
             }
             controls = actionButtons + [back]
-            firstControl = actionButtons.first ?? back
+            firstControl = preferredActionID.flatMap { actionButtonsByID[$0] }
+                ?? actionButtons.first
+                ?? back
         }
         root.addArrangedSubview(Self.footer())
 
@@ -110,6 +123,9 @@ final class BuddyMonCompactEncounterView: NSView {
         super.init(frame: .zero)
         focusableControls = controls
         initialResponder = firstControl
+        messageIndicator = messageViews?.indicator
+        messageField = messageViews?.field
+        self.actionButtonsByID = actionButtonsByID
         wantsLayer = true
         layer?.backgroundColor = BuddyMonBrand.Menu.canvas.cgColor
         addSubview(card)
@@ -139,10 +155,44 @@ final class BuddyMonCompactEncounterView: NSView {
                 card.fittingSize.height + (BuddyMonBrand.Menu.fieldGuideFrameInset * 2)
             )
         )
+        if message != nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let indicator = self?.messageIndicator else { return }
+                BuddyMonBrand.Motion.animateEncounterFeedback(indicator)
+            }
+        }
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func beginAction(_ actionID: String) {
+        let pendingMessage = Self.pendingMessage(for: actionID)
+        messageField?.stringValue = pendingMessage
+        messageField?.toolTip = pendingMessage
+        messageField?.setAccessibilityLabel(pendingMessage)
+        for (identifier, button) in actionButtonsByID {
+            BuddyMonBrand.Menu.refreshActionButton(
+                button,
+                role: identifier == actionID ? .primary : .secondary,
+                state: .loading
+            )
+            if identifier == actionID {
+                button.setAccessibilityValue("In progress")
+            }
+        }
+    }
+
+    private static func pendingMessage(for actionID: String) -> String {
+        switch actionID {
+        case "attack", "fight": return "Your buddy attacks…"
+        case "ball": return "Throwing a Ball…"
+        case "rock": return "Throwing a Rock…"
+        case "bait": return "Throwing Bait…"
+        case "run": return "Getting away…"
+        default: return "Making a move…"
+        }
     }
 
     private static func identityRow(_ encounter: [String: Any]) -> NSView {
@@ -263,7 +313,9 @@ final class BuddyMonCompactEncounterView: NSView {
         return imageView
     }
 
-    private static func messageLine(_ message: String) -> NSView {
+    private static func messageLine(
+        _ message: String
+    ) -> (view: NSView, indicator: NSTextField, field: NSTextField) {
         let row = NSStackView()
         row.orientation = .horizontal
         row.alignment = .centerY
@@ -275,12 +327,22 @@ final class BuddyMonCompactEncounterView: NSView {
             right: BuddyMonBrand.Menu.microGap
         )
         row.widthAnchor.constraint(equalToConstant: Layout.contentWidth).isActive = true
-        row.addArrangedSubview(text(
-            "▶  \(message)",
+        let indicator = text(
+            "▶",
             color: BuddyMonBrand.Menu.ink,
             font: BuddyMonBrand.Font.strong(10)
-        ))
-        return row
+        )
+        let field = text(
+            message,
+            color: BuddyMonBrand.Menu.ink,
+            font: BuddyMonBrand.Font.strong(10)
+        )
+        field.toolTip = message
+        field.setAccessibilityLabel(message)
+        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        row.addArrangedSubview(indicator)
+        row.addArrangedSubview(field)
+        return (row, indicator, field)
     }
 
     private static func sizeButtons(_ buttons: [NSButton], availableWidth: CGFloat) {

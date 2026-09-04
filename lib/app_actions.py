@@ -1,11 +1,17 @@
 """Lock-aware native mutation handlers."""
 
+import copy
 import random
 import time
 
 from . import battle as battle_mode, safari, state
 from .app_payloads import _build_encounter_result_payload
-from .app_views import SETTING_LABELS, _setting_display_value, app_view
+from .app_views import (
+    SETTING_LABELS,
+    _build_encounter_view,
+    _setting_display_value,
+    app_view,
+)
 
 
 def _build_action_response(action, ok=True, message="", screen=None, **extra):
@@ -33,6 +39,7 @@ def _build_action_error_response(action, message, screen=None):
 def _handle_encounter_action(args):
     requested = args[0] if args else ""
     result_context = None
+    encounter_snapshot = None
     with state.lock():
         s = state.load()
         if s.get("pending_battle"):
@@ -46,12 +53,31 @@ def _handle_encounter_action(args):
             pending = s["pending_encounter"]
             outcome, message = safari.take_turn(s, requested, random.Random())
         else:
-            return _build_action_error_response("encounter", "No wild Pokemon is waiting.", screen="encounter")
+            return _build_action_error_response(
+                "encounter",
+                "No wild Pokemon is waiting.",
+            )
         if outcome is None:
-            return _build_action_error_response("encounter", message, screen="encounter")
-        if outcome.get("done"):
-            result_context = (dict(state.active_pokemon(s) or {}), dict(pending), mode, dict(outcome), message)
-        state.save(s)
+            encounter_snapshot = copy.deepcopy(s)
+        elif outcome.get("done"):
+            result_context = (
+                dict(state.active_pokemon(s) or {}),
+                dict(pending),
+                mode,
+                dict(outcome),
+                message,
+            )
+            state.save(s)
+        else:
+            state.save(s)
+            encounter_snapshot = copy.deepcopy(s)
+    if outcome is None:
+        return _build_action_response(
+            "encounter",
+            ok=False,
+            message=message,
+            view=_build_encounter_view(encounter_snapshot),
+        )
     if result_context:
         buddy, wild, mode, outcome, message = result_context
         return _build_action_response(
@@ -66,7 +92,7 @@ def _handle_encounter_action(args):
         "encounter",
         ok=True,
         message=message,
-        screen="encounter",
+        view=_build_encounter_view(encounter_snapshot),
         outcome=outcome,
     )
 

@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import (
+    app_actions,
     app_bridge,
     assets,
     engine,
@@ -548,6 +549,60 @@ def test_handle_encounter_action_resolves_run(tmp_path, monkeypatch):
     assert result["encounter_result"]["outcome_emoji"] == "💨"
     assert result["encounter_result"]["wild"]["name"] == "Mewtwo"
     assert base64.b64decode(result["encounter_result"]["scene_base64"]).startswith(b"\x89PNG")
+
+
+def test_handle_encounter_action_builds_continuing_view_from_action_snapshot(
+    tmp_path,
+    monkeypatch,
+):
+    use_temp_state(monkeypatch, tmp_path)
+    s = state.default_state()
+    engine.create_starter(s, "Squirtle")
+    s["pending_encounter"] = safari.start({
+        "name": "Mewtwo",
+        "type": "Psychic",
+        "emoji": "🔮",
+        "rarity": "legendary",
+        "shiny": False,
+        "level": 55,
+    })
+    state.save(s)
+    build_view = app_actions._build_encounter_view
+
+    def resolve_live_encounter_after_snapshot(snapshot):
+        live = state.load()
+        live.pop("pending_encounter", None)
+        state.save(live)
+        return build_view(snapshot)
+
+    monkeypatch.setattr(
+        app_actions,
+        "_build_encounter_view",
+        resolve_live_encounter_after_snapshot,
+    )
+
+    result = app_bridge.app_action("encounter", ["bait"])
+
+    assert result["ok"] is True
+    assert result["view"]["encounter"]["state"] == "waiting"
+    assert result["view"]["encounter"]["wild"]["name"] == "Mewtwo"
+    assert state.load().get("pending_encounter") is None
+
+
+def test_handle_encounter_action_without_pending_does_not_return_empty_view(
+    tmp_path,
+    monkeypatch,
+):
+    use_temp_state(monkeypatch, tmp_path)
+    s = state.default_state()
+    engine.create_starter(s, "Squirtle")
+    state.save(s)
+
+    result = app_bridge.app_action("encounter", ["ball"])
+
+    assert result["ok"] is False
+    assert result["message"] == "No wild Pokemon is waiting."
+    assert "view" not in result
 
 
 def test_app_action_json_and_cli_errors(tmp_path, monkeypatch):

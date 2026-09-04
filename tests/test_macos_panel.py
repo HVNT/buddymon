@@ -34,6 +34,7 @@ def test_native_menu_bar_uses_a_short_pokemon_style_menu():
         "BuddyMonCompactEncounterResultView",
         'status["native_menu"]',
         'descriptor["image_base64"]',
+        "BuddyMonBrand.Menu.configureActionButton",
         "levelPercent(active)",
         'message = "LAST CATCH"',
         '"BUDDYMON"',
@@ -67,12 +68,15 @@ def test_native_menu_bar_uses_a_short_pokemon_style_menu():
     assert "func compactNavigationHeader(" in panel_source
     assert panel_source.count("compactNavigationHeader(") == 6
     assert "let card = BuddyMonFieldGuideCardBackgroundView()" in compact_home
+    assert "button.imagePosition" not in compact_home
     assert "card.addSubview(root)" in compact_home
     assert "static let cardWidth = BuddyMonBrand.Menu.trainerCardWidth" in compact_home
     assert "BuddyMonBrand.Menu.fieldGuideFrameInset" in compact_home
     assert "static let fieldGuideFrameInset: CGFloat = 8" in brand_source
     assert "static func applyFieldGuideCardSurface" in brand_source
     assert "static let buddySpriteSize: CGFloat = 54" in brand_source
+    assert "static let actionImageSize: CGFloat = 24" in brand_source
+    assert "func configureLeadingImage(_ image: NSImage)" in brand_source
     assert (
         "static let activeBuddyRowHeight: CGFloat = "
         "buddySpriteSize + (compactGap * 2)"
@@ -655,7 +659,7 @@ def test_native_encounter_action_stays_in_the_compact_dropdown():
     )
     encounter = swift_function_body(
         app_source,
-        "private func loadEncounter(message: String? = nil)",
+        "private func loadEncounter(generation: Int)",
     )
     action = swift_function_body(
         app_source,
@@ -663,12 +667,22 @@ def test_native_encounter_action_stays_in_the_compact_dropdown():
     )
 
     assert "flowController.presentLoading" not in open_encounter
-    assert "loadEncounter()" in open_encounter
+    assert "loadEncounter(generation: generation)" in open_encounter
     assert "menuPanelController.presentEncounter(" in encounter
     assert "flowController.presentEncounter(" not in encounter
     assert "menuPanelController.presentEncounterResult(" in action
     assert "menuPanelController.presentEncounter(" in action
     assert "flowController.presentEncounterResult(" not in action
+    assert "inFlightEncounterGeneration == nil" in action
+    assert "menuPanelController.beginEncounterAction(action)" in action
+    assert "requestStatusRefresh()" in action
+    assert "await refreshStatus()" not in action
+    assert "generation == encounterPresentationGeneration" in action
+    assert "menuPanelController.displayMode == .encounter" in action
+    assert "preferredActionID: action" in action
+    assert "await loadEncounter" not in action
+    assert 'response["ok"] as? Bool != false' in action
+    assert "presentMessage" in action
     assert 'descriptor["compact_label"]' in panel_source
     assert 'descriptor["shortcut"]' in panel_source
     assert 'descriptor["emoji"]' not in swift_function_body(
@@ -692,6 +706,11 @@ def test_native_encounter_action_stays_in_the_compact_dropdown():
     assert '"H  HOME"' not in compact_encounter
     assert '"RETURN  HOME"' not in encounter_result
     assert '"B BACK' not in encounter_result
+    assert "func beginAction(_ actionID: String)" in compact_encounter
+    assert 'case "ball": return "Throwing a Ball…"' in compact_encounter
+    assert "BuddyMonBrand.Motion.animateEncounterFeedback" in compact_encounter
+    assert "func beginEncounterAction(_ actionID: String) -> Bool" in panel_source
+    assert "guard !encounterActionPending else { return }" in panel_source
 
     encounter_identity = swift_function_body(
         panel_source,
@@ -916,6 +935,7 @@ def test_compact_menu_panel_state_harness_is_complete_and_deterministic(
     assert "BuddyMonBrand.Menu.makeRarityLabel(rarity)" in harness_source
     assert 'stateID: "encounter_result_caught"' in harness_source
     assert 'stateID: "encounter_result_ran"' in harness_source
+    assert '"encounter_action_pending"' in harness_source
     assert 'loading ? "tokens_loading" : "tokens"' in harness_source
     assert '"daily": [' in harness_source
     assert '"active_streak"' in harness_source

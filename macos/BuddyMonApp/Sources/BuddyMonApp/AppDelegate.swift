@@ -24,6 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var passiveStatusRefreshPending = false
     private var menuBarPreviewSignalSource: DispatchSourceSignal?
     private var statusRefreshGeneration = 0
+    private var encounterPresentationGeneration = 0
+    private var inFlightEncounterGeneration: Int?
     private var hasConfirmedStatus = false
     private var awaitsInitialStatus = true
     private static let openPanelNotification = Notification.Name(
@@ -177,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleStatusItemClick(_ sender: NSStatusBarButton) {
         if menuPanelController.isVisible {
+            advanceEncounterPresentationGeneration()
             menuPanelController.close()
         } else {
             presentRootPanel()
@@ -218,6 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentRootPanel() {
+        advanceEncounterPresentationGeneration()
         requestStatusRefresh()
         if presentStarterSetupIfNeeded() {
             return
@@ -301,27 +305,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openRootPanel() {
-        menuPanelController.presentRoot(
-            status: latestStatus,
-            target: self,
-            action: #selector(handleNativeMenuAction(_:))
-        )
+        presentRootPanel()
     }
 
-    private func loadEncounter(message: String? = nil) async {
+    private func loadEncounter(generation: Int) async {
         do {
             let view = try await runner.appView(
                 "encounter",
                 timeout: CommandTimeout.view
             )
+            guard generation == encounterPresentationGeneration else { return }
             menuPanelController.presentEncounter(
                 view: view,
-                message: message,
+                message: nil,
                 target: self,
                 action: #selector(handleEncounterAction(_:)),
                 backAction: #selector(openRootPanel)
             )
         } catch {
+            guard generation == encounterPresentationGeneration else { return }
             menuPanelController.presentEncounterResult(
                 result: [
                     "title": "Encounter unavailable",
@@ -335,18 +337,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func handleEncounterAction(_ sender: NSButton) {
         let action = sender.identifier?.rawValue ?? ""
-        sender.isEnabled = false
-        Task { [weak self, weak sender] in
+        guard
+            !action.isEmpty,
+            inFlightEncounterGeneration == nil,
+            menuPanelController.beginEncounterAction(action)
+        else { return }
+        let generation = advanceEncounterPresentationGeneration()
+        inFlightEncounterGeneration = generation
+        Task { [weak self] in
             guard let self else { return }
-            defer { sender?.isEnabled = true }
+            defer {
+                if inFlightEncounterGeneration == generation {
+                    inFlightEncounterGeneration = nil
+                }
+            }
             do {
                 let response = try await runner.appAction(
                     "encounter",
                     [action],
                     timeout: CommandTimeout.action
                 )
-                await refreshStatus()
+                requestStatusRefresh()
+                guard
+                    generation == encounterPresentationGeneration,
+                    menuPanelController.isVisible,
+                    menuPanelController.displayMode == .encounter
+                else { return }
                 let message = response["message"] as? String
+                guard response["ok"] as? Bool != false else {
+                    presentMessage(message ?? "That move could not be completed.")
+                    return
+                }
                 if let result = response["encounter_result"] as? [String: Any] {
                     menuPanelController.presentEncounterResult(
                         result: result,
@@ -357,24 +378,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     menuPanelController.presentEncounter(
                         view: view,
                         message: message,
+                        preferredActionID: action,
                         target: self,
                         action: #selector(handleEncounterAction(_:)),
                         backAction: #selector(openRootPanel)
                     )
                 } else {
-                    await loadEncounter(message: message)
+                    presentMessage(message ?? "That move could not be completed.")
                 }
             } catch {
-                menuPanelController.presentEncounterResult(
-                    result: [
-                        "title": "Move failed",
-                        "message": error.localizedDescription,
-                    ],
-                    target: self,
-                    doneAction: #selector(openRootPanel)
-                )
+                guard
+                    generation == encounterPresentationGeneration,
+                    menuPanelController.isVisible,
+                    menuPanelController.displayMode == .encounter
+                else { return }
+                presentMessage(error.localizedDescription)
             }
         }
+    }
+
+    @discardableResult
+    private func advanceEncounterPresentationGeneration() -> Int {
+        encounterPresentationGeneration += 1
+        return encounterPresentationGeneration
     }
 
     private func loadTokenUsage() async {
@@ -481,8 +507,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openEncounter() {
+        let generation = advanceEncounterPresentationGeneration()
         Task { [weak self] in
-            await self?.loadEncounter()
+            await self?.loadEncounter(generation: generation)
         }
     }
 

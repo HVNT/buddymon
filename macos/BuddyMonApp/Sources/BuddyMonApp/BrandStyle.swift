@@ -130,6 +130,9 @@ enum BuddyMonBrand {
     enum Motion {
         static let quickLinkHoverDuration: CFTimeInterval = 0.12
         static let quickLinkHoverAnimationKey = "buddymon-brand-quick-link-hover"
+        static let encounterFeedbackDuration: CFTimeInterval = 0.24
+        static let encounterFeedbackDistance: CGFloat = 3
+        static let encounterFeedbackAnimationKey = "buddymon-brand-encounter-feedback"
 
         static func animateQuickLinkHover(_ view: NSView, hovered: Bool) {
             view.wantsLayer = true
@@ -152,6 +155,24 @@ enum BuddyMonBrand {
             lift.timingFunction = CAMediaTimingFunction(name: .easeOut)
             layer.setAffineTransform(CGAffineTransform(translationX: 0, y: target))
             layer.add(lift, forKey: quickLinkHoverAnimationKey)
+        }
+
+        static func animateEncounterFeedback(_ view: NSView) {
+            view.wantsLayer = true
+            guard let layer = view.layer else { return }
+            layer.removeAnimation(forKey: encounterFeedbackAnimationKey)
+            layer.setAffineTransform(.identity)
+            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+                return
+            }
+
+            let distance = Double(encounterFeedbackDistance)
+            let jiggle = CAKeyframeAnimation(keyPath: "transform.translation.x")
+            jiggle.values = [0, distance, -distance / 3, distance / 2, 0]
+            jiggle.keyTimes = [0, 0.24, 0.48, 0.72, 1]
+            jiggle.duration = encounterFeedbackDuration
+            jiggle.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.add(jiggle, forKey: encounterFeedbackAnimationKey)
         }
     }
 
@@ -571,6 +592,7 @@ enum BuddyMonBrand {
         static let starterChoiceAccentSize: CGFloat = 4
         static let quickLinkHoverLift: CGFloat = 1
         static let actionHorizontalInset: CGFloat = 5
+        static let actionImageSize: CGFloat = 24
         static let progressCornerRadius: CGFloat = 4
         static let noBorderWidth: CGFloat = 0
         static let cornerRadius: CGFloat = 10
@@ -763,6 +785,14 @@ enum BuddyMonBrand {
                 minimumHeight: minimumHeight
             )
             return button
+        }
+
+        static func configureActionButton(
+            _ button: NSButton,
+            leadingImage image: NSImage
+        ) {
+            guard let menuButton = button as? BuddyMonMenuActionButton else { return }
+            menuButton.configureLeadingImage(image)
         }
 
         static func makeQuickLink(
@@ -1561,6 +1591,7 @@ private final class BuddyMonMenuActionButton: NSButton {
     private var menuTitle = ""
     private var menuTitleColor = BuddyMonBrand.Menu.ink
     private var identityAccent: NSColor?
+    private var leadingImage: NSImage?
     fileprivate var actionTreatment: BuddyMonBrand.Menu.ActionTreatment = .button
 
     override var acceptsFirstResponder: Bool { isEnabled }
@@ -1608,9 +1639,14 @@ private final class BuddyMonMenuActionButton: NSButton {
         needsDisplay = true
     }
 
+    func configureLeadingImage(_ image: NSImage) {
+        leadingImage = image
+        needsDisplay = true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let titleInset: CGFloat
+        var titleInset = BuddyMonBrand.Menu.actionHorizontalInset
         if let identityAccent {
             let accentSize = BuddyMonBrand.Menu.starterChoiceAccentSize
             identityAccent.setFill()
@@ -1620,18 +1656,39 @@ private final class BuddyMonMenuActionButton: NSButton {
                 width: accentSize,
                 height: accentSize
             ))
-            titleInset = BuddyMonBrand.Menu.actionHorizontalInset
-                + accentSize
-                + BuddyMonBrand.Menu.tightGap
-        } else {
-            titleInset = BuddyMonBrand.Menu.actionHorizontalInset
+            titleInset += accentSize + BuddyMonBrand.Menu.tightGap
+        }
+        if let leadingImage {
+            let imageSize = BuddyMonBrand.Menu.actionImageSize
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.imageInterpolation = .none
+            leadingImage.draw(
+                in: NSRect(
+                    x: titleInset,
+                    y: bounds.midY - (imageSize / 2),
+                    width: imageSize,
+                    height: imageSize
+                ),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: 1,
+                respectFlipped: true,
+                hints: nil
+            )
+            NSGraphicsContext.restoreGraphicsState()
+            titleInset += imageSize + BuddyMonBrand.Menu.tightGap
         }
         BuddyMonBrand.FireRedDisplay.draw(
             menuTitle,
             in: NSRect(
                 x: titleInset,
                 y: BuddyMonBrand.Menu.tightGap,
-                width: max(0, bounds.width - titleInset),
+                width: max(
+                    0,
+                    bounds.width
+                        - titleInset
+                        - BuddyMonBrand.Menu.actionHorizontalInset
+                ),
                 height: max(
                     0,
                     bounds.height - (BuddyMonBrand.Menu.tightGap * 2)
