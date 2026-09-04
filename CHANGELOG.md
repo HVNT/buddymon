@@ -27,12 +27,10 @@ git tags and matching plugin metadata versions.
   `perfect`) use the same values without changing saved state or gameplay.
 - Added BuddyMon's original mint Signal Buddy identity across the primary
   lockup, semantic documentation icons, and close-up Signal Tile macOS app
-  icon. README imagery now
-  comes from reproducible captures of the shipping native views, while the
-  collection-first Showcase image comes from the real local PNG exporter. The
-  resulting visual set features shiny Mewtwo and Rayquaza alongside the current
-  Trainer Card and Token Usage views without presenting Showcase as a native
-  panel.
+  icon. README imagery now combines reproducible shipping-native captures, a
+  real roomy Ghostty Box handoff, and the collection-first local Showcase PNG
+  exporter. The game-first page keeps every detailed screen full-width and
+  distinguishes live product views from exported collection art.
 - Added Trainer Red as an optional local art pack. Explicit asset installation
   fetches one pinned, SHA-256-verified FireRed/LeafGreen portrait into BuddyMon's
   XDG state directory; it is never bundled, and the original two-tone

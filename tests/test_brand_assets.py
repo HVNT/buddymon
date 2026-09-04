@@ -1,6 +1,9 @@
+import json
 from io import BytesIO
 from pathlib import Path
 import struct
+import subprocess
+import sys
 
 from PIL import Image
 
@@ -97,26 +100,35 @@ def test_readme_uses_current_shipping_screenshots():
         "trainer-card.png": (608, 416),
         "token-usage.png": (608, 420),
         "showcase-export.png": (864, 600),
+        "terminal-box-ghostty.png": (1648, 1474),
     }
     assert {path.name for path in SCREENSHOTS.glob("*.png")} == set(expected)
     for name, size in expected.items():
         assert Image.open(SCREENSHOTS / name).size == size
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    for name in expected:
+    for name in (
+        "buddymon-main.png",
+        "encounter.png",
+        "terminal-box-ghostty.png",
+        "showcase-export.png",
+    ):
         assert f"docs/screenshots/{name}" in readme
+    assert "docs/screenshots/trainer-card.png" not in readme
+    assert "docs/screenshots/token-usage.png" not in readme
 
 
-def test_readme_distinguishes_native_views_from_showcase_export():
+def test_readme_presents_a_readable_game_first_screenshot_story():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "### Curate your favorites" in readme
-    assert "Open Showcase in the\nterminal game" in readme
-    assert "Actual BuddyMon Showcase export rendered locally" in readme
-    assert "docs/screenshots/showcase.png" not in readme
-    showcase_section = readme.index("### Curate your favorites")
-    for native_image in ("encounter.png", "trainer-card.png", "token-usage.png"):
-        assert readme.index(native_image) < showcase_section
-    assert readme.index("showcase-export.png") > showcase_section
+    assert "Start Playing" in readme
+    assert "The Loop" in readme
+    assert "A Collection Worth Opening" in readme
+    assert readme.index("buddymon-main.png") < readme.index("Start Playing")
+    assert readme.index("encounter.png") < readme.index("terminal-box-ghostty.png")
+    assert readme.index("terminal-box-ghostty.png") < readme.index("showcase-export.png")
+    assert 'width="49%"' not in readme
+    assert "releases/latest" not in readme
+    assert "there is no downloadable GitHub Release\nyet" in readme
 
 
 def test_readme_capture_tool_instantiates_shipping_views():
@@ -137,3 +149,34 @@ def test_readme_capture_tool_instantiates_shipping_views():
     assert '"Mewtwo"' in generator
     assert "shiny=True" in generator
     assert "showcase_export.render_showcase_png" in generator
+    assert '"--terminal-state-only"' in generator
+
+    ghostty_capture = (ROOT / "scripts" / "capture-readme-ghostty.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "--window-frame=80,80,1040,680" in ghostty_capture
+    assert "XDG_STATE_HOME" in ghostty_capture
+    assert "ReadmeGhosttyWindow.swift" in ghostty_capture
+
+
+def test_readme_terminal_fixture_uses_isolated_deterministic_state():
+    destination = (
+        ROOT / ".build" / "readme-ghostty" / "state" / "buddymon" / "state.json"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "generate-readme-screenshots.py"),
+            "--terminal-state-only",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(destination.read_text(encoding="utf-8"))
+    assert payload["active"] == "readme-mewtwo"
+    dragonite = next(p for p in payload["pokemon"] if p["name"] == "Dragonite")
+    assert dragonite["id"] == "readme-dragonite-673"

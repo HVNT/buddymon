@@ -73,7 +73,16 @@ scripts/menu-bar-state-harness.sh
 scripts/capture-menu-bar-states.sh
 scripts/capture-menu-panel.sh
 scripts/capture-menu-panel-states.sh
+python3 scripts/generate-readme-screenshots.py
+scripts/capture-readme-ghostty.sh
 ```
+
+The README generator renders deterministic native views and the Showcase
+export. The Ghostty capture helper creates isolated demo state under `.build`,
+opens the roomy Box directly, captures only the titled BuddyMon window, and
+closes that BuddyMon-owned process. It never reads or changes trainer progress;
+if optional local art is already installed, it copies that pack into the
+temporary fixture without modifying the source.
 
 An external development runtime must be named explicitly and paired with
 `--allow-unlocked-runtime`. That escape hatch performs import checks but is not

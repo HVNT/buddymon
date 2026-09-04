@@ -2,6 +2,7 @@
 """Capture README art from BuddyMon's shipping render surfaces."""
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -16,6 +17,9 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "screenshots"
 BUILD_DIR = ROOT / ".build" / "readme-screenshots"
 SNAPSHOT = BUILD_DIR / "readme-screenshot"
+TERMINAL_STATE = (
+    ROOT / ".build" / "readme-ghostty" / "state" / "buddymon" / "state.json"
+)
 SOURCE_STATE_ROOT = Path(
     os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")
 )
@@ -66,13 +70,13 @@ def _mon(
     }
 
 
-def _install_local_art_fixture() -> None:
+def _install_local_art_fixture(destination_root: Path = DEMO_STATE_ROOT) -> None:
     """Use the player's installed local art when present, without mutating it."""
     if not SOURCE_PACKS.exists():
         return
-    destination = DEMO_STATE_ROOT / "buddymon" / "packs"
+    destination = destination_root / "buddymon" / "packs"
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(SOURCE_PACKS, destination)
+    shutil.copytree(SOURCE_PACKS, destination, dirs_exist_ok=True)
 
 
 def _showcase_team() -> list[dict]:
@@ -92,7 +96,7 @@ def _showcase_team() -> list[dict]:
             rarity="legendary",
             caught_offset=0,
         ),
-        _mon("readme-dragonite", "Dragonite", 68, rarity="rare", caught_offset=7200),
+        _mon("readme-dragonite-673", "Dragonite", 68, rarity="rare", caught_offset=7200),
         _mon("readme-gengar", "Gengar", 61, rarity="rare", caught_offset=10_800),
         _mon("readme-pikachu", "Pikachu", 54, rarity="starter", caught_offset=14_400),
         _mon("readme-staryu", "Staryu", 47, shiny=True, caught_offset=18_000),
@@ -240,7 +244,30 @@ def _capture(kind: str, payload: dict, filename: str) -> None:
     )
 
 
-def main() -> int:
+def _write_demo_state(destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(_menu_state(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    _install_local_art_fixture(destination.parent.parent)
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Generate README images or an isolated terminal demo state."
+    )
+    parser.add_argument(
+        "--terminal-state-only",
+        action="store_true",
+        help="write the deterministic Ghostty demo state without rendering images",
+    )
+    args = parser.parse_args(argv)
+    if args.terminal_state_only:
+        _write_demo_state(TERMINAL_STATE)
+        print(TERMINAL_STATE)
+        return 0
+
     OUT.mkdir(parents=True, exist_ok=True)
     _install_local_art_fixture()
     _build_snapshot_tool()
