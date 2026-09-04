@@ -69,7 +69,7 @@ def _party_header_row():
 
 def _party_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=80,
                  sort_key="name", descending=False, fav_only=False,
-                 query="", search_active=False):
+                 query="", search_active=False, roomy=False):
     runtime.begin_frame()
     pinned, rest = _party_split(s, sort_key, descending)
     mons = pinned + rest
@@ -110,7 +110,10 @@ def _party_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width
     panel = []
     if mons:
         p = mons[selected]
-        panel = [*_pokemon_detail_card_lines(p, active, art_h), _detail_action_line(p, active)]
+        panel = [
+            *_pokemon_detail_card_lines(p, active, art_h, roomy=roomy),
+            _detail_action_line(p, active),
+        ]
     if width >= _detail_two_col_min_width(PARTY_LIST_W):
         lines += _two_col(rows, panel, PARTY_LIST_W)
     else:  # narrow terminal: stack the list and the preview
@@ -142,7 +145,7 @@ def _box_header_row():
 
 def _box_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=80,
                sort_key="name", descending=False, fav_only=False,
-               query="", search_active=False):
+               query="", search_active=False, roomy=False):
     """Box browser: every caught individual (no per-species collapse), with a
     detail panel for the selected copy. Mirrors the two-column party layout."""
     runtime.begin_frame()
@@ -190,7 +193,8 @@ def _box_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=8
         copy = (f" · copy {p['copy_index']}/{p['copy_total']}"
                 if p.get("copy_total", 1) > 1 else "")
         panel = [*_pokemon_detail_card_lines(
-                     p, active, art_h, f"caught {when}{copy}", show_iv=True),
+                     p, active, art_h, f"caught {when}{copy}", show_iv=True,
+                     roomy=roomy),
                  _detail_action_line(p, active)]
     if width >= _detail_two_col_min_width(BOX_LIST_W):
         lines += _two_col(rows, panel, BOX_LIST_W)

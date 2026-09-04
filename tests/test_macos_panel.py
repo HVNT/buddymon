@@ -216,10 +216,11 @@ def test_native_menu_bar_uses_a_short_pokemon_style_menu():
     assert 'arguments.append("--window-frame=\\(windowFrame)")' in terminal_handoff
     assert "func prepareForTerminalHandoff()" in panel_source
     assert "removeOutsideClickMonitors()" in panel_source
-    assert "BuddyMonBrand.Menu.terminalWindowWidth" in panel_source
-    assert "BuddyMonBrand.Menu.terminalWindowHeight" in panel_source
-    assert "static let terminalWindowWidth: CGFloat = 760" in brand_source
-    assert "static let terminalWindowHeight: CGFloat = 520" in brand_source
+    assert "BuddyMonBrand.Menu.terminalWindowProfiles" in panel_source
+    assert "static let terminalWindowWidth: CGFloat = 1040" in brand_source
+    assert "static let terminalWindowHeight: CGFloat = 680" in brand_source
+    assert "static let terminalMediumWindowWidth: CGFloat = 920" in brand_source
+    assert "static let terminalCompactWindowWidth: CGFloat = 760" in brand_source
     assert "statusItem.menu = menu" not in app_source
     assert "statusMenu?.popUp" not in app_source
     assert "BuddyMonMenuDashboard" not in app_source

@@ -119,7 +119,7 @@ def render_menu_frame(s, selected=0):
     return _build_menu_frame(_menu_items(s), selected)
 
 
-def render_encounter_frame(s, kind, sel):
+def render_encounter_frame(s, kind, sel, width=80, height=24):
     """Terminal battle view: compact sprites, status, and the action row."""
     runtime.begin_frame()
     pending = s.get("pending_encounter") if kind == "safari" else s.get("pending_battle")
@@ -131,7 +131,13 @@ def render_encounter_frame(s, kind, sel):
         layout._encounter_title(pending, with_level=True),
     ))
     lines.append(layout._pair_line(layout._pokemon_meta(buddy), layout._pokemon_meta(pending)))
-    lines.extend(layout._paired_encounter_sprite_lines(buddy, pending))
+    art_w, art_h = layout.encounter_art_size(width, height)
+    lines.extend(layout._paired_encounter_sprite_lines(
+        buddy,
+        pending,
+        art_w=art_w,
+        art_h=art_h,
+    ))
     if kind == "battle":
         lines.append(layout._pair_line(f"HP {layout._bar(bt.buddy_hp_frac(pending))}",
                                 f"HP {layout._bar(bt.wild_hp_frac(pending))}"))
@@ -192,6 +198,20 @@ def _status_lines(s):
 def _scroll_frame(title, body_lines, top, height, hint="↑/↓ scroll · esc back"):
     view = body_lines[top:top + height]
     return "\n".join(["", layout._header(title), ""] + view + ["", layout._footer(hint)])
+
+
+def _collection_view_budget(kind, width, height, item_count):
+    """Return list rows, sprite height, and roomy state within one TUI frame."""
+    if kind not in ("party", "box"):
+        raise ValueError("collection budget kind must be party or box")
+    _, max_art_h = layout.select_art_size(width, height)
+    list_h = max(6, height - (9 if kind == "party" else 8))
+    showing = item_count > list_h
+    outer_chrome = 7 if showing else 6
+    detail_chrome = 6 if kind == "party" else 13
+    max_inner_rows = max(4, height - outer_chrome - detail_chrome)
+    art_h = min(max_art_h // 2, max_inner_rows) * 2
+    return list_h, art_h, layout.roomy_terminal(width, height)
 
 
 def _name_rarity():
@@ -524,11 +544,9 @@ def _party_screen():
             return
         height = max(12, shutil.get_terminal_size((80, 24)).lines - 1)
         width = shutil.get_terminal_size((80, 24)).columns
-        # List and sprite now sit side by side, so the list gets nearly the full
-        # height; the sprite is capped so its rows don't push the frame past the
-        # screen. ~6 lines go to fixed chrome (header, "showing", footer).
-        art_rows = min(layout.SELECT_ART_H // 2, max(6, height - 11))
-        list_h = max(6, height - 7)
+        list_h, art_h, roomy = _collection_view_budget(
+            "party", width, height, len(mons)
+        )
         sel = max(0, min(sel, len(mons) - 1)) if mons else 0
         if sel < top:
             top = sel
@@ -536,9 +554,9 @@ def _party_screen():
             top = sel - list_h + 1
         top = max(0, min(top, max(0, len(mons) - list_h)))
         runtime.draw_frame(collections_ui._party_frame(
-            s, sel, top, list_h, art_h=art_rows * 2, width=width,
+            s, sel, top, list_h, art_h=art_h, width=width,
             sort_key=sort_key, descending=descending, fav_only=fav_only,
-            query=query, search_active=search_active))
+            query=query, search_active=search_active, roomy=roomy))
         key = runtime.read_key()
         selected_id = mons[sel]["id"] if mons else None
         query, search_active, handled = layout._search_key(key, query, search_active)
@@ -624,17 +642,18 @@ def _box_screen():
             return
         height = max(12, shutil.get_terminal_size((80, 24)).lines - 1)
         width = shutil.get_terminal_size((80, 24)).columns
-        art_rows = min(layout.SELECT_ART_H // 2, max(6, height - 11))
-        list_h = max(6, height - 7)
+        list_h, art_h, roomy = _collection_view_budget(
+            "box", width, height, len(mons)
+        )
         sel = max(0, min(sel, len(mons) - 1)) if mons else 0
         if sel < top:
             top = sel
         elif sel >= top + list_h:
             top = sel - list_h + 1
         top = max(0, min(top, max(0, len(mons) - list_h)))
-        runtime.draw_frame(collections_ui._box_frame(s, sel, top, list_h, art_h=art_rows * 2, width=width,
+        runtime.draw_frame(collections_ui._box_frame(s, sel, top, list_h, art_h=art_h, width=width,
                          sort_key=sort_key, descending=descending, fav_only=fav_only,
-                         query=query, search_active=search_active))
+                         query=query, search_active=search_active, roomy=roomy))
         key = runtime.read_key()
         selected_id = mons[sel]["id"] if mons else None
         query, search_active, handled = layout._search_key(key, query, search_active)
@@ -851,7 +870,14 @@ def _encounter_screen():
             return  # resolved or expired — nothing to fight
         opts = ENCOUNTER_OPTIONS[kind]
         sel = max(0, min(sel, len(opts) - 1))
-        runtime.draw_frame(render_encounter_frame(s, kind, sel))
+        terminal = shutil.get_terminal_size((80, 24))
+        runtime.draw_frame(render_encounter_frame(
+            s,
+            kind,
+            sel,
+            width=terminal.columns,
+            height=terminal.lines,
+        ))
         key = runtime.read_key()
         if key in ("esc", "q"):
             return

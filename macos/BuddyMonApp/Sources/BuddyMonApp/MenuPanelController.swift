@@ -77,13 +77,33 @@ final class MenuPanelController: NSObject {
         let screen = panel.screen ?? anchorButton?.window?.screen ?? NSScreen.main
         guard let screen else { return nil }
         let visible = screen.visibleFrame
-        let width = BuddyMonBrand.Menu.terminalWindowWidth
-        let height = BuddyMonBrand.Menu.terminalWindowHeight
         let gap = BuddyMonBrand.Spacing.compact
+        let leftRoom = panel.frame.minX - visible.minX - (gap * 2)
+        let rightRoom = visible.maxX - panel.frame.maxX - (gap * 2)
+        let sideWidth = max(leftRoom, rightRoom)
+        let usableWidth = max(1, visible.width - (gap * 2))
+        let usableHeight = max(1, visible.height - (gap * 2))
+        let profiles = BuddyMonBrand.Menu.terminalWindowProfiles
+        let profile = profiles.first {
+            $0.width <= sideWidth && $0.height <= usableHeight
+        } ?? profiles.first {
+            $0.width <= usableWidth && $0.height <= usableHeight
+        } ?? profiles[profiles.count - 1]
+        let width = min(profile.width, usableWidth)
+        let height = min(profile.height, usableHeight)
 
         let leftX = panel.frame.minX - width - gap
         let rightX = panel.frame.maxX + gap
-        let preferredX = leftX >= visible.minX + gap ? leftX : rightX
+        let leftFits = leftX >= visible.minX + gap
+        let rightFits = rightX + width <= visible.maxX - gap
+        let preferredX: CGFloat
+        if leftFits {
+            preferredX = leftX
+        } else if rightFits {
+            preferredX = rightX
+        } else {
+            preferredX = leftRoom >= rightRoom ? leftX : rightX
+        }
         let minX = visible.minX + gap
         let maxX = max(minX, visible.maxX - width - gap)
         let x = min(max(preferredX, minX), maxX)

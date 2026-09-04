@@ -335,22 +335,26 @@ Opening or reopening the app resolves to the compact dropdown. Development
 builds stay under `.build`; `--install` explicitly replaces the copy in
 `/Applications` so Finder cannot keep launching a stale experience.
 
-Optional terminal handoffs are compact adjuncts to that surface. They request
-one roughly 760-by-520 footprint beside the open panel, clamp it to the current
-screen, and do not dismiss the panel or its state. iTerm2 and Terminal.app use
-exact scripted bounds. Ghostty starts one isolated process with its position,
-88-by-30 grid, fixed BuddyMon title, disabled saved state, and non-fullscreen
-state supplied before launch. Its initial process is the stable system shell,
-and the safely quoted menu command arrives as startup input. This keeps the
-app-bundled Python runtime out of Ghostty's file-open confirmation path. It does
-not activate or resize an existing Ghostty window, create a provisional window,
-or close a live terminal during fallback. The launcher tries another terminal
-only when Ghostty rejects the launch request before accepting a window.
+Optional terminal handoffs are roomy adjuncts to that surface when the display
+allows it. The native panel chooses among `1040-by-680`, `920-by-600`, and
+`760-by-520` footprints, preferring the largest size that fits beside the open
+panel and otherwise the largest size that fits the display. It does not dismiss
+the panel or its state. iTerm2 and Terminal.app use the selected exact bounds.
+Ghostty maps those profiles to `112-by-38`, `100-by-34`, and `88-by-30` grids,
+then starts one isolated process with its position, fixed BuddyMon title,
+disabled saved state, and non-fullscreen state supplied before launch. Its
+initial process is the stable system shell, and the safely quoted menu command
+arrives as startup input. This keeps the app-bundled Python runtime out of
+Ghostty's file-open confirmation path. It does not activate or resize an
+existing Ghostty window, create a provisional window, or close a live terminal
+during fallback. The launcher tries another terminal only when Ghostty rejects
+the launch request before accepting a window.
 
-**Why:** A best-effort size is less disruptive than a pixel-perfect handshake
-that briefly creates a second window or asks the trainer to confirm closing it.
-The isolated process also gives replacement logic a precise BuddyMon-owned
-target without touching unrelated Ghostty sessions.
+**Why:** The collection and appraisal surfaces need enough room for recognizable
+art and complete details, but a fixed large window would be disruptive on
+smaller displays. Adaptive profiles preserve the one-window handoff and give
+replacement logic a precise BuddyMon-owned target without touching unrelated
+Ghostty sessions.
 
 ## Developer previews never become trainer state
 

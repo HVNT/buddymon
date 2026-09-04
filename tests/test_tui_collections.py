@@ -1,3 +1,5 @@
+import pytest
+
 from lib import data, engine, iv, render, state, tui
 from lib import tui_collections as collections_ui
 from lib import tui_layout as layout
@@ -26,6 +28,37 @@ def test_box_frame_stays_within_terminal_width():
     s = _with_pidgeys(fresh(), 4, [1, 2, 3, 4])
     frame = collections_ui._box_frame(s, selected=2, top=0, list_height=20, width=80)
     assert all(visible_width(line) <= 80 for line in frame.splitlines())
+
+
+@pytest.mark.parametrize("width,lines", [(88, 30), (100, 34), (112, 38)])
+@pytest.mark.parametrize("kind", ["party", "box"])
+def test_collection_screen_budget_never_overflows_terminal(width, lines, kind):
+    s = fresh()
+    for index in range(32):
+        s["pokemon"].append(engine.new_pokemon(
+            "Pidgey", "Flying", "🐦", "common", level=(index % 20) + 1,
+        ))
+
+    height = lines - 1
+    list_h, art_h, roomy = tui._collection_view_budget(
+        kind, width, height, len(s["pokemon"])
+    )
+    builder = (
+        collections_ui._party_frame if kind == "party"
+        else collections_ui._box_frame
+    )
+    frame = builder(
+        s,
+        selected=0,
+        top=0,
+        list_height=list_h,
+        art_h=art_h,
+        width=width,
+        roomy=roomy,
+    )
+
+    assert len(frame.splitlines()) <= height
+    assert all(visible_width(line) <= width for line in frame.splitlines())
 
 
 def test_box_detail_reflects_the_selected_copy():

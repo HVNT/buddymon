@@ -8,15 +8,17 @@ need Homebrew, Terminal setup, Ghostty, or their own Python install.
 
 ## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> Open It
 
-Download `BuddyMon-macOS-arm64.zip` from the latest GitHub release, open it,
-move **BuddyMon.app** to Applications, and open the app. The published archive
-is self-contained, signed, and notarized.
-
-For a source build:
+BuddyMon `0.2.0` is not published as a downloadable GitHub Release yet. To try
+the current macOS app from source, clone the repository and build the local
+self-contained app:
 
 ```bash
 scripts/build-macos-app.sh --friend --install --open
 ```
+
+Published archives will use the signed and notarized release path documented in
+[Development](development.md); the README will link the downloadable archive
+only after that release exists.
 
 BuddyMon appears only in the menu bar. It does not create a Dock icon or open a
 standalone product window. Opening the app again signals the existing copy to
@@ -165,17 +167,18 @@ exact destination using the saved launcher preference. Trainer and Settings
 stay in the native panel. The terminal path keeps the compact emoji/ASCII experience and Ghostty
 PNG experience available for power users. New users never need to choose
 between “coder” and “simple” during onboarding; native is the default.
-Each handoff requests roughly the same 760-by-520 footprint, places it beside
-the current menu-bar panel when the screen has room, and leaves that panel
-visible while the terminal is in use. The origin is clamped to the panel's
-current display. iTerm2 and Terminal.app use exact scripted bounds. Ghostty
-starts one isolated 88-by-30 window with saved state, fullscreen, maximize, and
-close confirmation disabled. Its first process is the stable system shell,
-which receives the safely quoted BuddyMon command as startup input; the bundled
-Python runtime is never handed to Ghostty as a file to open. It never creates a
-provisional Ghostty window or closes one during frame verification, so a single
-handoff cannot fan out into an alert plus a second terminal. Ghostty's pixel
-dimensions may vary slightly with font metrics.
+Each handoff chooses the largest safe footprint for the current display:
+`1040-by-680`, `920-by-600`, or the compact `760-by-520` fallback. It prefers to
+sit beside the menu-bar panel and leaves that panel visible while the terminal
+is in use. The origin is clamped to the panel's current display. iTerm2 and
+Terminal.app use exact scripted bounds. Ghostty maps those footprints to
+`112-by-38`, `100-by-34`, and `88-by-30` grids with saved state, fullscreen,
+maximize, and close confirmation disabled. Its first process is the stable
+system shell, which receives the safely quoted BuddyMon command as startup
+input; the bundled Python runtime is never handed to Ghostty as a file to open.
+It never creates a provisional Ghostty window or closes one during frame
+verification, so a single handoff cannot fan out into an alert plus a second
+terminal. Ghostty's pixel dimensions may vary slightly with font metrics.
 
 ## <img src="assets/brand/icons/privacy.png" width="22" height="22" alt=""> Local and Shared
 

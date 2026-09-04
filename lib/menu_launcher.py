@@ -14,11 +14,15 @@ _BUDDYMON = Path(__file__).resolve().parent.parent / "buddymon.py"
 _GHOSTTY_APP = Path("/Applications/Ghostty.app")
 _ITERM_APP = Path("/Applications/iTerm.app")
 _GHOSTTY_TITLE = "BuddyMon Menu"
-WINDOW_WIDTH = 760
-WINDOW_HEIGHT = 520
+WINDOW_WIDTH = 1040
+WINDOW_HEIGHT = 680
 DEFAULT_WINDOW_FRAME = (80, 80, WINDOW_WIDTH, WINDOW_HEIGHT)
-GHOSTTY_WINDOW_COLUMNS = 88
-GHOSTTY_WINDOW_ROWS = 30
+ROOMY_WINDOW_SIZE = (1040, 680)
+MEDIUM_WINDOW_SIZE = (920, 600)
+COMPACT_WINDOW_SIZE = (760, 520)
+ROOMY_GHOSTTY_GRID = (112, 38)
+MEDIUM_GHOSTTY_GRID = (100, 34)
+COMPACT_GHOSTTY_GRID = (88, 30)
 _GHOSTTY_LAUNCH_TIMEOUT = 5
 
 
@@ -114,7 +118,8 @@ def _applescript_bounds(window_frame):
 
 
 def _ghostty_args(initial_screen=None, window_frame=None):
-    x, y, _, _ = normalize_window_frame(window_frame)
+    x, y, width, height = normalize_window_frame(window_frame)
+    columns, rows = ghostty_grid_for_frame(width, height)
     return [
         "open",
         "-na",
@@ -127,11 +132,20 @@ def _ghostty_args(initial_screen=None, window_frame=None):
         "--confirm-close-surface=false",
         f"--window-position-x={x}",
         f"--window-position-y={y}",
-        f"--window-width={GHOSTTY_WINDOW_COLUMNS}",
-        f"--window-height={GHOSTTY_WINDOW_ROWS}",
+        f"--window-width={columns}",
+        f"--window-height={rows}",
         "--command=/bin/zsh",
         f"--input={_ghostty_startup_input(initial_screen)}",
     ]
+
+
+def ghostty_grid_for_frame(width, height):
+    """Match a requested pixel footprint to a stable Ghostty cell profile."""
+    if width >= ROOMY_WINDOW_SIZE[0] and height >= ROOMY_WINDOW_SIZE[1]:
+        return ROOMY_GHOSTTY_GRID
+    if width >= MEDIUM_WINDOW_SIZE[0] and height >= MEDIUM_WINDOW_SIZE[1]:
+        return MEDIUM_GHOSTTY_GRID
+    return COMPACT_GHOSTTY_GRID
 
 
 def _iterm_args(initial_screen=None, window_frame=None):

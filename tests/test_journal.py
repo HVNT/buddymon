@@ -267,8 +267,8 @@ def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
         "--confirm-close-surface=false",
         "--window-position-x=80",
         "--window-position-y=80",
-        "--window-width=88",
-        "--window-height=30",
+        "--window-width=112",
+        "--window-height=38",
         "--command=/bin/zsh",
     ]:
         assert option in args
@@ -339,7 +339,7 @@ def test_open_menu_uses_iterm_when_ghostty_missing(monkeypatch):
     assert spawned and spawned[0][0] == "osascript"
     assert "iTerm" in spawned[0][2]
     assert "buddymon.py menu tokens" in spawned[0][2]
-    assert "set bounds of current window to {80, 80, 840, 600}" in spawned[0][2]
+    assert "set bounds of current window to {80, 80, 1120, 760}" in spawned[0][2]
 
 
 def test_open_menu_uses_terminal_when_ghostty_and_iterm_missing(monkeypatch):
@@ -356,7 +356,7 @@ def test_open_menu_uses_terminal_when_ghostty_and_iterm_missing(monkeypatch):
     assert any("Terminal" in part for part in spawned[0])
     assert any("buddymon.py menu tokens" in part for part in spawned[0])
     assert any(
-        "set bounds of front window to {80, 80, 840, 600}" in part
+        "set bounds of front window to {80, 80, 1120, 760}" in part
         for part in spawned[0]
     )
 
@@ -364,7 +364,7 @@ def test_open_menu_uses_terminal_when_ghostty_and_iterm_missing(monkeypatch):
 def test_open_menu_normalizes_and_uses_requested_window_frame(monkeypatch):
     from lib import menu_launcher
 
-    assert menu_launcher.normalize_window_frame() == (80, 80, 760, 520)
+    assert menu_launcher.normalize_window_frame() == (80, 80, 1040, 680)
     assert menu_launcher.normalize_window_frame("620,24,760,520") == (
         620,
         24,
@@ -392,6 +392,15 @@ def test_open_menu_normalizes_and_uses_requested_window_frame(monkeypatch):
     assert "--window-position-y=24" in args
     assert "--window-width=88" in args
     assert "--window-height=30" in args
+
+
+def test_ghostty_grid_tracks_adaptive_window_profiles():
+    from lib import menu_launcher
+
+    assert menu_launcher.ghostty_grid_for_frame(1040, 680) == (112, 38)
+    assert menu_launcher.ghostty_grid_for_frame(920, 600) == (100, 34)
+    assert menu_launcher.ghostty_grid_for_frame(760, 520) == (88, 30)
+    assert menu_launcher.ghostty_grid_for_frame(900, 680) == (88, 30)
 
 
 def test_open_menu_rejects_invalid_window_frames():

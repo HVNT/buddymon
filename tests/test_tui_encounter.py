@@ -34,6 +34,23 @@ def test_render_encounter_frame_shows_options_and_status():
     assert all(visible_width(line) <= 80 for line in frame.splitlines())
 
 
+def test_roomy_encounter_uses_more_art_without_overflow():
+    s = fresh()
+    s["pending_encounter"] = {
+        "name": "Beldum", "type": "Steel", "emoji": "⚙️", "rarity": "rare",
+        "shiny": False, "level": 20, "c": 90, "base_c": 90,
+        "angry": 0, "eating": 0, "balls_thrown": 0, "moves": 0,
+        "last_msg": "A wild Beldum appeared!",
+    }
+
+    compact = tui.render_encounter_frame(s, "safari", 0, width=88, height=30)
+    roomy = tui.render_encounter_frame(s, "safari", 0, width=112, height=38)
+
+    assert len(roomy.splitlines()) > len(compact.splitlines())
+    assert len(roomy.splitlines()) <= 38
+    assert all(visible_width(line) <= 112 for line in roomy.splitlines())
+
+
 def test_finished_encounter_screen_does_not_require_second_key(monkeypatch):
     s = fresh()
     s["pending_battle"] = battle.start({

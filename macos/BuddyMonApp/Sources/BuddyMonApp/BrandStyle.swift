@@ -552,8 +552,31 @@ enum BuddyMonBrand {
         static let compactProgressHeight: CGFloat = 6
         static let tokenDailyPulseHeight: CGFloat = 52
         static let tokenHeaderWidth: CGFloat = 164
-        static let terminalWindowWidth: CGFloat = 760
-        static let terminalWindowHeight: CGFloat = 520
+        struct TerminalWindowProfile {
+            let width: CGFloat
+            let height: CGFloat
+        }
+
+        static let terminalWindowWidth: CGFloat = 1040
+        static let terminalWindowHeight: CGFloat = 680
+        static let terminalMediumWindowWidth: CGFloat = 920
+        static let terminalMediumWindowHeight: CGFloat = 600
+        static let terminalCompactWindowWidth: CGFloat = 760
+        static let terminalCompactWindowHeight: CGFloat = 520
+        static let terminalWindowProfiles = [
+            TerminalWindowProfile(
+                width: terminalWindowWidth,
+                height: terminalWindowHeight
+            ),
+            TerminalWindowProfile(
+                width: terminalMediumWindowWidth,
+                height: terminalMediumWindowHeight
+            ),
+            TerminalWindowProfile(
+                width: terminalCompactWindowWidth,
+                height: terminalCompactWindowHeight
+            ),
+        ]
         static let fieldGuideFrameInset: CGFloat = 8
         static let trainerCardWidth: CGFloat = 288
         static let trainerCardHeight: CGFloat = 192

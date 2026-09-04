@@ -46,6 +46,13 @@ def test_encounter_sprite_lines_use_fixed_portrait_box_roster(monkeypatch):
     assert all(visible_width(line) == layout.ENCOUNTER_ART_W for line in lines)
 
 
+def test_roomy_terminal_unlocks_larger_sprite_budgets():
+    assert layout.encounter_art_size(88, 30) == (28, 24)
+    assert layout.encounter_art_size(100, 34) == (36, 30)
+    assert layout.select_art_size(88, 30) == (36, 32)
+    assert layout.select_art_size(112, 38) == (44, 40)
+
+
 def test_sprite_card_centers_visible_pixels_not_source_padding(monkeypatch):
     def off_center_frame(_name, _ptype="Normal", _shiny=False):
         return [([

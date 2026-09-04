@@ -14,12 +14,18 @@ ENCOUNTER_ART_W = 28
 ENCOUNTER_ART_H = 24
 SELECT_ART_W = 36
 SELECT_ART_H = 32
+ROOMY_ENCOUNTER_ART_W = 36
+ROOMY_ENCOUNTER_ART_H = 30
+ROOMY_SELECT_ART_W = 44
+ROOMY_SELECT_ART_H = 40
 SELECT_CARD_WIDTH_FACTOR = 3
 SELECT_CARD_HEIGHT_FACTOR = 2
 SELECT_POKEMON_MAX_COLS = 14
 SELECT_POKEMON_MAX_ROWS = 7
 SELECT_CARD_INNER_W = SELECT_POKEMON_MAX_COLS * SELECT_CARD_WIDTH_FACTOR
 SELECT_CARD_INNER_ROWS = SELECT_POKEMON_MAX_ROWS * SELECT_CARD_HEIGHT_FACTOR
+ROOMY_SELECT_POKEMON_MAX_COLS = 18
+ROOMY_SELECT_POKEMON_MAX_ROWS = 9
 SHOWCASE_CARD_INNER_W = 30
 SHOWCASE_CARD_BODY_ROWS = 10
 SHOWCASE_CARD_W = SHOWCASE_CARD_INNER_W + 4
@@ -63,6 +69,24 @@ DEX_CHROME = 8
 FALLBACK_BOX_PX = 768
 PREVIEW_TARGET_PX = 210
 MIN_IMAGE_COLS = 6
+ROOMY_MIN_COLUMNS = 100
+ROOMY_MIN_ROWS = 34
+
+
+def roomy_terminal(width, height):
+    return width >= ROOMY_MIN_COLUMNS and height >= ROOMY_MIN_ROWS
+
+
+def encounter_art_size(width, height):
+    if roomy_terminal(width, height):
+        return ROOMY_ENCOUNTER_ART_W, ROOMY_ENCOUNTER_ART_H
+    return ENCOUNTER_ART_W, ENCOUNTER_ART_H
+
+
+def select_art_size(width, height):
+    if roomy_terminal(width, height):
+        return ROOMY_SELECT_ART_W, ROOMY_SELECT_ART_H
+    return SELECT_ART_W, SELECT_ART_H
 
 
 def _header(title):
@@ -456,13 +480,23 @@ def _crop_grid_to_content(grid, palette):
     return [row[left:right] for row in grid[top:bottom]]
 
 
-def _sprite_card_geometry(max_h):
+def _sprite_card_geometry(max_h, roomy=False):
     requested_h = max_h if max_h % 2 == 0 else max_h + 1
     requested_rows = max(1, requested_h // 2)
-    inner_rows = max(4, min(SELECT_CARD_INNER_ROWS, requested_rows))
-    sprite_rows = max(1, min(SELECT_POKEMON_MAX_ROWS,
+    max_inner_rows = (
+        ROOMY_SELECT_POKEMON_MAX_ROWS * SELECT_CARD_HEIGHT_FACTOR
+        if roomy else SELECT_CARD_INNER_ROWS
+    )
+    max_sprite_cols = (
+        ROOMY_SELECT_POKEMON_MAX_COLS if roomy else SELECT_POKEMON_MAX_COLS
+    )
+    max_sprite_rows = (
+        ROOMY_SELECT_POKEMON_MAX_ROWS if roomy else SELECT_POKEMON_MAX_ROWS
+    )
+    inner_rows = max(4, min(max_inner_rows, requested_rows))
+    sprite_rows = max(1, min(max_sprite_rows,
                              max(1, inner_rows // SELECT_CARD_HEIGHT_FACTOR)))
-    return SELECT_CARD_INNER_W, inner_rows, SELECT_POKEMON_MAX_COLS, sprite_rows
+    return SELECT_CARD_INNER_W, inner_rows, max_sprite_cols, sprite_rows
 
 
 def _sprite_card_body(art, art_w, art_rows, inner_w, inner_rows):
@@ -512,13 +546,13 @@ def _sprite_lines(pokemon, max_h=SELECT_ART_H, silhouette=False):
     return pixels.render_scaled(grid, palette, SELECT_ART_W, max_h)
 
 
-def _sprite_card_lines(pokemon, max_h=SELECT_ART_H):
+def _sprite_card_lines(pokemon, max_h=SELECT_ART_H, roomy=False):
     """Framed preview for selected Pokemon detail panels. Keep the frame ASCII
     and ANSI-free so inline image markers still resolve to the correct columns."""
     grid, palette = packs.gen5_frames(
         pokemon["name"], pokemon.get("type", "Normal"), pokemon.get("shiny"))[0]
     grid = _crop_grid_to_content(grid, palette)
-    inner_w, inner_rows, sprite_w, sprite_rows = _sprite_card_geometry(max_h)
+    inner_w, inner_rows, sprite_w, sprite_rows = _sprite_card_geometry(max_h, roomy)
     if runtime.graphics_enabled():
         img_idx = runtime.image_count()
         art = _image_block(grid, palette, sprite_w, sprite_rows)
@@ -585,13 +619,13 @@ def _appraisal_lines(appraisal, inner_w):
 
 
 def _pokemon_detail_card_lines(pokemon, active_id, art_h=SELECT_ART_H, caught_line=None,
-                               show_iv=False):
+                               show_iv=False, roomy=False):
     """Full right-side Party/Box detail card: centered sprite plus attached
     metadata. The card owns the border so details do not float below the art."""
     grid, palette = packs.gen5_frames(
         pokemon["name"], pokemon.get("type", "Normal"), pokemon.get("shiny"))[0]
     grid = _crop_grid_to_content(grid, palette)
-    inner_w, inner_rows, sprite_w, sprite_rows = _sprite_card_geometry(art_h)
+    inner_w, inner_rows, sprite_w, sprite_rows = _sprite_card_geometry(art_h, roomy)
     if runtime.graphics_enabled():
         img_idx = runtime.image_count()
         art = _image_block(grid, palette, sprite_w, sprite_rows)
@@ -644,18 +678,19 @@ def _sprite_card_content_offset(lines):
     return min(xs), min(ys), max(xs) + 1, max(ys) + 1
 
 
-def _encounter_sprite_lines(pokemon):
+def _encounter_sprite_lines(pokemon, art_w=ENCOUNTER_ART_W, art_h=ENCOUNTER_ART_H):
     grid, palette = packs.gen5_frames(
         pokemon["name"], pokemon.get("type", "Normal"), pokemon.get("shiny"))[0]
     if runtime.graphics_enabled():
-        return _image_block(grid, palette, ENCOUNTER_ART_W, ENCOUNTER_ART_H // 2)
-    return pixels.render_scaled(grid, palette, ENCOUNTER_ART_W, ENCOUNTER_ART_H,
-                                pad_to=(ENCOUNTER_ART_W, ENCOUNTER_ART_H))
+        return _image_block(grid, palette, art_w, art_h // 2)
+    return pixels.render_scaled(grid, palette, art_w, art_h,
+                                pad_to=(art_w, art_h))
 
 
-def _paired_encounter_sprite_lines(left_pokemon, right_pokemon, width=31):
-    left = _encounter_sprite_lines(left_pokemon)
-    right = _encounter_sprite_lines(right_pokemon)
+def _paired_encounter_sprite_lines(left_pokemon, right_pokemon, width=31,
+                                   art_w=ENCOUNTER_ART_W, art_h=ENCOUNTER_ART_H):
+    left = _encounter_sprite_lines(left_pokemon, art_w, art_h)
+    right = _encounter_sprite_lines(right_pokemon, art_w, art_h)
     return [
         _pair_line(left_line, right_line, width=width)
         for left_line, right_line in zip(left, right)

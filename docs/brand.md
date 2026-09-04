@@ -11,6 +11,13 @@ This contract governs the native macOS shell. Terminal, statusline, and
 SwiftBar surfaces follow the same semantic color restraint and product voice,
 but do not import AppKit tokens.
 
+Terminal handoffs use one of three brand-owned footprints: roomy
+`1040-by-680` with a `112-by-38` Ghostty grid, medium `920-by-600` with a
+`100-by-34` grid, or compact `760-by-520` with an `88-by-30` grid. The native
+panel chooses the largest profile that fits the current display. Roomy terminal
+layouts may use larger encounter and collection sprites; compact layouts keep
+their original art budget, and content must never overflow the chosen grid.
+
 `BrandStylesPreview.swift` is the living, scrollable reference for shared
 components. Product-specific shipping components use dedicated state harnesses;
 the compact dropdown is covered by `MenuPanelStateHarnessView.swift`.

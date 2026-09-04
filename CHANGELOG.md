@@ -5,6 +5,10 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+- Enlarged terminal handoffs with adaptive roomy, medium, and compact window
+  profiles. Displays that have room now open a 112-by-38 Ghostty grid with
+  larger encounter and collection art, while constrained displays retain a
+  safe compact layout and every Box appraisal stays inside the terminal.
 - Fixed compact encounter input so rapid clicks cannot overlap moves or replace
   a catch/flee result with the empty encounter screen. Every move now shows
   immediate pending copy, continuing encounters keep focus on the chosen move,

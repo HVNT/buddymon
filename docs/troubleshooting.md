@@ -170,14 +170,15 @@ python3 buddymon.py open-menu settings --launcher terminal
 
 Then choose a permanent **Menu launcher** in native Settings.
 
-Terminal handoffs request roughly a 760-by-520 footprint beside the open
-BuddyMon panel. Ghostty receives one direct isolated-window request with an
-88-by-30 grid, a fixed BuddyMon title, and saved-state/fullscreen behavior
+Terminal handoffs choose among `1040-by-680`, `920-by-600`, and `760-by-520`
+footprints based on the current display. Ghostty maps them to `112-by-38`,
+`100-by-34`, and `88-by-30` grids and receives one direct isolated-window
+request with a fixed BuddyMon title and saved-state/fullscreen behavior
 disabled. That window starts the system shell and safely injects BuddyMon as its
 startup command, so Ghostty does not treat the bundled Python runtime as a file
 that needs confirmation. It does not need Accessibility access, create a
 provisional window, or close a live window before falling back. iTerm2 and
-Terminal.app apply exact bounds through their own scripting APIs.
+Terminal.app apply the selected exact bounds through their own scripting APIs.
 
 ## SwiftBar opens extra terminal windows
 
