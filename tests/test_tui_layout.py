@@ -144,7 +144,6 @@ def test_box_detail_card_fits_longest_name_level_shiny_and_perfect_iv():
         "xp": 0,
         "next_xp": 100,
         "shiny": True,
-        "gender": "male",
     }
 
     card = layout._pokemon_detail_card_lines(

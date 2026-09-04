@@ -31,7 +31,7 @@ def _stars_for_total(total):
 
 def appraise(pokemon_id: str) -> Appraisal:
     """Return stable Pokemon GO-style 0-15 values for one caught copy."""
-    if not isinstance(pokemon_id, str) or not pokemon_id:
+    if not isinstance(pokemon_id, str) or not pokemon_id.strip():
         raise ValueError("pokemon_id must be non-empty text")
 
     digest = hashlib.sha256(_IV_NAMESPACE + pokemon_id.encode()).digest()

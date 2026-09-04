@@ -35,7 +35,7 @@ def test_star_thresholds(total, stars):
     assert iv._stars_for_total(total) == stars
 
 
-@pytest.mark.parametrize("pokemon_id", ["", None, 42])
+@pytest.mark.parametrize("pokemon_id", ["", "   ", None, 42])
 def test_appraise_rejects_invalid_ids(pokemon_id):
     with pytest.raises(ValueError, match="pokemon_id"):
         iv.appraise(pokemon_id)
@@ -49,10 +49,16 @@ def test_appraisal_is_derived_without_mutating_persisted_state():
     before = {**pokemon}
 
     first = iv.appraise(pokemon["id"])
-    pokemon.update(name="Pikachu", type="Electric", level=1, shiny=True)
-    second = iv.appraise(pokemon["id"])
+    assert pokemon == before
+    changed = {
+        **pokemon,
+        "name": "Pikachu",
+        "type": "Electric",
+        "level": 1,
+        "shiny": True,
+    }
+    second = iv.appraise(changed["id"])
 
     assert first == second
-    assert set(before) == set(pokemon)
     assert "iv" not in pokemon
     assert game_state["version"] == state.STATE_VERSION == 5

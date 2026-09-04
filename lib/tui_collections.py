@@ -331,6 +331,7 @@ def _sort_pokemon(mons, sort_key, descending):
             return (-caught if descending else caught, *name_key(p))
         return sorted(mons, key=key)
     if sort_key == "iv":
+        # IV is the only field whose default presentation is highest-first.
         def key(p):
             total = iv.appraise(p["id"]).total
             caught = p.get("caught_at", 0)
