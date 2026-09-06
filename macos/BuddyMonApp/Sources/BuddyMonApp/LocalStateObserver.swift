@@ -14,6 +14,8 @@ final class LocalStateObserver {
     private var source: DispatchSourceFileSystemObject?
     private var pendingChangeCheck: DispatchWorkItem?
     private var lastSignature: FileSignature?
+    private var candidateSignature: FileSignature?
+    private var hasCandidateSignature = false
     private var changeHandler: (() -> Void)?
 
     init(
@@ -45,6 +47,8 @@ final class LocalStateObserver {
         guard descriptor >= 0 else { return false }
 
         lastSignature = currentSignature()
+        candidateSignature = nil
+        hasCandidateSignature = false
         changeHandler = onChange
 
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -70,6 +74,8 @@ final class LocalStateObserver {
         source = nil
         changeHandler = nil
         lastSignature = nil
+        candidateSignature = nil
+        hasCandidateSignature = false
     }
 
     private func scheduleChangeCheck() {
@@ -87,7 +93,19 @@ final class LocalStateObserver {
     private func emitIfStateChanged() {
         pendingChangeCheck = nil
         let signature = currentSignature()
-        guard signature != lastSignature else { return }
+        guard signature != lastSignature else {
+            candidateSignature = nil
+            hasCandidateSignature = false
+            return
+        }
+        guard hasCandidateSignature, signature == candidateSignature else {
+            candidateSignature = signature
+            hasCandidateSignature = true
+            scheduleChangeCheck()
+            return
+        }
+        candidateSignature = nil
+        hasCandidateSignature = false
         lastSignature = signature
         changeHandler?()
     }

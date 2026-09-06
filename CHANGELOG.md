@@ -15,6 +15,8 @@ git tags and matching plugin metadata versions.
   and repeated response text replays a Reduce Motion-aware dialogue cue. The
   root waiting-encounter row now keeps its sprite inside a dedicated leading
   column so the shortcut and label remain visible.
+- Stabilized native state observation across atomic saves so a burst of file
+  system notifications produces one refresh after the final state is settled.
 
 ## [0.2.0] - unreleased
 
