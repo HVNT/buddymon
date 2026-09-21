@@ -111,7 +111,7 @@ def _party_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width
     if mons:
         p = mons[selected]
         panel = [
-            *_pokemon_detail_card_lines(p, active, art_h, roomy=roomy),
+            *_pokemon_detail_card_lines(p, active, art_h, show_iv=True, roomy=roomy),
             _detail_action_line(p, active),
         ]
     if width >= _detail_two_col_min_width(PARTY_LIST_W):
@@ -161,7 +161,7 @@ def _box_frame(s, selected, top=0, list_height=None, art_h=SELECT_ART_H, width=8
     else:
         scope = (
             f"{box.total_copies(caught)} caught · {species} species · "
-            f"by {_box_sort_label(sort_key, descending)}"
+            f"by {_box_sort_label(sort_key, descending)} · s next · r reverse"
         )
     status = f"  {DIM}{scope} · {_search_status(query, search_active)}{RESET}"
     lines = ["", _header("box"),

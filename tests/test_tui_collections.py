@@ -75,7 +75,7 @@ def test_box_detail_reflects_the_selected_copy():
     assert "selected" not in frame
 
 
-def test_box_detail_shows_copy_appraisal_but_party_does_not():
+def test_party_and_box_detail_show_copy_appraisal():
     s = fresh()
     pokemon = state.active_pokemon(s)
     appraisal = iv.appraise(pokemon["id"])
@@ -86,8 +86,9 @@ def test_box_detail_shows_copy_appraisal_but_party_does_not():
     assert f"IV {appraisal.percent:>3}%" in box_frame
     assert f"TOTAL {appraisal.total:>2}/45" in box_frame
     assert "ATK " in box_frame and "DEF " in box_frame and "HP  " in box_frame
-    assert "IV " not in party_frame
-    assert "ATK " not in party_frame
+    assert f"IV {appraisal.percent:>3}%" in party_frame
+    assert f"TOTAL {appraisal.total:>2}/45" in party_frame
+    assert "ATK " in party_frame and "DEF " in party_frame and "HP  " in party_frame
 
 
 def test_box_narrow_terminal_stacks_without_overflow():
@@ -344,6 +345,30 @@ def test_box_activation_uses_selected_id_with_fresh_state(
     )
     tui.favorites.set_favorite(selected, True)
     assert state.load() == expected["state"]
+
+
+@pytest.mark.parametrize("sort_key", ["s", "r"])
+def test_box_sort_starts_at_the_first_result(tmp_path, monkeypatch, sort_key):
+    initial = fresh()
+    for index in range(24):
+        initial["pokemon"].append(engine.new_pokemon(
+            f"Mon{index:02d}", "Normal", "•", "common", level=1,
+        ))
+    _use_temp_state(monkeypatch, tmp_path, initial)
+    keys = ["end", sort_key, "q"]
+    frames = []
+
+    monkeypatch.setattr(runtime, "draw_frame", frames.append)
+    monkeypatch.setattr(runtime, "read_key", lambda: keys.pop(0))
+
+    tui._box_screen()
+
+    assert keys == []
+    sorted_frame = ANSI_RE.sub("", frames[-1])
+    lines = sorted_frame.splitlines()
+    header = next(index for index, line in enumerate(lines) if "Name" in line)
+    assert "▶" in lines[header + 1]
+    assert "showing 1-" in sorted_frame
 
 
 def test_party_inactive_action_hint_sits_outside_detail_card():

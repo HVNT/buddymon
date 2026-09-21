@@ -27,6 +27,9 @@ git tags and matching plugin metadata versions.
   percentage, and star tier derived from its existing id. Box sorting and
   structured searches (`iv:82`, `stars:3`, `atk:13`, `def:9`, `hp:15`, and
   `perfect`) use the same values without changing saved state or gameplay.
+  Sorting or reversing returns the Box to its first result, and its header now
+  names the active order with the sort and reverse controls.
+- Added the selected Pokémon's IV appraisal to terminal Party details.
 - Added BuddyMon's original mint Signal Buddy identity across the primary
   lockup, semantic documentation icons, and close-up Signal Tile macOS app
   icon. README imagery now combines reproducible shipping-native captures, a

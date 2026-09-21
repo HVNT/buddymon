@@ -208,7 +208,8 @@ def _collection_view_budget(kind, width, height, item_count):
     list_h = max(6, height - (9 if kind == "party" else 8))
     showing = item_count > list_h
     outer_chrome = 7 if showing else 6
-    detail_chrome = 6 if kind == "party" else 13
+    # Party and Box both show the selected copy's full IV appraisal.
+    detail_chrome = 13
     max_inner_rows = max(4, height - outer_chrome - detail_chrome)
     art_h = min(max_art_h // 2, max_inner_rows) * 2
     return list_h, art_h, layout.roomy_terminal(width, height)
@@ -693,19 +694,19 @@ def _box_screen():
         elif key == "f" and mons:
             _mutate_fresh_state(_toggle_favorite, mons[sel]["id"])
         elif key == "s":
-            selected_id = mons[sel]["id"] if mons else None
             sort_key = layout._next_box_sort(sort_key)
             mons = collections_ui._box_roster(s, sort_key, descending, fav_only=fav_only)
             if query:
                 mons = layout._filter_pokemon_query(mons, query, include_iv=True)
-            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+            sel = 0
+            top = 0
         elif key == "r":
-            selected_id = mons[sel]["id"] if mons else None
             descending = not descending
             mons = collections_ui._box_roster(s, sort_key, descending, fav_only=fav_only)
             if query:
                 mons = layout._filter_pokemon_query(mons, query, include_iv=True)
-            sel = next((i for i, p in enumerate(mons) if p["id"] == selected_id), 0)
+            sel = 0
+            top = 0
         elif key == "enter" and mons:
             cid = mons[sel]["id"]  # activate THIS specific copy
             _mutate_fresh_state(_activate_pokemon_copy, cid)

@@ -232,7 +232,7 @@ def _pokemon_query_values(pokemon, include_iv=False):
             f"def:{appraisal.defense}",
             f"hp:{appraisal.hp}",
         ]
-        if appraisal.total == 45:
+        if appraisal.is_perfect:
             values.append("perfect")
     return values
 
@@ -593,14 +593,14 @@ def _detail_title(pokemon):
 
 
 def _iv_bar(value):
-    cells = "#" * value + "-" * (15 - value)
-    return "|".join(cells[index:index + 5] for index in range(0, 15, 5))
+    cells = "#" * value + "-" * (iv.STAT_MAX - value)
+    return "|".join(cells[index:index + 5] for index in range(0, iv.STAT_MAX, 5))
 
 
 def _appraisal_lines(appraisal, inner_w):
-    marks = "*" * appraisal.stars + "-" * (4 - appraisal.stars)
+    marks = "*" * appraisal.stars + "-" * (iv.STAR_MAX - appraisal.stars)
     left = f"IV {appraisal.percent:>3}%"
-    middle = f"TOTAL {appraisal.total:>2}/45"
+    middle = f"TOTAL {appraisal.total:>2}/{iv.TOTAL_MAX}"
     right = f"[{marks}]"
     score = f"{left:<12}{middle:^18}{right:>12}"
     return [

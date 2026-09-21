@@ -16,12 +16,12 @@ def test_appraise_has_stable_hash_vectors(pokemon_id, expected):
 def test_appraisal_values_stay_in_pokemon_go_bounds():
     for index in range(10_000):
         appraisal = iv.appraise(f"copy-{index}")
-        assert 0 <= appraisal.attack <= 15
-        assert 0 <= appraisal.defense <= 15
-        assert 0 <= appraisal.hp <= 15
+        assert 0 <= appraisal.attack <= iv.STAT_MAX
+        assert 0 <= appraisal.defense <= iv.STAT_MAX
+        assert 0 <= appraisal.hp <= iv.STAT_MAX
         assert appraisal.total == appraisal.attack + appraisal.defense + appraisal.hp
-        assert appraisal.percent == (appraisal.total * 100 + 22) // 45
-        assert 0 <= appraisal.stars <= 4
+        assert appraisal.percent == iv._percent_for_total(appraisal.total)
+        assert 0 <= appraisal.stars <= iv.STAR_MAX
 
 
 @pytest.mark.parametrize(("total", "stars"), [
@@ -33,6 +33,14 @@ def test_appraisal_values_stay_in_pokemon_go_bounds():
 ])
 def test_star_thresholds(total, stars):
     assert iv._stars_for_total(total) == stars
+
+
+def test_perfect_appraisal_uses_the_total_limit():
+    perfect = iv.appraise("perfect-16325")
+
+    assert perfect.total == iv.TOTAL_MAX
+    assert perfect.is_perfect
+    assert not iv.appraise("copy-001").is_perfect
 
 
 @pytest.mark.parametrize("pokemon_id", ["", "   ", None, 42])

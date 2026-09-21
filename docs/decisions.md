@@ -240,9 +240,9 @@ Exact values live in the game data and engine.
 ## Individual values are collectible-only
 
 **Decision:** Give every caught copy stable 0–15 Attack, Defense, and HP values
-derived from its immutable id. Show, sort, and search those appraisals only in
-the terminal Box; do not persist them or use them for catch odds, XP, leveling,
-evolution, or battle.
+derived from its immutable id. Show those appraisals in terminal Party and Box,
+but sort and search them only in Box; do not persist them or use them for catch
+odds, XP, leveling, evolution, or battle.
 
 **Why:** Per-copy variation makes duplicate catches worth inspecting without a
 state migration or a hidden balance change. Deriving the values from an id and
@@ -342,10 +342,10 @@ panel and otherwise the largest size that fits the display. It does not dismiss
 the panel or its state. iTerm2 and Terminal.app use the selected exact bounds.
 Ghostty maps those profiles to `112-by-38`, `100-by-34`, and `88-by-30` grids,
 then starts one isolated process with its position, fixed BuddyMon title,
-disabled saved state, and non-fullscreen state supplied before launch. Its
-initial process is the stable system shell, and the safely quoted menu command
-arrives as startup input. This keeps the app-bundled Python runtime out of
-Ghostty's file-open confirmation path. It does not activate or resize an
+disabled saved state, and non-fullscreen state supplied before launch. It starts
+a clean `zsh -df` and sends the safely quoted menu command as startup input.
+That skips user shell-startup prompts while keeping the app-bundled Python
+runtime out of Ghostty's file-open confirmation path. It does not activate or resize an
 existing Ghostty window, create a provisional window, or close a live terminal
 during fallback. The launcher tries another terminal only when Ghostty rejects
 the launch request before accepting a window.
