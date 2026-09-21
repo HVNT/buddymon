@@ -173,9 +173,9 @@ sit beside the menu-bar panel and leaves that panel visible while the terminal
 is in use. The origin is clamped to the panel's current display. iTerm2 and
 Terminal.app use exact scripted bounds. Ghostty maps those footprints to
 `112-by-38`, `100-by-34`, and `88-by-30` grids with saved state, fullscreen,
-maximize, and close confirmation disabled. Its first process is the stable
-system shell, which receives the safely quoted BuddyMon command as startup
-input; the bundled Python runtime is never handed to Ghostty as a file to open.
+maximize, and close confirmation disabled. It starts a clean `zsh -df`, which
+receives the safely quoted BuddyMon menu as startup input without user shell
+prompts; the bundled Python runtime is never handed to Ghostty as a file to open.
 It never creates a provisional Ghostty window or closes one during frame
 verification, so a single handoff cannot fan out into an alert plus a second
 terminal. Ghostty's pixel dimensions may vary slightly with font metrics.

@@ -134,7 +134,7 @@ def _ghostty_args(initial_screen=None, window_frame=None):
         f"--window-position-y={y}",
         f"--window-width={columns}",
         f"--window-height={rows}",
-        "--command=/bin/zsh",
+        "--command=direct:/bin/zsh -df",
         f"--input={_ghostty_startup_input(initial_screen)}",
     ]
 

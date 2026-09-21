@@ -225,9 +225,9 @@ def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
     buddy_script = menu_launcher._BUDDYMON
     ps = "\n".join([
         "  101 /Applications/Ghostty.app/Contents/MacOS/ghostty",
-        f"  202 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 {buddy_script} menu\\n",
+        f"  202 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=direct:/bin/zsh -df --input=raw:exec /usr/bin/python3 {buddy_script} menu\\n",
         f"  203 /Applications/Ghostty.app/Contents/MacOS/ghostty --window-width=88 --window-height=30 -e /usr/bin/python3 {buddy_script} menu tokens",
-        "  303 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh --input=raw:exec /usr/bin/python3 /tmp/other/buddymon.py menu\\n",
+        "  303 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=direct:/bin/zsh -df --input=raw:exec /usr/bin/python3 /tmp/other/buddymon.py menu\\n",
         "  404 /Applications/Ghostty.app/Contents/MacOS/ghostty --command=/bin/zsh",
     ])
     monkeypatch.setattr(menu_launcher, "_ghostty_available", lambda: True)
@@ -269,7 +269,7 @@ def test_open_menu_prefers_ghostty_and_replaces_owned_menu(monkeypatch):
         "--window-position-y=80",
         "--window-width=112",
         "--window-height=38",
-        "--command=/bin/zsh",
+        "--command=direct:/bin/zsh -df",
     ]:
         assert option in args
     assert "-e" not in args
@@ -298,7 +298,7 @@ def test_open_showcase_menu_uses_targeted_ghostty_window(monkeypatch):
     assert len(spawned) == 1
     args = spawned[0]
     assert args[:3] == ["open", "-na", "Ghostty.app"]
-    assert "--command=/bin/zsh" in args
+    assert "--command=direct:/bin/zsh -df" in args
     assert (
         f"--input=raw:exec {menu_launcher._run_text('showcase')}\\n"
         in args
@@ -425,7 +425,7 @@ def test_ghostty_launch_never_creates_a_provisional_applescript_window():
     assert "osascript" not in args
     assert "--window-save-state=never" in args
     assert "--confirm-close-surface=false" in args
-    assert "--command=/bin/zsh" in args
+    assert "--command=direct:/bin/zsh -df" in args
     assert (
         f"--input=raw:exec {menu_launcher._run_text('party')}\\n"
         in args

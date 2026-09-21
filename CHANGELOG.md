@@ -30,6 +30,8 @@ git tags and matching plugin metadata versions.
   Sorting or reversing returns the Box to its first result, and its header now
   names the active order with the sort and reverse controls.
 - Added the selected Pokémon's IV appraisal to terminal Party details.
+- Made Ghostty terminal handoffs use clean `zsh -df`, preventing a user shell
+  startup prompt from swallowing the requested terminal screen.
 - Added BuddyMon's original mint Signal Buddy identity across the primary
   lockup, semantic documentation icons, and close-up Signal Tile macOS app
   icon. README imagery now combines reproducible shipping-native captures, a
