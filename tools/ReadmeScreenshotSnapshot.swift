@@ -44,8 +44,19 @@ struct ReadmeScreenshotSnapshot {
                     action: #selector(ReadmeScreenshotTarget.noop(_:)),
                     backAction: #selector(ReadmeScreenshotTarget.noop(_:))
                 )
+                if let action = payload["capture_action"] as? String {
+                    encounter.beginAction(action)
+                }
                 view = encounter
                 size = encounter.preferredSize
+            case "result":
+                let result = BuddyMonCompactEncounterResultView(
+                    result: payload,
+                    target: target,
+                    doneAction: #selector(ReadmeScreenshotTarget.noop(_:))
+                )
+                view = result
+                size = result.preferredSize
             case "trainer":
                 let trainer = BuddyMonCompactTrainerView(
                     view: payload,

@@ -8,29 +8,34 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/buddymon-main.png" width="608" alt="BuddyMon's macOS menu showing a shiny Mewtwo buddy, XP progress, and a recent Rayquaza catch">
+  <img src="docs/screenshots/menu-bar-open.png" width="384" alt="Shiny Mewtwo in the real macOS menu bar with BuddyMon's compact panel open below it">
 </p>
 
 <p align="center">
-  <sub>The everyday menu-bar view: your buddy, progress, latest catch, and next action.</sub>
+  <sub>A shiny Mewtwo in your menu bar. One click opens your buddy, progress, and latest catch. Captured with demo state.</sub>
 </p>
 
 ## <img src="docs/assets/brand/icons/setup.png" width="24" height="24" alt=""> Start Playing
 
 ### macOS menu-bar app
 
-BuddyMon collects new **Claude Code, Codex CLI, and Auggie** activity while the
-app is open. No plugin is needed. Gemini CLI is supported for token reporting
-only.
+Keep BuddyMon open while you use **Claude Code**, **Codex CLI**, or **Auggie**.
+Your new activity earns progress automatically. No plugin needed.
 
-The Mac app requires **macOS 13 or newer**. The universal build includes Apple
-Silicon and Intel support, and the self-contained app includes its own Python.
-BuddyMon `0.2.0` is still unreleased, so there is no downloadable GitHub Release
-yet. The public DMG will be linked here after final release checks pass.
+- **macOS 13+** on Apple Silicon or Intel.
+- **Python included** in the self-contained app.
+- **Pokémon artwork downloads automatically** on first launch.
 
-For now, build from source. The build needs Git, Python 3, Apple's Swift compiler
-and macOS SDK (from Xcode or Command Line Tools), and an internet connection to
-prepare the bundled runtime:
+**Release status:** `0.2.0` is unreleased; there is no downloadable GitHub Release
+yet. The DMG will be linked here after final checks.
+
+#### Build from source
+
+Until the download is available, you'll need:
+
+- Git and Python 3
+- Xcode or Command Line Tools, including Swift and the macOS SDK
+- Internet access for the bundled runtime and artwork
 
 ```bash
 git clone https://github.com/HVNT/buddymon.git ~/buddymon
@@ -38,19 +43,17 @@ cd ~/buddymon
 scripts/build-macos-app.sh --friend --install --open
 ```
 
-This builds for the current Mac and installs the app in Applications. See
-[Development](docs/development.md) for universal builds and packaging.
+This installs BuddyMon in **Applications** for your current Mac.
+[Universal builds and packaging →](docs/development.md)
 
-BuddyMon lives in the menu bar with no Dock icon or account. On first launch:
+#### First launch
 
-1. Click the menu-bar buddy and choose a starter.
-2. Start playing immediately. Pokémon artwork downloads automatically and
-   appears as it arrives—no artwork command is required.
-3. Use Claude Code, Codex CLI, or Auggie while BuddyMon is open to earn progress.
+1. **Choose a buddy.** Click BuddyMon in the menu bar; there's no Dock icon.
+2. **Start playing.** Artwork appears as it downloads. No setup command needed.
+3. **Keep coding.** Leave BuddyMon open to collect new activity.
 
-If artwork downloading stops, choose **Retry** in the app. Completed artwork
-stays saved, and reopening the app resumes unfinished downloads. Returning
-trainers open directly to their buddy.
+**Download interrupted?** Click **Retry**, or reopen BuddyMon. Completed artwork
+and your progress stay saved.
 
 ### Optional Claude Code plugin
 
@@ -81,6 +84,19 @@ invokes `python3`, so Python 3 must be available on `PATH` before Claude starts.
 
 <p align="center">
   <sub>Encounters and their results stay inside the compact native panel.</sub>
+</p>
+
+## <img src="docs/assets/brand/icons/native-app.png" width="24" height="24" alt=""> Your Trainer Card
+
+Your collection, coding streak, shinies, and earned badges—all on one card.
+Select a badge to see what you've unlocked.
+
+<p align="center">
+  <img src="docs/screenshots/trainer-card.png" width="608" alt="BuddyMon Trainer Card with Trainer Red, collection totals, a 42-day streak, two shinies, and earned badges">
+</p>
+
+<p align="center">
+  <sub>The native Trainer Card, captured with demo progress and downloaded Trainer Red artwork.</sub>
 </p>
 
 ## <img src="docs/assets/brand/icons/collection.png" width="24" height="24" alt=""> A Collection Worth Opening

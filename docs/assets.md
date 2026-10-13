@@ -21,6 +21,18 @@ deterministic demo state. The Showcase image uses the shipping local PNG
 exporter with the same kind of demo collection; it is an export, not a native
 panel or a player's personal save.
 
+Add `--menu-bar` to capture a temporary real macOS status item and open panel
+using the shipping `MenuBarBuddyPlayer` and `MenuPanelController`. This needs
+Screen Recording permission. A neutral backdrop keeps other windows out of the
+shot; close the installed BuddyMon app first to avoid a second buddy, then reopen
+it afterward. Inspect captures before publishing: menu-bar placement and scale
+depend on the active display.
+
+The Trainer Card uses the installed Trainer Red pack when available. Battle
+frames in `.build/readme-screenshots/battle-frames/` advance the real battle
+engine from encounter through attacks and a catch with fixed random seeds.
+Progress and notifications are isolated from the player's game.
+
 ## <img src="assets/brand/icons/encounter.png" width="22" height="22" alt=""> Optional Game Art
 
 The Mac app downloads these packs automatically on first launch. You can choose

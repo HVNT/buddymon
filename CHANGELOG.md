@@ -5,6 +5,8 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+- Made README setup easier to scan and added the real macOS menu-bar view and
+  Trainer Card with shiny Mewtwo demo captures.
 - Clarified Mac app setup, supported clients, build requirements, and automatic
   artwork in the README; the Claude Code plugin is an optional integration.
 - Fixed old Claude sessions replaying token history after inactivity and cache

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -33,8 +34,9 @@ os.environ["XDG_STATE_HOME"] = str(DEMO_STATE_ROOT)
 os.environ["USER"] = "HUNT"
 sys.path.insert(0, str(ROOT))
 
-from lib import battle, data, engine, showcase_export, state, trainer_card  # noqa: E402
+from lib import assets, battle, data, engine, menu_bar, showcase_export, state, trainer_card  # noqa: E402
 from lib.app_fixtures import _build_menu_panel_fixture_status  # noqa: E402
+from lib.app_payloads import _build_encounter_result_payload  # noqa: E402
 from lib.app_views import _build_encounter_view  # noqa: E402
 
 
@@ -152,7 +154,7 @@ def _trainer_payload(demo: dict) -> dict:
         demo,
         entries=entries,
         username="HUNT",
-        portrait_base64=None,
+        portrait_base64=assets.trainer_portrait_base64(),
     )
     payload["selected_badge_id"] = "shiny_legend"
     return payload
@@ -202,7 +204,7 @@ def _tokens_payload() -> dict:
     }
 
 
-def _build_snapshot_tool() -> None:
+def _build_snapshot_tool(*, menu_bar_capture=False) -> Path:
     source = ROOT / "macos" / "BuddyMonApp" / "Sources" / "BuddyMonApp"
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     module_cache = BUILD_DIR / "module-cache"
@@ -218,6 +220,12 @@ def _build_snapshot_tool() -> None:
         "CompactEncounterView.swift",
         "CompactSetupView.swift",
     ]
+    tool = "ReadmeScreenshotSnapshot.swift"
+    executable = SNAPSHOT
+    if menu_bar_capture:
+        sources.append("MenuBarBuddy.swift")
+        tool = "ReadmeMenuBarCapture.swift"
+        executable = BUILD_DIR / "readme-menu-bar"
     subprocess.run([
         "xcrun",
         "swiftc",
@@ -228,10 +236,11 @@ def _build_snapshot_tool() -> None:
         "-framework",
         "QuartzCore",
         *(str(source / name) for name in sources),
-        str(ROOT / "tools" / "ReadmeScreenshotSnapshot.swift"),
+        str(ROOT / "tools" / tool),
         "-o",
-        str(SNAPSHOT),
+        str(executable),
     ], check=True)
+    return executable
 
 
 def _capture(kind: str, payload: dict, filename: str) -> None:
@@ -253,6 +262,45 @@ def _write_demo_state(destination: Path) -> None:
     _install_local_art_fixture(destination.parent.parent)
 
 
+def _battle_frames() -> list[tuple[str, dict, int]]:
+    """Advance the shipping battle engine, with no player state or notifications."""
+    demo = _encounter_state()
+    demo["preferences"]["notifications"] = "off"
+    pending = demo["pending_battle"]
+    pending["wild_hp"] = pending["wild_hp_max"]
+    pending["buddy_hp"] = pending["buddy_hp_max"]
+    pending["last_msg"] = f"A wild {pending['name']} appeared!"
+    frames = [("encounter", _build_encounter_view(demo), 2000)]
+    rng = random.Random(7)
+    while battle.wild_hp_frac(pending) > 0.4:
+        frames.append(("encounter", {**_build_encounter_view(demo), "capture_action": "fight"}, 500))
+        outcome, _ = battle.take_turn(demo, "attack", rng)
+        if outcome["done"]:
+            raise RuntimeError("README demo battle ended before its catch")
+        frames.append(("encounter", _build_encounter_view(demo), 1800))
+    frames.append(("encounter", {**_build_encounter_view(demo), "capture_action": "ball"}, 700))
+    buddy = dict(state.active_pokemon(demo))
+    wild = dict(pending)
+    outcome, message = battle.take_turn(demo, "ball", random.Random(1))
+    if not outcome["caught"]:
+        raise RuntimeError("README demo catch failed")
+    frames.append(("result", _build_encounter_result_payload(
+        buddy, wild, "battle", outcome, message,
+    ), 3000))
+    return frames
+
+
+def _capture_battle_frames() -> None:
+    directory = BUILD_DIR / "battle-frames"
+    directory.mkdir(parents=True, exist_ok=True)
+    manifest = []
+    for index, (kind, payload, duration) in enumerate(_battle_frames()):
+        destination = directory / f"{index:02d}.png"
+        _capture(kind, payload, destination)
+        manifest.append({"file": destination.name, "duration_ms": duration, "kind": kind})
+    (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate README images or an isolated terminal demo state."
@@ -261,6 +309,10 @@ def main(argv=None) -> int:
         "--terminal-state-only",
         action="store_true",
         help="write the deterministic Ghostty demo state without rendering images",
+    )
+    parser.add_argument(
+        "--menu-bar", action="store_true",
+        help="also capture a temporary real macOS status item and open panel",
     )
     args = parser.parse_args(argv)
     if args.terminal_state_only:
@@ -278,6 +330,15 @@ def main(argv=None) -> int:
     _capture("encounter", _build_encounter_view(encounter), "encounter.png")
     _capture("trainer", _trainer_payload(menu), "trainer-card.png")
     _capture("tokens", _tokens_payload(), "token-usage.png")
+    _capture_battle_frames()
+    if args.menu_bar:
+        executable = _build_snapshot_tool(menu_bar_capture=True)
+        status = _build_menu_panel_fixture_status(menu)
+        status["menu_bar"] = menu_bar.runtime_payload(menu, now=FIXED_TIME)
+        subprocess.run(
+            [str(executable), str(OUT)],
+            input=json.dumps(status, sort_keys=True).encode(), check=True,
+        )
     (OUT / "showcase-export.png").write_bytes(showcase_export.render_showcase_png(
         menu,
         generated_at=datetime(2026, 8, 17, 13, 42),

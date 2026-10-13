@@ -101,6 +101,8 @@ def test_readme_uses_current_shipping_screenshots():
         "token-usage.png": (608, 420),
         "showcase-export.png": (864, 600),
         "terminal-box-ghostty.png": (1648, 1474),
+        "menu-bar.png": (384, 26),
+        "menu-bar-open.png": (384, 266),
     }
     assert {path.name for path in SCREENSHOTS.glob("*.png")} == set(expected)
     for name, size in expected.items():
@@ -108,13 +110,13 @@ def test_readme_uses_current_shipping_screenshots():
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for name in (
-        "buddymon-main.png",
+        "menu-bar-open.png",
         "encounter.png",
+        "trainer-card.png",
         "terminal-box-ghostty.png",
         "showcase-export.png",
     ):
         assert f"docs/screenshots/{name}" in readme
-    assert "docs/screenshots/trainer-card.png" not in readme
     assert "docs/screenshots/token-usage.png" not in readme
 
 
@@ -123,7 +125,7 @@ def test_readme_presents_a_readable_game_first_screenshot_story():
     assert "Start Playing" in readme
     assert "The Loop" in readme
     assert "A Collection Worth Opening" in readme
-    assert readme.index("buddymon-main.png") < readme.index("Start Playing")
+    assert readme.index("menu-bar-open.png") < readme.index("Start Playing")
     assert readme.index("encounter.png") < readme.index("terminal-box-ghostty.png")
     assert readme.index("terminal-box-ghostty.png") < readme.index("showcase-export.png")
     assert 'width="49%"' not in readme
