@@ -4,6 +4,8 @@ This intentionally parses only local client usage logs and returns display
 lines. It does not update BuddyMon state or award progress.
 """
 import json
+import os
+import tempfile
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -196,11 +198,19 @@ def _load_cache():
 
 
 def _save_cache(cache):
-    path = _cache_file()
+    _save_json(_cache_file(), cache)
+
+
+def _save_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cache, sort_keys=True), encoding="utf-8")
-    tmp.replace(path)
+    descriptor, temporary = tempfile.mkstemp(prefix=".token-", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, sort_keys=True)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def _source_files():
@@ -464,6 +474,58 @@ def current_day_totals(now=None):
         "today": _sum_days(rows, today, now),
         "yesterday": _sum_days(rows, yesterday, today),
     }
+
+
+def refresh_native_views(now=None):
+    """Build both native read models outside the interactive request path."""
+    now = _coerce_now(now)
+    detail = dashboard(now)
+    report = report_lines(now)
+    today = next(item for item in detail["headline"] if item["id"] == "day")
+    totals = {"today": today["tokens"], "yesterday": today["comparison_tokens"]}
+    _save_json(paths.STATE_DIR / "token-report.json", {
+        "schema_version": 1, "date": now.date().isoformat(),
+        "dashboard": detail, "report_lines": report,
+    })
+    _save_json(paths.STATE_DIR / "token-summary.json", {
+        "date": now.date().isoformat(), "totals": totals,
+    })
+    return totals
+
+
+def cached_native_report(now=None):
+    """Return a complete saved report, without listing or reading client logs."""
+    now = _coerce_now(now)
+    try:
+        saved = json.loads((paths.STATE_DIR / "token-report.json").read_text())
+        if not isinstance(saved, dict) or saved.get("schema_version") != 1:
+            return None
+        if saved.get("date") != now.date().isoformat():
+            return None
+        detail = saved.get("dashboard")
+        report = saved.get("report_lines")
+        if not isinstance(detail, dict) or not isinstance(detail.get("headline"), list):
+            return None
+        if not isinstance(report, list) or not all(isinstance(line, str) for line in report):
+            return None
+        return saved
+    except (OSError, ValueError):
+        return None
+
+
+def cached_compact_totals(now=None):
+    """Read the tiny native summary only; never enumerate or parse transcripts."""
+    now = _coerce_now(now)
+    try:
+        saved = json.loads((paths.STATE_DIR / "token-summary.json").read_text())
+        if saved["date"] != now.date().isoformat():
+            return None
+        totals = saved["totals"]
+        if any(type(totals[key]) is not int or totals[key] < 0 for key in ("today", "yesterday")):
+            return None
+        return totals
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def _dashboard_tool(client, tokens, total=0):

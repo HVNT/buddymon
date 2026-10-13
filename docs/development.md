@@ -140,6 +140,19 @@ These development checks accept either a dated version heading or
 publication date. Public packaging and archive verification require a real
 date; the packager checks that before rebuilding the embedded runtime.
 
+### Universal Mac download
+
+`scripts/build-macos-app.sh --universal` builds both native slices and bundles
+locked Python/Pillow runtimes under `Resources/python/arm64` and `x86_64`.
+Each app slice selects its matching runtime. Build on Apple Silicon with Rosetta
+installed to verify the Intel runtime; this does not require Rosetta on users'
+Macs. Both native slices target macOS 13. Ordinary `--friend` builds still target
+the packaging Mac. `--runtime-dir` for universal builds takes a directory with
+both architecture subdirectories.
+
+`bash scripts/create-macos-dmg.sh` creates an unsigned local candidate with the
+app and an Applications shortcut. It does not claim public-release readiness.
+
 ### Signed release archive
 
 The release packager rebuilds the embedded runtime from the lock, verifies it,
@@ -157,12 +170,11 @@ BUDDYMON_NOTARY_PROFILE="buddymon-notary" \
 scripts/package-macos-release.sh
 ```
 
-The output is `.build/release/BuddyMon-macOS-ARCH.zip` plus its checksum. The
-stable asset name supports the README's `/releases/latest/download/` link while
-the app bundle keeps the canonical version in its metadata. Build on each
-architecture you intend to publish; do not label one archive universal.
+The public output is `.build/release/BuddyMon-macOS.dmg` plus its checksum.
+It contains both architectures. The intermediate ZIP is only for notarizing
+the app; the final DMG is also signed, notarized, and stapled.
 
-The packager verifies the final ZIP after signing and notarization. Complete
+The packager mounts and verifies the final DMG after signing and notarization. Complete
 the documented [Public Release QA](release-qa.md) in a clean macOS user before
 uploading either artifact.
 
@@ -202,8 +214,9 @@ That path uses one locked five-minute gate, so overlapping clients do not award
 the same activity twice. `python3 buddymon.py collect` is an immediate manual
 run and bypasses the schedule gate.
 
-The collection path reads Codex CLI and Auggie logs. Claude Code progress comes
-from the plugin's hooks; Gemini CLI is Token Usage only and never awards
+The collection path reads Claude Code, Codex CLI, and Auggie logs. Claude's
+optional plugin shares its per-file cursor with the collector; test both orders
+when changing token accounting. Gemini CLI is Token Usage only and never awards
 progress.
 
 Manage the per-user service with:
@@ -221,6 +234,11 @@ current script path and active Python runtime. It also preserves
 temporary home and the injected command runner.
 
 ## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Optional Assets
+
+The Mac app invokes `setup-artwork` during first launch. This internal command
+downloads Gen 5 sprites progressively, then the other packs. Its progress file
+is separate from gameplay state; retry skips completed species. Test with a
+disposable `XDG_STATE_HOME` and keep status-only tests network-free.
 
 Generated packs belong under `$XDG_STATE_HOME/buddymon/packs`, or
 `~/.local/state/buddymon/packs` by default. Do not commit them.

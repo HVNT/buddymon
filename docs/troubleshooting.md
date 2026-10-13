@@ -80,10 +80,12 @@ states preserve a pre-migration copy under the local `recovery/` directory.
 
 ## Optional art is missing or failed
 
-Plain fallback art is valid and never blocks the app. BuddyMon does not download
-optional art automatically.
+The Mac app downloads Pokémon art during first launch. Fallback art keeps play
+available meanwhile. If **Art download paused · Retry** appears, reconnect and
+click it. Reopening BuddyMon also resumes missing artwork. Completed sprites
+and game progress stay saved.
 
-From the Claude Code plugin, run `/buddymon:official` and confirm the download.
+For plugin-only setup, run `/buddymon:official` and confirm the download.
 From the CLI:
 
 ```bash
@@ -103,9 +105,9 @@ python3 buddymon.py collect
 ```
 
 Then check that a starter exists and the BuddyMon state directory is writable.
-For Claude Code, confirm its hooks came from the plugin. For Codex CLI or
-Auggie, the first `collect` only anchors existing logs; create new activity, then
-run it again. Gemini CLI contributes to Token Usage only, not XP. State lives under
+Keep BuddyMon open for automatic Claude Code, Codex CLI, and Auggie collection.
+The Claude plugin is optional. The first scan anchors existing logs; create new
+activity, then collect again. Gemini CLI contributes to Token Usage only, not XP. State lives under
 `$XDG_STATE_HOME/buddymon`, defaulting to
 `~/.local/state/buddymon`.
 

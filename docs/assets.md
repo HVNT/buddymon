@@ -23,8 +23,10 @@ panel or a player's personal save.
 
 ## <img src="assets/brand/icons/encounter.png" width="22" height="22" alt=""> Optional Game Art
 
-Art packs are optional. BuddyMon uses its built-in sprites when they are not
-installed.
+The Mac app downloads these packs automatically on first launch. You can choose
+a buddy and play immediately; built-in sprites cover missing artwork while it
+downloads. Completed Pokémon sprites appear progressively. A paused download
+offers **Retry** in the app and resumes on the next launch.
 
 By default, downloaded packs live in:
 
@@ -43,7 +45,15 @@ When `XDG_STATE_HOME` is set, BuddyMon uses
 `$XDG_STATE_HOME/buddymon/packs/` instead. Packs are local-only; do not commit
 their generated JSON.
 
-The compact app never downloads art automatically. From the Claude Code plugin,
+The app keeps download progress in `art-setup.json`, separate from game state.
+A file lock prevents duplicate downloads; an incomplete-pack marker lets setup
+resume without replacing completed sprites. Normal status reads never fetch art.
+Gen 5 completion requires both regular and shiny artwork. If the shiny download
+fails, the regular sprite remains usable and Retry fetches only the missing art.
+Packs from older versions receive one background check, including the legacy
+single-file pack. A versioned completion receipt keeps later status reads cheap.
+
+For plugin-only users,
 `/buddymon:official` asks before installing missing packs. From the CLI, install
 only missing packs with:
 
@@ -73,7 +83,7 @@ Runtime uses local Pokémon packs when present and otherwise falls back to the
 original sprites in `lib/sprites.py`. The native Trainer Card uses the local
 Trainer Red pack when present and otherwise draws BuddyMon's original two-tone
 silhouette with `BuddyMonBrand` colors. No external trainer portrait is bundled,
-and the app never fetches it without an explicit asset command.
+and it is included in the app's first-launch artwork download.
 
 The native status item prioritizes compacted, species-specific Gen 5 frames so
 its buddy matches the Pokémon shown in the native panel. If that pack is not

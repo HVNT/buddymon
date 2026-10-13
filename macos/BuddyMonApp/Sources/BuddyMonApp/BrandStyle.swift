@@ -836,6 +836,28 @@ enum BuddyMonBrand {
             return button
         }
 
+        static func makeArtworkStatus(
+            _ status: [String: Any],
+            target: AnyObject?,
+            action: Selector?
+        ) -> NSButton {
+            let button = makeQuickLink("", target: target, action: action)
+            button.identifier = NSUserInterfaceItemIdentifier("retry_artwork")
+            updateArtworkStatus(button, status: status)
+            return button
+        }
+
+        static func updateArtworkStatus(_ button: NSButton, status: [String: Any]) {
+            let message = status["message"] as? String ?? "Preparing Pokémon art…"
+            let display = message.folding(options: .diacriticInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+            let title = display.uppercased()
+                .replacingOccurrences(of: "…", with: "...")
+                .replacingOccurrences(of: "·", with: "/")
+            (button as? BuddyMonMenuActionButton)?.setDisplayTitle(title)
+            button.setAccessibilityLabel(message)
+            button.isEnabled = status["can_retry"] as? Bool == true
+        }
+
         static func makeStarterChoice(
             _ title: String,
             identityColor: NSColor,
@@ -1654,6 +1676,12 @@ private final class BuddyMonMenuActionButton: NSButton {
 
     func refreshTitle(color: NSColor) {
         menuTitleColor = color
+        needsDisplay = true
+    }
+
+    func setDisplayTitle(_ text: String) {
+        menuTitle = text
+        setAccessibilityLabel(text)
         needsDisplay = true
     }
 

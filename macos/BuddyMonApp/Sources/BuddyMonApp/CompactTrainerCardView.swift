@@ -548,6 +548,7 @@ final class BuddyMonCompactTrainerView: NSView {
         grid.rowSpacing = BuddyMonBrand.Menu.labelGap
         grid.columnSpacing = BuddyMonBrand.Menu.microGap
         grid.setContentCompressionResistancePriority(.required, for: .vertical)
+        grid.setContentHuggingPriority(.required, for: .vertical)
         for fact in facts {
             grid.addRow(with: [factLabel(fact), factValue(fact)])
         }

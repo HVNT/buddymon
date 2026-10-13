@@ -160,6 +160,12 @@ has no corner radius or resting button fill, and keeps one subtle neutral rule.
 Hover adds a quiet surface wash and one-point lift over 120 milliseconds;
 Reduce Motion keeps the link stationary. Primary and encounter actions retain
 the standard 32-point button treatment.
+Artwork progress uses `BuddyMonBrand.Menu.makeArtworkStatus`, sharing the
+22-point quick-link treatment. Progress is disabled text; an interrupted
+download becomes a keyboard-accessible Retry control. First Signal updates it
+in place to preserve starter focus; the root panel removes it after completion.
+The Brand Styles preview covers preparing, downloading, retry, and ready.
+
 First Signal uses the standard 304-by-210 Field Guide frame. Five starter
 choices use the same 22-point quick-link treatment in a 3-by-2 grid, with one
 small identity-color mark and neutral action text. Its working and error states
@@ -175,7 +181,10 @@ retain their ten-point content inset.
 Token Usage keeps the standard 304-by-210-point compact panel size while its
 local report loads, after it resolves, and if the report fails. Loading and
 failure render inside the Field Guide card; they never install a standalone
-Redline surface as an intermediate frame. Its resolved hierarchy is
+Redline surface as an intermediate frame. The first background scan uses the
+shipping loading component shown in Brand Styles. Back remains available and
+the report fills automatically without reopening the panel. Later scans retain
+the last complete report. Its resolved hierarchy is
 two equal comparison cards, a seven-day pulse with proportional daily bars, one
 context line for daily average, peak day, and active streak, then supported-tool
 share. The first card compares Today with Yesterday; the second compares This

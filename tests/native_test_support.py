@@ -502,6 +502,7 @@ def brand_snapshot_harness(tmp_path_factory):
             str(SWIFT_DIR / "BrandStyle.swift"),
             str(SWIFT_DIR / "MenuPanelSharedViews.swift"),
             str(SWIFT_DIR / "CompactSetupView.swift"),
+            str(SWIFT_DIR / "CompactTokenUsageView.swift"),
             str(SWIFT_DIR / "BrandStylesPreview.swift"),
             str(BRAND_SNAPSHOT_TOOL),
             "-o",

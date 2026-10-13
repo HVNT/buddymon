@@ -7,6 +7,7 @@ INSTALL_APP=0
 BOOTSTRAP_RUNTIME=1
 FORCE_RUNTIME=0
 ALLOW_UNLOCKED_RUNTIME=0
+UNIVERSAL=0
 RUNTIME_SOURCE="${BUDDYMON_PYTHON_RUNTIME:-}"
 PYTHON_VERSION=""
 
@@ -17,6 +18,8 @@ Usage: scripts/build-macos-app.sh [--friend] [--open] [options]
 Builds .build/macos/BuddyMon.app.
 
 Options:
+  --universal           Build one self-contained app for Apple Silicon and Intel.
+                        --runtime-dir must contain arm64/ and x86_64/ runtimes.
   --friend              Build a self-contained app. Uses
                         BUDDYMON_PYTHON_RUNTIME when set; otherwise bootstraps
                         .build/python-runtime with Python + Pillow.
@@ -40,6 +43,10 @@ MSG
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --universal)
+      UNIVERSAL=1
+      REQUIRE_RUNTIME=1
+      ;;
     --friend|--require-runtime)
       REQUIRE_RUNTIME=1
       ;;
@@ -105,6 +112,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ROOT}/.build/macos"
 ICON_SOURCE="${ROOT}/macos/BuddyMonApp/Resources/AppIcon.icns"
 DEFAULT_RUNTIME_DIR="${ROOT}/.build/python-runtime"
+if [[ "${UNIVERSAL}" == "1" ]]; then
+  DEFAULT_RUNTIME_DIR="${ROOT}/.build/python-runtimes"
+fi
 VERSION="$(tr -d '\r\n' < "${ROOT}/VERSION")"
 BUNDLE_ID="${BUDDYMON_BUNDLE_ID:-com.hvnt.buddymon}"
 BUILD_NUMBER="${BUDDYMON_BUILD_NUMBER:-${VERSION}}"
@@ -171,9 +181,22 @@ PY
 }
 
 runtime_matches_lock() {
-  python3 "${ROOT}/scripts/verify-python-runtime.py" "$1" >/dev/null 2>&1
+  local runtime="$1"
+  if [[ "${UNIVERSAL}" == "1" ]]; then
+    local architecture
+    for architecture in arm64 x86_64; do
+      python3 "${ROOT}/scripts/verify-python-runtime.py" "${runtime}/${architecture}" \
+        --arch "${architecture}" >/dev/null 2>&1 || return 1
+    done
+  else
+    python3 "${ROOT}/scripts/verify-python-runtime.py" "${runtime}" >/dev/null 2>&1
+  fi
 }
 
+if [[ "${UNIVERSAL}" == "1" && "${ALLOW_UNLOCKED_RUNTIME}" == "1" ]]; then
+  echo "error: universal builds require both locked runtimes" >&2
+  exit 2
+fi
 if [[ "${ALLOW_UNLOCKED_RUNTIME}" == "1" && -z "${RUNTIME_SOURCE}" ]]; then
   cat >&2 <<'MSG'
 error: --allow-unlocked-runtime requires BUDDYMON_PYTHON_RUNTIME or --runtime-dir.
@@ -190,7 +213,14 @@ if [[ "${REQUIRE_RUNTIME}" == "1" && -z "${RUNTIME_SOURCE}" ]]; then
     if [[ "${FORCE_RUNTIME}" == "1" ]]; then
       args+=(--force)
     fi
-    "${ROOT}/scripts/build-python-runtime.sh" "${args[@]}"
+    if [[ "${UNIVERSAL}" == "1" ]]; then
+      for architecture in arm64 x86_64; do
+        "${ROOT}/scripts/build-python-runtime.sh" "${args[@]}" \
+          --arch "${architecture}" --runtime-dir "${DEFAULT_RUNTIME_DIR}/${architecture}"
+      done
+    else
+      "${ROOT}/scripts/build-python-runtime.sh" "${args[@]}"
+    fi
     RUNTIME_SOURCE="${DEFAULT_RUNTIME_DIR}"
   else
     cat >&2 <<'MSG'
@@ -255,7 +285,7 @@ SWIFT_SOURCES=(
   "${SWIFT_SOURCE_DIR}/ProcessExecutor.swift"
   "${SWIFT_SOURCE_DIR}/SingleInstanceGuard.swift"
 )
-SWIFTC_ARGS=(-target "${SWIFT_TARGET}" -framework AppKit)
+SWIFTC_ARGS=(-framework AppKit -module-cache-path "${BUILD_DIR}/module-cache")
 
 if [[ "${REQUIRE_RUNTIME}" != "1" ]]; then
   SWIFTC_ARGS+=(-D BUDDYMON_DEVELOPMENT)
@@ -265,10 +295,17 @@ if [[ "${REQUIRE_RUNTIME}" != "1" ]]; then
   )
 fi
 
-swiftc \
-  "${SWIFTC_ARGS[@]}" \
-  "${SWIFT_SOURCES[@]}" \
-  -o "${MACOS}/BuddyMon"
+if [[ "${UNIVERSAL}" == "1" ]]; then
+  for architecture in arm64 x86_64; do
+    swiftc -target "${architecture}-apple-macosx${MINIMUM_MACOS_VERSION}" \
+      "${SWIFTC_ARGS[@]}" "${SWIFT_SOURCES[@]}" -o "${BUILD_DIR}/BuddyMon-${architecture}"
+  done
+  lipo -create "${BUILD_DIR}/BuddyMon-arm64" "${BUILD_DIR}/BuddyMon-x86_64" \
+    -output "${MACOS}/BuddyMon"
+else
+  swiftc -target "${SWIFT_TARGET}" "${SWIFTC_ARGS[@]}" "${SWIFT_SOURCES[@]}" \
+    -o "${MACOS}/BuddyMon"
+fi
 
 cat > "${CONTENTS}/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -312,7 +349,10 @@ if [[ -n "${RUNTIME_SOURCE}" ]]; then
   mkdir -p "${RESOURCES}/python"
   rsync -a "${RUNTIME_SOURCE%/}/" "${RESOURCES}/python/"
   if [[ "${RUNTIME_IS_LOCKED}" == "1" ]]; then
-    python3 "${ROOT}/scripts/verify-python-runtime.py" "${RESOURCES}/python"
+    if ! runtime_matches_lock "${RESOURCES}/python"; then
+      echo "error: copied runtime does not match lock" >&2
+      exit 1
+    fi
   else
     validate_python_runtime "${RESOURCES}/python"
   fi
@@ -324,7 +364,9 @@ warning: BUDDYMON_PYTHON_RUNTIME was not set.
 MSG
 fi
 
-if [[ -x "${RESOURCES}/python/bin/python3" ]]; then
+if [[ "${UNIVERSAL}" == "1" ]]; then
+  APP_PYTHON="${RESOURCES}/python/$(uname -m)/bin/python3"
+elif [[ -x "${RESOURCES}/python/bin/python3" ]]; then
   APP_PYTHON="${RESOURCES}/python/bin/python3"
 else
   APP_PYTHON="/usr/bin/python3"

@@ -49,7 +49,14 @@ final class BuddyMonRunner {
             self.repoURL = resources.appendingPathComponent("buddymon", isDirectory: true)
         }
 
-        let bundled = resources.appendingPathComponent("python/bin/python3")
+        #if arch(arm64)
+        let architecture = "arm64"
+        #else
+        let architecture = "x86_64"
+        #endif
+        let universal = resources.appendingPathComponent("python/\(architecture)/bin/python3")
+        let bundled = FileManager.default.isExecutableFile(atPath: universal.path)
+            ? universal : resources.appendingPathComponent("python/bin/python3")
         if let pythonURL {
             self.pythonURL = pythonURL
             usesBundledPython = pythonURL.standardizedFileURL == bundled.standardizedFileURL
@@ -143,6 +150,8 @@ final class BuddyMonRunner {
             environment: ProcessInfo.processInfo.environment.merging([
                 "BUDDYMON_PYTHON": pythonPath,
                 "PYTHONUNBUFFERED": "1",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONNOUSERSITE": "1",
             ]) { _, new in new },
             timeout: timeout
         )

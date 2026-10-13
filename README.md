@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Turn local AI coding sessions into a Pokémon-style companion game.</strong><br>
-  Work, earn XP, meet wild Pokémon, and build a collection that stays on your Mac.
+  Work with Claude Code, Codex CLI, or Auggie, earn XP, and build a collection that stays on your Mac.
 </p>
 
 <p align="center">
@@ -17,17 +17,46 @@
 
 ## <img src="docs/assets/brand/icons/setup.png" width="24" height="24" alt=""> Start Playing
 
-Clone BuddyMon once:
+### macOS menu-bar app
+
+BuddyMon collects new **Claude Code, Codex CLI, and Auggie** activity while the
+app is open. No plugin is needed. Gemini CLI is supported for token reporting
+only.
+
+The Mac app requires **macOS 13 or newer**. The universal build includes Apple
+Silicon and Intel support, and the self-contained app includes its own Python.
+BuddyMon `0.2.0` is still unreleased, so there is no downloadable GitHub Release
+yet. The public DMG will be linked here after final release checks pass.
+
+For now, build from source. The build needs Git, Python 3, Apple's Swift compiler
+and macOS SDK (from Xcode or Command Line Tools), and an internet connection to
+prepare the bundled runtime:
 
 ```bash
 git clone https://github.com/HVNT/buddymon.git ~/buddymon
 cd ~/buddymon
+scripts/build-macos-app.sh --friend --install --open
 ```
 
-### Claude Code plugin
+This builds for the current Mac and installs the app in Applications. See
+[Development](docs/development.md) for universal builds and packaging.
 
-Claude Code is the automatic path: plugin hooks turn new Claude activity into
-progress without a background service. Launch `claude` and run:
+BuddyMon lives in the menu bar with no Dock icon or account. On first launch:
+
+1. Click the menu-bar buddy and choose a starter.
+2. Start playing immediately. Pokémon artwork downloads automatically and
+   appears as it arrives—no artwork command is required.
+3. Use Claude Code, Codex CLI, or Auggie while BuddyMon is open to earn progress.
+
+If artwork downloading stops, choose **Retry** in the app. Completed artwork
+stays saved, and reopening the app resumes unfinished downloads. Returning
+trainers open directly to their buddy.
+
+### Optional Claude Code plugin
+
+The plugin adds Claude's terminal statusline and immediate turn-end updates.
+It is not needed for Codex CLI, Auggie, or normal Mac app play. After cloning
+the repository above, launch `claude` and run:
 
 ```text
 /plugin marketplace add ~/buddymon
@@ -37,20 +66,6 @@ progress without a background service. Launch `claude` and run:
 
 Other starters are `charmander`, `squirtle`, `pikachu`, and `eevee`. The plugin
 invokes `python3`, so Python 3 must be available on `PATH` before Claude starts.
-
-### macOS menu-bar app
-
-BuddyMon `0.2.0` is still unreleased, so there is no downloadable GitHub Release
-yet. To try the current self-contained app from source:
-
-```bash
-scripts/build-macos-app.sh --friend --install --open
-```
-
-The app lives in the menu bar with no Dock icon or account. First Signal lets a
-new trainer choose a starter; returning trainers open directly to their buddy.
-The public download will be added only after the app passes its signing,
-notarization, archive, and clean-install release gates.
 
 ## <img src="docs/assets/brand/icons/encounter.png" width="24" height="24" alt=""> The Loop
 
@@ -98,21 +113,22 @@ Box. Sharing creates a labeled PNG on your Desktop; BuddyMon never uploads it.
 
 | Client | Game progress | Token Usage | Collection path |
 | --- | --- | --- | --- |
-| Claude Code | Automatic plugin hooks | Yes | Automatic |
+| Claude Code | Local collection; optional plugin hooks | Yes | App, service, or `collect` |
 | Codex CLI | Local collection | Yes | App, service, or `collect` |
 | Auggie | Local collection | Yes | App, service, or `collect` |
 | Gemini CLI | No | Yes | Read-only reporting |
 
-The first Codex or Auggie collection anchors existing logs instead of turning
-old history into a surprise level-up. Only later activity earns progress.
+The first collection anchors existing client logs instead of turning old history
+into a surprise level-up. Claude's app collector and optional plugin share a
+cursor, so running both does not award the same activity twice.
 
 ## <img src="docs/assets/brand/icons/privacy.png" width="24" height="24" alt=""> Local by Default
 
 - Normal play reads local transcripts and local BuddyMon state.
 - Game state is not uploaded and no BuddyMon account is required.
 - AI-tool settings are never rewritten.
-- Background collection is opt-in.
-- Optional art is downloaded only when you explicitly request it.
+- The open Mac app collects activity automatically; collection after quitting is opt-in.
+- The Mac app downloads Pokémon artwork during first launch, then uses local copies.
 
 State, journey history, and optional packs live under
 `$XDG_STATE_HOME/buddymon`, or `~/.local/state/buddymon` when
@@ -120,14 +136,17 @@ State, journey history, and optional packs live under
 
 ## <img src="docs/assets/brand/icons/development.png" width="24" height="24" alt=""> Essential Commands
 
+Slash commands below are for the optional Claude Code plugin. Python commands
+run from a source checkout; normal Mac app play does not require them.
+
 | Command | Purpose |
 | --- | --- |
 | `/buddymon:status` | Show the current buddy and encounter |
 | `/buddymon:mode <quick\|safari\|battle>` | Change encounter mode |
 | `/buddymon:switch <name>` | Change the active buddy |
-| `/buddymon:official` | Install optional local art |
+| `/buddymon:official` | Manually install artwork for plugin-only play; automatic in the Mac app |
 | `python3 buddymon.py menu` | Open the terminal game |
-| `python3 buddymon.py collect` | Collect new Codex and Auggie activity |
+| `python3 buddymon.py collect` | Collect new Claude Code, Codex CLI, and Auggie activity |
 | `python3 buddymon.py tokens` | Show local token totals |
 
 ## <img src="docs/assets/brand/icons/brand.png" width="24" height="24" alt=""> Documentation

@@ -4,6 +4,7 @@ import base64
 from pathlib import Path
 
 from . import (
+    art_setup,
     assets,
     battle as battle_mode,
     collectors,
@@ -62,10 +63,10 @@ def _path_exists(path):
 def source_status():
     return {
         "claude_code": {
-            "kind": "plugin",
+            "kind": "local_logs",
             "automatic": True,
-            "configured": "unknown",
-            "log_root_exists": _path_exists(token_usage.CLAUDE_ROOT),
+            "plugin_required": False,
+            "log_root_exists": _path_exists(collectors.CLAUDE_ROOT),
         },
         "codex": {
             "kind": "local_logs",
@@ -155,7 +156,7 @@ def _render_brand_mark_base64():
 
 def _build_compact_token_summary():
     try:
-        totals = token_usage.current_day_totals()
+        totals = token_usage.cached_compact_totals()
         error = None
     except Exception as exc:
         totals = {"today": 0, "yesterday": 0}
@@ -163,15 +164,16 @@ def _build_compact_token_summary():
     return {
         "today": {
             "label": "Today",
-            "tokens": totals.get("today", 0),
-            "compact": token_usage.compact_tokens(totals.get("today", 0)),
+            "tokens": totals.get("today", 0) if totals is not None else None,
+            "compact": token_usage.compact_tokens(totals.get("today", 0)) if totals is not None else "—",
         },
         "yesterday": {
             "label": "Yesterday",
-            "tokens": totals.get("yesterday", 0),
-            "compact": token_usage.compact_tokens(totals.get("yesterday", 0)),
+            "tokens": totals.get("yesterday", 0) if totals is not None else None,
+            "compact": token_usage.compact_tokens(totals.get("yesterday", 0)) if totals is not None else "—",
         },
         "error": error,
+        "loading": totals is None,
     }
 
 
@@ -426,6 +428,7 @@ def app_status():
             "species_count": len({p.get("name") for p in s.get("pokemon", [])}),
         },
         "packs": packs_info,
+        "artwork": art_setup.status(),
         "setup": {
             "needs_starter": not has_buddy,
             "needs_assets": needs_assets,

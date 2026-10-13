@@ -184,8 +184,10 @@ final class MenuPanelController: NSObject {
     func presentRoot(
         status: [String: Any],
         target: AnyObject,
-        action: Selector
+        action: Selector,
+        preserveFocus: Bool = false
     ) {
+        let previousFocus = preserveFocus ? (panel.firstResponder as? NSButton)?.identifier : nil
         let content = BuddyMonCompactMenuView(
             status: status,
             target: target,
@@ -194,21 +196,32 @@ final class MenuPanelController: NSObject {
         compactControls = content.focusableControls
         displayMode = .menu
         install(content, preferredSize: content.preferredSize)
-        panel.makeFirstResponder(content.initialResponder)
+        let focusedControl = previousFocus.flatMap { identifier in
+            compactControls.first { $0.identifier == identifier && $0.isEnabled }
+        }
+        panel.makeFirstResponder(focusedControl ?? content.initialResponder)
     }
 
     func presentStarterSetup(
         target: AnyObject,
-        chooseAction: Selector
+        chooseAction: Selector,
+        artwork: [String: Any] = [:],
+        artworkAction: Selector? = nil
     ) {
         let content = BuddyMonCompactStarterSetupView(
             target: target,
-            chooseAction: chooseAction
+            chooseAction: chooseAction,
+            artwork: artwork,
+            artworkAction: artworkAction
         )
         compactControls = content.focusableControls
         displayMode = .setup
         install(content, preferredSize: content.preferredSize)
         panel.makeFirstResponder(content.initialResponder)
+    }
+
+    func updateStarterArtwork(_ artwork: [String: Any]) {
+        (panel.contentView as? BuddyMonCompactStarterSetupView)?.updateArtwork(artwork)
     }
 
     func presentLoading(_ message: String) {

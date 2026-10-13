@@ -868,8 +868,10 @@ final class BrandStylesWindowController: NSWindowController {
                 color: BuddyMonBrand.Menu.ink,
                 font: BuddyMonBrand.Font.strong(9)
             ))
+            item.setContentHuggingPriority(.required, for: .horizontal)
             row.addArrangedSubview(item)
         }
+        row.addArrangedSubview(flexibleSpace())
         return row
     }
 
@@ -1630,7 +1632,8 @@ final class BrandStylesWindowController: NSWindowController {
     private func setupComponentSection() -> NSView {
         let compactSetup = BuddyMonCompactStarterSetupView(
             target: nil,
-            chooseAction: nil
+            chooseAction: nil,
+            artwork: ["message": "Pokémon art 24/649", "can_retry": false]
         )
         compactSetup.heightAnchor.constraint(
             equalToConstant: compactSetup.preferredSize.height
@@ -1652,6 +1655,16 @@ final class BrandStylesWindowController: NSWindowController {
         let compactFlows = vertical(spacing: BuddyMonBrand.Spacing.medium)
         compactFlows.addArrangedSubview(sampleRow([compactSetup, compactLoading]))
         compactFlows.addArrangedSubview(compactError)
+        let artworkStates: [[String: Any]] = [
+            ["message": "Preparing Pokémon art…", "can_retry": false],
+            ["message": "Art download paused · Retry", "can_retry": true],
+            ["message": "Pokémon art ready", "can_retry": false],
+        ]
+        for artwork in artworkStates {
+            let progress = BuddyMonBrand.Menu.makeArtworkStatus(artwork, target: nil, action: nil)
+            progress.widthAnchor.constraint(equalToConstant: BuddyMonBrand.Menu.trainerCardWidth).isActive = true
+            compactFlows.addArrangedSubview(progress)
+        }
 
         let starters = sampleRow([
             starterChoice("PIKACHU", state: "SELECTED", color: BuddyMonBrand.pikachu),
@@ -1693,13 +1706,25 @@ final class BrandStylesWindowController: NSWindowController {
             stateBlock("DETAIL OPEN", "07/15 / CODEX\ninput 98,765 / output 24,691", color: BuddyMonBrand.textPrimary),
             stateBlock("SOURCE ERROR", "Claude logs unavailable.\nOther sources remain visible.", color: BuddyMonBrand.brand),
         ])
+        let loading = BuddyMonCompactTokensView(
+            view: ["loading": true],
+            target: self,
+            backAction: #selector(previewTokenBack(_:))
+        )
+        loading.heightAnchor.constraint(equalToConstant: loading.preferredSize.height).isActive = true
+        let content = vertical(spacing: BuddyMonBrand.Spacing.medium)
+        content.alignment = .leading
+        content.addArrangedSubview(loading)
+        content.addArrangedSubview(states)
         return specimenSection(
             "27",
             "TOKEN EDGE STATES",
-            "No history/baseline, large-number overflow, expanded detail, partial-source failure, and preserved-report states.",
-            states
+            "Background scan with Back available, no history/baseline, large-number overflow, expanded detail, partial-source failure, and preserved-report states.",
+            content
         )
     }
+
+    @objc private func previewTokenBack(_ sender: Any?) {}
 
     private func accessibilitySection() -> NSView {
         let keyboard = highlightedText(

@@ -72,12 +72,27 @@ at v5. The values do not feed encounter, XP, evolution, or battle rules.
 
 ## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Data Flow
 
-Claude Code is the only plugin integration: its hooks collect new transcript
-usage, apply game rules, and save the result automatically. Activity from Codex
-CLI and Auggie is collected through `collect`, run manually or by the app and
-optional service. Gemini CLI contributes to the read-only Token Usage report
-only; it never awards progress. All state-changing paths hold the shared lock
-across a fresh load, mutation, and save.
+Native `app-status` reads `token-summary.json`, and `app-view tokens` reads
+`token-report.json`; neither request scans transcripts. `refresh-tokens` builds
+both snapshots in a background process at launch, after scheduled collection,
+and on Refresh. Opening Token Usage also starts a scan if its report is missing
+or from a previous day. The masthead shows dashes and Token Usage shows loading
+until the report is ready, then the open screen updates automatically. Reads
+keep the last complete snapshot during a refresh. A late result cannot replace
+a different screen or reopen a closed panel. The background scan and terminal
+reports reuse the detailed per-file cache.
+
+The Mac app collects Claude Code, Codex CLI, and Auggie through `collect`;
+the same command is available manually and through the optional service.
+Claude's plugin remains optional for terminal statusline integration and
+immediate turn-end collection. Both Claude paths use `transcript.claim_usage`
+under the shared state lock. Its durable per-file cursor survives pruning of
+the small plugin session cache and the 14-day idle-file scan cutoff. Claude
+cursors are removed only when their transcript files are gone; temporary access
+errors preserve them. Existing plugin cursors are reused.
+The first scan of Claude logs anchors existing history without awarding it.
+Gemini CLI contributes to Token Usage only. All state-changing paths hold the
+shared lock across a fresh load, mutation, and save.
 
 Interactive screens release the lock while waiting for input. After a keypress
 they resolve the selected Pokémon against current state again, avoiding stale
@@ -149,14 +164,17 @@ rest of its lifecycle.
 ## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Assets
 
 Built-in fallback art is sufficient for every screen and for app readiness.
-Optional packs are installed or refreshed only after an explicit user action.
-Downloads are staged and validated before replacement; a failure leaves the
-last working pack in place.
+`lib/art_setup.py` runs first-launch downloads in a separate process. Gen 5
+species are saved atomically as they arrive, prioritized for the active buddy
+and starters. A marker distinguishes an incomplete pack from a finished one.
+`art-setup.json` holds progress outside game state; a file lock excludes duplicate
+setup processes. Other packs and explicit refreshes use staged validation and
+replacement, preserving working packs on failure. Status reads never download.
 
 The native Trainer Card reads an optional Trainer Red portrait from the local
 trainer pack. Without it, the card draws BuddyMon's original two-tone silhouette
-with `BuddyMonBrand` colors. The portrait is never bundled and is fetched only
-by an explicit asset command.
+with `BuddyMonBrand` colors. The portrait is never bundled and is fetched during
+first-launch setup or an explicit asset command.
 
 Showcase selection stores only Pokémon ids in normal state. PNG export reads
 those ids and writes a local file on demand without storing export history.

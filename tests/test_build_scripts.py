@@ -60,7 +60,8 @@ def test_native_app_binary_target_matches_declared_minimum_macos():
 
     assert 'MINIMUM_MACOS_VERSION="13.0"' in source
     assert 'SWIFT_TARGET="$(uname -m)-apple-macosx${MINIMUM_MACOS_VERSION}"' in source
-    assert 'SWIFTC_ARGS=(-target "${SWIFT_TARGET}" -framework AppKit)' in source
+    assert 'swiftc -target "${SWIFT_TARGET}"' in source
+    assert 'swiftc -target "${architecture}-apple-macosx${MINIMUM_MACOS_VERSION}"' in source
     assert '<string>${MINIMUM_MACOS_VERSION}</string>' in source
 
 
@@ -493,7 +494,8 @@ def test_release_packager_signs_notarizes_and_checksums_the_exact_app():
         assert token in source
     assert 'PRODUCTION_BUNDLE_ID="com.hvnt.buddymon"' in source
     assert 'BUDDYMON_BUNDLE_ID="${PRODUCTION_BUNDLE_ID}"' in source
-    assert 'ARCHIVE="${OUTPUT_DIR}/BuddyMon-macOS-${ARCH}.zip"' in source
+    assert 'DISK_IMAGE="${OUTPUT_DIR}/BuddyMon-macOS.dmg"' in source
+    assert 'stapler validate "${DISK_IMAGE}"' in source
     assert source.count("scripts/validate-release-metadata.py") >= 2
     assert 'cd "${OUTPUT_DIR}"' in source
     assert (

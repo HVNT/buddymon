@@ -101,6 +101,40 @@ def test_client_mix_lines_show_nonzero_sources_by_share():
     ]
 
 
+def test_compact_totals_are_cached_without_scanning_and_expire_next_day(tmp_path, monkeypatch):
+    monkeypatch.setattr(token_usage.paths, "STATE_DIR", tmp_path)
+    now = datetime(2026, 10, 12, 12, tzinfo=token_usage.LOCAL_TZ)
+    def no_scan():
+        raise AssertionError("cached summary must not scan files")
+    monkeypatch.setattr(token_usage, "_source_files", no_scan)
+    assert token_usage.cached_compact_totals(now) is None
+    totals = {"today": 148_200, "yesterday": 102_400}
+    monkeypatch.setattr(token_usage, "dashboard", lambda _: {"headline": [
+        {"id": "day", "tokens": totals["today"], "comparison_tokens": totals["yesterday"]},
+    ]})
+    monkeypatch.setattr(token_usage, "report_lines", lambda _: ["Today 148,200"])
+    assert token_usage.refresh_native_views(now) == totals
+    assert token_usage.cached_compact_totals(now) == totals
+    assert token_usage.cached_native_report(now)["report_lines"] == ["Today 148,200"]
+    assert token_usage.cached_compact_totals(now.replace(day=13)) is None
+    assert token_usage.cached_native_report(now.replace(day=13)) is None
+    (tmp_path / "token-summary.json").write_text('{"date":"2026-10-12","totals": {"today": -1}}')
+    assert token_usage.cached_compact_totals(now) is None
+
+
+def test_native_report_ignores_incomplete_or_invalid_cache(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "STATE_DIR", tmp_path)
+    now = datetime(2026, 10, 12, 12, tzinfo=token_usage.LOCAL_TZ)
+    saved = tmp_path / "token-report.json"
+    assert token_usage.cached_native_report(now) is None
+    for invalid in ["{", "null", "[]", '{"schema_version": 0}', json.dumps({
+        "schema_version": 1, "date": "2026-10-12",
+        "dashboard": {"headline": []}, "report_lines": [None],
+    })]:
+        saved.write_text(invalid)
+        assert token_usage.cached_native_report(now) is None
+
+
 def test_current_day_totals_returns_today_and_yesterday(tmp_path, monkeypatch):
     codex = tmp_path / "codex"
     claude = tmp_path / "claude"

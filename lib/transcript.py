@@ -6,6 +6,35 @@ from entries after that anchor. If the anchor vanishes (compaction, resume),
 skip the award and re-anchor at the tail so stale tokens are never back-filled.
 """
 import json
+import time
+from pathlib import Path
+
+
+def claim_usage(state, transcript_path, session_id, *, bootstrap=False):
+    """Claim usage once for the app and Stop hook, under the caller's state lock.
+
+    Keep the durable cursor alongside the other file collectors. The smaller
+    legacy session cache is still updated for plugin compatibility, but pruning
+    that cache must not make an already-counted transcript eligible again.
+    """
+    path = Path(transcript_path).resolve()
+    mtime = path.stat().st_mtime
+    anchors = state.setdefault("collectors", {})
+    key = f"claude:{path}"
+    previous = anchors.get(key)
+    legacy = state.get("xp_sessions", {}).get(session_id, {})
+    last_uuid = (previous if previous is not None else legacy).get("last_uuid") or None
+    if bootstrap and last_uuid is None:
+        totals, newest = None, _tail_uuid(path)
+    else:
+        totals, newest = collect_since(path, last_uuid)
+    cursor = newest or last_uuid or ""
+    anchors[key] = {"last_uuid": cursor, "mtime": mtime}
+    state.setdefault("xp_sessions", {})[session_id] = {
+        "last_uuid": cursor,
+        "updated": time.time(),
+    }
+    return totals
 
 
 def _usage(entry):

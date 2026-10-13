@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("runtime", type=Path)
+    parser.add_argument("--arch", choices=("arm64", "x86_64"))
     args = parser.parse_args()
 
     lock = json.loads(
@@ -22,6 +23,10 @@ def main():
         (args.runtime / "buddymon-runtime.json").read_text(encoding="utf-8")
     )
     platform = metadata.get("platform")
+    if args.arch:
+        expected_platform = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}[args.arch]
+        if platform != expected_platform:
+            raise SystemExit(f"runtime platform is {platform}, expected {expected_platform}")
     entry = lock["python"]["platforms"].get(platform)
     if not entry:
         raise SystemExit(f"runtime platform is not locked: {platform}")
@@ -51,6 +56,10 @@ def main():
     python = args.runtime / "bin" / "python3"
     if not python.is_file():
         raise SystemExit("runtime is missing bin/python3")
+    if args.arch:
+        architectures = subprocess.check_output(["lipo", "-archs", str(python)], text=True).split()
+        if args.arch not in architectures:
+            raise SystemExit(f"runtime executable does not support {args.arch}")
     probe = subprocess.run(
         [
             str(python),

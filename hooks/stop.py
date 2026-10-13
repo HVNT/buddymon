@@ -7,7 +7,6 @@ so the statusline shows them — nothing is printed into the conversation.
 import json
 import random
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -28,12 +27,7 @@ def main():
         with state.lock():
             s = state.load()
             if s["pokemon"]:
-                sessions = s.setdefault("xp_sessions", {})
-                sess = sessions.setdefault(session_id, {})
-                last_uuid = sess.get("last_uuid")
-                totals, anchor = transcript.collect_since(transcript_path, last_uuid)
-                sess["last_uuid"] = anchor or last_uuid or ""
-                sess["updated"] = time.time()
+                totals = transcript.claim_usage(s, transcript_path, session_id)
                 state.prune_sessions(s)
 
                 if totals:

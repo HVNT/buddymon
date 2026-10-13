@@ -19,6 +19,8 @@ from lib import (
 
 
 def use_temp_state(monkeypatch, tmp_path):
+    for source in ("CLAUDE_ROOT", "CODEX_ROOT", "AUGMENT_ROOT", "GEMINI_ROOT"):
+        monkeypatch.setattr(token_usage, source, tmp_path / "logs" / source)
     state_dir = tmp_path / "state"
     monkeypatch.setattr(paths, "STATE_DIR", state_dir)
     monkeypatch.setattr(paths, "STATE_FILE", state_dir / "state.json")
@@ -30,12 +32,17 @@ def use_temp_state(monkeypatch, tmp_path):
 
 def test_app_status_reports_missing_buddy_and_pack_paths(tmp_path, monkeypatch):
     state_dir = use_temp_state(monkeypatch, tmp_path)
+    def no_scan():
+        raise AssertionError("app-status must not scan activity history")
+    monkeypatch.setattr(token_usage, "_source_files", no_scan)
 
     status = app_bridge.app_status()
 
     assert status["schema_version"] == 1
     assert status["state_dir"] == str(state_dir)
     assert status["has_buddy"] is False
+    assert status["tokens"]["loading"] is True
+    assert status["tokens"]["today"]["compact"] == "—"
     assert status["active"] is None
     assert status["menu_bar_icon_base64"] is None
     assert status["menu_bar"]["baseline"]["state_id"] == "needs_buddy"
@@ -88,7 +95,7 @@ def test_app_status_reports_active_buddy_and_icon(tmp_path, monkeypatch):
     use_temp_state(monkeypatch, tmp_path)
     monkeypatch.setattr(
         token_usage,
-        "current_day_totals",
+        "cached_compact_totals",
         lambda: {"today": 148_200, "yesterday": 102_400},
     )
     s = state.default_state()
@@ -247,6 +254,8 @@ def test_compact_menu_harness_covers_all_review_states_without_expansion():
         "pending",
         "shiny",
         "long_values",
+        "art_downloading",
+        "art_retry",
         "unavailable",
         "recovery_required",
     ]
@@ -381,7 +390,7 @@ def test_app_view_settings_and_tokens(tmp_path, monkeypatch):
     monkeypatch.setattr(
         token_usage,
         "dashboard",
-        lambda: {
+        lambda _: {
             "today": {"tokens": 100, "compact": "100"},
             "headline": [
                 {
@@ -425,8 +434,9 @@ def test_app_view_settings_and_tokens(tmp_path, monkeypatch):
     monkeypatch.setattr(
         token_usage,
         "report_lines",
-        lambda: ["Token Usage", "Today 100"],
+        lambda _: ["Token Usage", "Today 100"],
     )
+    token_usage.refresh_native_views()
 
     settings = app_bridge.app_view("settings")
     tokens = app_bridge.app_view("tokens")
@@ -461,6 +471,72 @@ def test_app_view_settings_and_tokens(tmp_path, monkeypatch):
     assert tokens["summary"][1]["change"] == "+50%"
     assert tokens["dashboard"]["daily"][0]["label"] == "Mon"
     assert tokens["report_lines"] == ["Token Usage", "Today 100"]
+
+
+def test_token_view_stays_responsive_during_background_scan(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import datetime
+    from threading import Event, get_ident
+
+    use_temp_state(monkeypatch, tmp_path)
+    log = token_usage.CLAUDE_ROOT / "project" / "session.jsonl"
+    log.parent.mkdir(parents=True)
+    log.write_text(json.dumps({
+        "timestamp": datetime.now(token_usage.LOCAL_TZ).isoformat(),
+        "message": {"usage": {"input_tokens": 100, "output_tokens": 25}},
+    }) + "\n")
+    scan_started, finish_scan = Event(), Event()
+    source_files = token_usage._source_files
+    ui_thread = get_ident()
+
+    def slow_scan():
+        assert get_ident() != ui_thread, "interactive token view must never scan logs"
+        scan_started.set()
+        assert finish_scan.wait(10), "test did not release background scan"
+        return source_files()
+
+    monkeypatch.setattr(token_usage, "_source_files", slow_scan)
+    assert app_bridge.app_view("tokens")["loading"] is True
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        refresh = pool.submit(token_usage.refresh_native_views)
+        try:
+            assert scan_started.wait(5)
+            for _ in range(3):
+                assert app_bridge.app_view("tokens")["loading"] is True
+                assert app_bridge.app_status()["tokens"]["loading"] is True
+        finally:
+            finish_scan.set()
+        assert refresh.result(timeout=10) == {"today": 125, "yesterday": 0}
+
+        ready = app_bridge.app_view("tokens")
+        assert ready["loading"] is False
+        assert ready["summary"][0]["tokens"] == 125
+        assert app_bridge.app_status()["tokens"]["today"]["tokens"] == 125
+
+        # Keep the last complete report visible while the next scan is pending.
+        scan_started.clear()
+        finish_scan.clear()
+        refresh = pool.submit(token_usage.refresh_native_views)
+        try:
+            assert scan_started.wait(5)
+            pending = app_bridge.app_view("tokens")
+            assert pending["loading"] is False
+            assert pending["dashboard"] == ready["dashboard"]
+            assert pending["report_lines"] == ready["report_lines"]
+        finally:
+            finish_scan.set()
+        refresh.result(timeout=10)
+
+    def failed_scan():
+        raise OSError("activity temporarily unavailable")
+
+    monkeypatch.setattr(token_usage, "_source_files", failed_scan)
+    import pytest
+    with pytest.raises(OSError, match="temporarily unavailable"):
+        token_usage.refresh_native_views()
+    preserved = app_bridge.app_view("tokens")
+    assert preserved["loading"] is False
+    assert preserved["dashboard"] == ready["dashboard"]
 
 
 def test_app_view_json_and_cli_aliases(tmp_path, monkeypatch):

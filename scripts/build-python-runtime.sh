@@ -10,6 +10,7 @@ SOURCE_TARBALL="${PYTHON_BUILD_STANDALONE_TARBALL:-}"
 SOURCE_SHA256="${PYTHON_BUILD_STANDALONE_SHA256:-}"
 WORK_DIR=""
 BACKUP_DIR=""
+ARCH="$(uname -m)"
 
 usage() {
   cat <<'MSG'
@@ -18,6 +19,8 @@ Usage: scripts/build-python-runtime.sh [options]
 Creates a standalone Python runtime for self-contained BuddyMon app builds.
 
 Options:
+  --arch ARCH            arm64 or x86_64 (defaults to this Mac). Cross-building
+                         x86_64 on Apple Silicon requires installed Rosetta.
   --runtime-dir DIR      Output directory. Defaults to .build/python-runtime.
   --python-version VER   Exact locked CPython version.
   --url URL              Direct python-build-standalone tarball URL.
@@ -36,6 +39,10 @@ MSG
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --arch)
+      ARCH="${2:?--arch requires arm64 or x86_64}"
+      shift
+      ;;
     --runtime-dir)
       if [[ $# -lt 2 ]]; then
         echo "error: --runtime-dir requires a directory" >&2
@@ -131,7 +138,6 @@ if [[ "${RUNTIME_DIR_SET}" == "1" && -z "${RUNTIME_DIR}" ]]; then
   exit 2
 fi
 RUNTIME_DIR="${RUNTIME_DIR:-${ROOT}/.build/python-runtime}"
-ARCH="$(uname -m)"
 
 case "${ARCH}" in
   arm64)
@@ -290,6 +296,7 @@ directory_is_empty() {
 
 if [[ "${FORCE}" != "1" ]] \
   && python3 "${ROOT}/scripts/verify-python-runtime.py" "${RUNTIME_DIR}" \
+    --arch "${ARCH}" \
     >/dev/null 2>&1; then
   echo "runtime already matches lock: ${RUNTIME_DIR}"
   exit 0
@@ -490,7 +497,7 @@ if ! validate_runtime "${RUNTIME_DIR}"; then
 fi
 
 if [[ -z "${SOURCE_TARBALL}" && "${SOURCE_URL}" == "${LOCKED_SOURCE_URL}" ]] \
-  && ! python3 "${ROOT}/scripts/verify-python-runtime.py" "${RUNTIME_DIR}"; then
+  && ! python3 "${ROOT}/scripts/verify-python-runtime.py" "${RUNTIME_DIR}" --arch "${ARCH}"; then
   mv "${RUNTIME_DIR}" "${WORK_DIR}/failed-runtime"
   if [[ -n "${BACKUP_DIR}" && -d "${BACKUP_DIR}" ]]; then
     mv "${BACKUP_DIR}" "${RUNTIME_DIR}"

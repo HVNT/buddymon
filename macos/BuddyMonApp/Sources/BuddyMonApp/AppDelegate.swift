@@ -10,20 +10,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static let action: TimeInterval = 30
         static let terminalLaunch: TimeInterval = 30
         static let scheduledCollection: TimeInterval = 300
+        static let artwork: TimeInterval = 3_600
     }
 
     private let runner = BuddyMonRunner()
     private let menuPanelController = MenuPanelController()
     private let singleInstanceGuard = SingleInstanceGuard()
     private let localStateObserver = LocalStateObserver()
+    private let artworkObserver = LocalStateObserver(fileName: "art-setup.json")
     private var statusItem: NSStatusItem!
     private var menuBarBuddyController: MenuBarBuddyController!
     private var latestStatus: [String: Any] = [:]
     private var collectionTask: Task<Void, Never>?
+    private var tokenRefreshTask: Task<Void, Never>?
+    private var artworkTask: Task<Void, Never>?
+    private var attemptedArtworkSetup = false
+    private var artworkSetupFailed = false
     private var passiveStatusRefreshTask: Task<Void, Never>?
     private var passiveStatusRefreshPending = false
     private var menuBarPreviewSignalSource: DispatchSourceSignal?
     private var statusRefreshGeneration = 0
+    private var tokenUsageGeneration = 0
     private var encounterPresentationGeneration = 0
     private var inFlightEncounterGeneration: Int?
     private var hasConfirmedStatus = false
@@ -105,6 +112,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         localStateObserver.stop()
+        artworkObserver.stop()
+        artworkTask?.cancel()
+        collectionTask?.cancel()
+        tokenRefreshTask?.cancel()
         passiveStatusRefreshTask?.cancel()
         passiveStatusRefreshTask = nil
         menuBarPreviewSignalSource?.cancel()
@@ -120,7 +131,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let status = try await runner.status(timeout: CommandTimeout.status)
             guard generation == statusRefreshGeneration else { return }
             latestStatus = status
+            if artworkSetupFailed,
+               (status["artwork"] as? [String: Any])?["state"] as? String == "needed" {
+                latestStatus["artwork"] = [
+                    "state": "incomplete", "message": "Art download paused · Retry", "can_retry": true,
+                ]
+            }
             hasConfirmedStatus = true
+            if !attemptedArtworkSetup {
+                attemptedArtworkSetup = true
+                startArtworkSetup()
+            }
             menuBarBuddyController.apply(status: status)
             refreshRootPanelIfVisible()
             if awaitsInitialStatus {
@@ -138,6 +159,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installLocalStateObserver() {
         localStateObserver.start { [weak self] in
+            self?.requestStatusRefresh()
+        }
+        artworkObserver.start { [weak self] in
             self?.requestStatusRefresh()
         }
     }
@@ -168,7 +192,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "terminal_dex": openTerminalExperience(screen: "dex")
         case "terminal_activity": openTerminalExperience(screen: "journal")
         case "settings": openSettings()
+        case "retry_artwork": startArtworkSetup()
         case "refresh":
+            refreshTokenTotals()
             Task { [weak self] in
                 await self?.refreshStatus()
             }
@@ -234,6 +260,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshRootPanelIfVisible() {
+        if menuPanelController.isVisible, menuPanelController.displayMode == .setup {
+            menuPanelController.updateStarterArtwork(latestStatus["artwork"] as? [String: Any] ?? [:])
+        }
         guard
             menuPanelController.isVisible,
             menuPanelController.displayMode == .menu
@@ -241,7 +270,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuPanelController.presentRoot(
             status: latestStatus,
             target: self,
-            action: #selector(handleNativeMenuAction(_:))
+            action: #selector(handleNativeMenuAction(_:)),
+            preserveFocus: true
         )
     }
 
@@ -257,7 +287,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else { return false }
         menuPanelController.presentStarterSetup(
             target: self,
-            chooseAction: #selector(chooseStarterFromWelcome(_:))
+            chooseAction: #selector(chooseStarterFromWelcome(_:)),
+            artwork: latestStatus["artwork"] as? [String: Any] ?? [:],
+            artworkAction: #selector(handleNativeMenuAction(_:))
         )
         return true
     }
@@ -282,6 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { [weak self] in
             guard let self else { return }
             if await chooseStarter(starter) {
+                collectLocalUsage()
                 presentRootPanel()
             }
         }
@@ -296,6 +329,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ["collect", "--scheduled"],
                 timeout: CommandTimeout.scheduledCollection
             )
+            refreshTokenTotals()
+            await refreshStatus()
+        }
+    }
+
+    private func refreshTokenTotals() {
+        guard tokenRefreshTask == nil else { return }
+        tokenRefreshTask = Task { [weak self] in
+            guard let self else { return }
+            let failure: String?
+            do {
+                _ = try await runner.run(["refresh-tokens"], timeout: CommandTimeout.scheduledCollection)
+                failure = nil
+            } catch {
+                failure = runner.diagnosticText(error: error)
+            }
+            tokenRefreshTask = nil
+            await refreshStatus()
+            guard menuPanelController.isVisible,
+                  menuPanelController.displayMode == .tokens else { return }
+            if let failure {
+                tokenUsageGeneration += 1
+                presentTokenUsage(["error": failure])
+            } else {
+                await loadTokenUsage()
+            }
+        }
+    }
+
+    private func startArtworkSetup() {
+        guard artworkTask == nil,
+              let artwork = latestStatus["artwork"] as? [String: Any],
+              artwork["state"] as? String != "complete" else { return }
+        artworkTask = Task { [weak self] in
+            guard let self else { return }
+            artworkSetupFailed = false
+            do {
+                _ = try await runner.run(["setup-artwork"], timeout: CommandTimeout.artwork)
+            } catch {
+                artworkSetupFailed = true
+            }
+            artworkTask = nil
             await refreshStatus()
         }
     }
@@ -404,13 +479,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func loadTokenUsage() async {
+        tokenUsageGeneration += 1
+        let generation = tokenUsageGeneration
         do {
             let view = try await runner.appView(
                 "tokens",
                 timeout: CommandTimeout.view
             )
+            guard generation == tokenUsageGeneration,
+                  menuPanelController.isVisible,
+                  menuPanelController.displayMode == .tokens else { return }
             presentTokenUsage(view)
+            if view["loading"] as? Bool == true {
+                refreshTokenTotals()
+            }
         } catch {
+            guard generation == tokenUsageGeneration,
+                  menuPanelController.isVisible,
+                  menuPanelController.displayMode == .tokens else { return }
             presentTokenUsage([
                 "error": runner.diagnosticText(error: error),
             ])

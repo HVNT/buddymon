@@ -4,9 +4,16 @@ import random
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import collectors, engine, state
+
+
+@pytest.fixture(autouse=True)
+def isolated_claude_logs(tmp_path, monkeypatch):
+    monkeypatch.setattr(collectors, "CLAUDE_ROOT", tmp_path / "claude")
 
 
 def codex_record(cum_output, cum_input, cum_cached):

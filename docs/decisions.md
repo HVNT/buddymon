@@ -57,16 +57,19 @@ stable JSON views and actions instead of parsing human-readable output.
 
 ## Client support is explicit and intentionally uneven
 
-**Decision:** Claude Code is the only automatic plugin source for progress.
-Codex CLI and Auggie earn progress through the explicit `collect` path, which
-the app and optional collector service can run. Token Usage recognizes those
+**Decision:** The Mac app collects Claude Code, Codex CLI, and Auggie directly
+from local logs. The Claude plugin is optional; it adds terminal integration
+and immediate turn-end updates. App and plugin collection share one durable
+Claude transcript cursor to prevent duplicate awards. The first app scan of
+Claude history uses its own bootstrap marker, so existing Codex/Auggie players
+do not receive old Claude history when upgrading. Token Usage recognizes those
 three sources plus Gemini CLI; Gemini is report-only and never earns progress.
 Unknown log shapes are ignored rather than grouped under a vague catch-all, and
 model names remain hidden until their local record format provides them reliably.
 
-**Why:** Each client gets only the integration the local data can prove.
-Pretending every source has a Claude-style hook or awards progress would make
-BuddyMon feel more capable than it is.
+**Why:** Opening the Mac app should be enough to collect supported activity.
+A separate plugin installation must not be a prerequisite for normal play,
+and keeping it installed must not inflate progress.
 
 ## Python owns native-menu policy
 
@@ -192,19 +195,40 @@ window animation disabled. Motion is reserved for Pokémon state playback and
 small direct-control feedback that honors Reduce Motion; it must not gate page
 content or make navigation cadence depend on row count.
 
-## Optional art requires explicit consent
+## Mac artwork setup is automatic and resumable
 
-**Decision:** Built-in fallback art is always enough for readiness. Optional art
-is installed or refreshed only after a confirmed user action, and a failed
-operation preserves the last working pack.
+First status must also be independent of historical token-report scans. A
+separate background command refreshes saved reports for both the masthead and
+Token Usage. Interactive reads never scan logs: a measured cold report took
+about 40 seconds, exceeding the native screen's 20-second deadline. Token Usage
+keeps Back available during the first scan, updates when it finishes, and keeps
+the last complete report during later refreshes. Async results only update the
+current Token Usage screen; they cannot undo navigation or reopen the panel.
 
-**Why:** Normal play should remain local-only and dependable. Optional art packs
-should not be downloaded silently.
+**Decision:** The Mac app downloads the existing Pokémon packs on first launch
+while users choose a starter and play. Gen 5 sprites appear progressively;
+interrupted downloads resume from completed species. Progress and retry stay
+inside the app. Plugin-only installs and refreshes remain explicit commands.
+
+**Why:** Pokémon art is part of the intended first-run experience and should not
+require a command. Setup uses the network; subsequent play uses local copies.
+Failed downloads preserve completed art and never replace gameplay state.
+Regular and shiny Gen 5 downloads are tracked separately: a transient shiny
+failure must not certify the pack as complete. Retry reuses regular frames,
+and older completion records receive a background check so they can be repaired
+without a command. Successful validation is recorded once, keeping status
+reads independent of the full sprite inventory.
+
+Claude's shared cursor remains while its transcript file exists, even when it
+falls outside the 14-day scan window or the plugin's 20-session cache. Removing
+both cursors made a resumed file look new and replayed historical tokens. The
+saved cursor therefore outlives inactivity and temporary permission errors;
+confirmed file deletion still permits cleanup.
 
 The Trainer Card always includes an original two-tone silhouette drawn in code
-with `BuddyMonBrand` colors. A confirmed optional-art command may install one
+with `BuddyMonBrand` colors. First-launch setup installs one
 pinned, checksum-verified Trainer Red portrait in local XDG state. No external
-trainer portrait is bundled, and normal app use remains network-free.
+trainer portrait is bundled. After setup, normal play remains network-free.
 
 ## Scheduled collection has one gate
 
@@ -300,7 +324,8 @@ native first run automatically opens First Signal as a 304-by-210 Field Guide
 card in the anchored panel: five compact starter choices and one simple first
 mission. Existing trainers still launch quietly. Choosing, loading, and failure
 stay in that same compact panel. There is no hidden titled setup window,
-standalone window, automatic optional-art download, or recurring prompt.
+standalone window or recurring prompt. Pokémon artwork downloads in the
+background; choosing a starter and playing never wait for it.
 
 **Why:** BuddyMon should feel like a little game from the first click while
 remaining a calm local companion. A new trainer should not have to discover a
@@ -405,8 +430,8 @@ rather than persistent filled buttons. Their resting state is transparent,
 every option uses a pointing-hand cursor, hover is transient, and keyboard focus
 retains a visible square outline. The active option is darker, bold, underlined,
 and marked with a leading chevron so state is visible without relying on color.
-Backup and optional-art setup remain explicit terminal or command flows because
-they require operational feedback rather than a preference value.
+Backup remains an explicit command. Artwork setup is automatic on Mac, with
+progress and retry in First Signal and the root panel rather than Settings.
 
 The root panel exposes Tokens, Today, and Yesterday as one clickable,
 backgroundless, right-aligned masthead line, with no separate token row or

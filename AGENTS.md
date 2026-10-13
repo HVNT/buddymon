@@ -2,8 +2,9 @@
 
 ## Project Shape
 
-BuddyMon is a local Claude Code plugin. It turns local token/activity data into
-a small pokemon-style statusline/menu-bar game.
+BuddyMon is a local macOS menu-bar and terminal game powered by Claude Code,
+Codex CLI, and Auggie activity. Gemini CLI supports token reporting only. The
+Claude Code plugin is an optional statusline and turn-end integration.
 
 ## Non-Negotiables
 
@@ -13,8 +14,9 @@ a small pokemon-style statusline/menu-bar game.
   state, and local sprite packs.
 - Do not commit personal runtime state or generated sprite packs from
   `~/.local/state/buddymon/`.
-- Do not fetch network assets unless the user explicitly asks for an asset
-  setup command such as `/buddymon:official`.
+- Network artwork setup is limited to the Mac app's automatic first-launch
+  download and explicit setup/refresh commands such as `/buddymon:official`.
+  Ordinary game commands and status reads must remain network-free.
 - Native UI must always use `BuddyMonBrand` from `BrandStyle.swift`. Do not add
   local palettes, theme enums, direct font choices, one-off corner radii, or a
   second spacing system. Read `docs/brand.md` before changing native UI and add

@@ -113,6 +113,18 @@ def menu_panel_harness():
         ("shiny", "SHINY BUDDY", _build_menu_panel_fixture_status(shiny, recent=[])),
         ("long_values", "LONG VALUES / LEVEL CAP", _build_menu_panel_fixture_status(long_values, recent=[])),
         (
+            "art_downloading", "ART DOWNLOADING / PLAY READY",
+            {**_build_menu_panel_fixture_status(ready, recent=[]), "artwork": {
+                "state": "downloading", "message": "Pokémon art 24/649", "can_retry": False,
+            }},
+        ),
+        (
+            "art_retry", "ART OFFLINE / RETRY",
+            {**_build_menu_panel_fixture_status(ready, recent=[]), "artwork": {
+                "state": "incomplete", "message": "Art download paused · Retry", "can_retry": True,
+            }},
+        ),
+        (
             "unavailable",
             "LOCAL STATUS UNAVAILABLE",
             _build_menu_panel_fixture_status(empty, error="fixture unavailable"),

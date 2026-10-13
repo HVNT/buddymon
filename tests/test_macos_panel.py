@@ -961,7 +961,7 @@ def test_compact_menu_panel_state_harness_is_complete_and_deterministic(
     )
     assert payload.returncode == 0, payload.stderr
     decoded = json.loads(payload.stdout)
-    assert len(decoded["fixtures"]) == 8
+    assert len(decoded["fixtures"]) == 10
     assert "recovery_required" in {
         fixture["id"] for fixture in decoded["fixtures"]
     }

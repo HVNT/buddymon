@@ -5,6 +5,25 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+- Clarified Mac app setup, supported clients, build requirements, and automatic
+  artwork in the README; the Claude Code plugin is an optional integration.
+- Fixed old Claude sessions replaying token history after inactivity and cache
+  cleanup. Saved positions now remain while their transcript files exist.
+- Fixed interrupted shiny artwork being marked complete. Retry keeps regular
+  sprites and fetches missing shiny art; older packs are checked in the background.
+- Fixed Token Usage timing out on a large first scan. Its loading screen now
+  stays responsive and fills automatically when the background report is ready.
+- Moved the first token-history scan into the background so existing activity
+  cannot delay starter selection or exceed the native status timeout.
+- Added a universal Mac build and drag-to-Applications DMG packaging, with
+  bundled runtimes for Apple Silicon and Intel and verification of the final
+  signed, notarized disk image.
+- Added automatic Pokémon artwork downloads on Mac. Choose a buddy immediately,
+  see artwork as it arrives, and resume interrupted downloads with in-app Retry.
+- Added direct Claude Code activity collection to the Mac app, removing the
+  plugin requirement for normal play. The optional plugin shares a durable
+  transcript cursor with the app, preventing duplicate progress and preserving
+  existing token bookkeeping when upgrading.
 - Enlarged terminal handoffs with adaptive roomy, medium, and compact window
   profiles. Displays that have room now open a 112-by-38 Ghostty grid with
   larger encounter and collection art, while constrained displays retain a

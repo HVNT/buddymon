@@ -120,11 +120,7 @@ final class MenuPanelStateHarnessView: NSView {
         errorRow.alignment = .top
         errorRow.spacing = BuddyMonBrand.Spacing.large
         errorRow.addArrangedSubview(noticeCard(kind: .error))
-        let errorSpacer = NSView()
-        errorSpacer.widthAnchor.constraint(
-            equalToConstant: Layout.cardWidth
-        ).isActive = true
-        errorRow.addArrangedSubview(errorSpacer)
+        errorRow.addArrangedSubview(setupCard(retry: true))
         stack.addArrangedSubview(errorRow)
 
         let tokenRow = NSStackView()
@@ -348,14 +344,19 @@ final class MenuPanelStateHarnessView: NSView {
         return content
     }
 
-    private func setupCard() -> NSView {
+    private func setupCard(retry: Bool = false) -> NSView {
         let panel = BuddyMonCompactStarterSetupView(
             target: self,
-            chooseAction: #selector(noop(_:))
+            chooseAction: #selector(noop(_:)),
+            artwork: [
+                "message": retry ? "Art download paused · Retry" : "Pokémon art 24/649",
+                "can_retry": retry,
+            ],
+            artworkAction: #selector(noop(_:))
         )
         return drillInCard(
             title: "FIRST SIGNAL / COMPACT SETUP",
-            stateID: "starter_setup",
+            stateID: retry ? "starter_setup_retry" : "starter_setup",
             panel: panel,
             height: panel.preferredSize.height
         )

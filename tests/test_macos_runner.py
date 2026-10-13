@@ -81,7 +81,7 @@ def test_buddymon_runner_describes_failure_with_empty_streams(
     assert result["description"] == "BuddyMon command failed with exit status 37."
 
 
-def test_native_app_keeps_first_launch_offline_and_uses_shared_scheduling():
+def test_native_app_keeps_starter_independent_from_art_and_uses_shared_scheduling():
     app_source = (
         SWIFT_DIR / "AppDelegate.swift"
     ).read_text(encoding="utf-8")
@@ -97,6 +97,9 @@ def test_native_app_keeps_first_launch_offline_and_uses_shared_scheduling():
     assert "presentStarterSetup" in first_setup
     assert "chooseStarter()" not in first_setup
     assert "installAssets" not in first_setup
+    assert "await" not in first_setup
+    assert "startArtworkSetup()" in refresh_status
+    assert "attemptedArtworkSetup = true" in refresh_status
     assert "if awaitsInitialStatus" in refresh_status
     assert "awaitsInitialStatus = false" in refresh_status
     assert "_ = presentStarterSetupIfNeeded()" in refresh_status

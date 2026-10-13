@@ -17,6 +17,7 @@ xcrun swiftc \
   "${SOURCE_DIR}/BrandStyle.swift" \
   "${SOURCE_DIR}/MenuPanelSharedViews.swift" \
   "${SOURCE_DIR}/CompactSetupView.swift" \
+  "${SOURCE_DIR}/CompactTokenUsageView.swift" \
   "${SOURCE_DIR}/BrandStylesPreview.swift" \
   "${ROOT}/tools/BrandStylesSnapshot.swift" \
   -o "${EXECUTABLE}"

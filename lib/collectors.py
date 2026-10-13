@@ -10,15 +10,18 @@ weeks of history don't dump into one level-up.
           cumulative totals in event_msg/token_count records)
   augment ~/.augment/sessions/*.json  (rewritten in place; per-node
           token_usage with timestamp_ms)
+  claude  ~/.claude/projects/*/*.jsonl (assistant usage; cursor shared with
+          the optional Claude Code plugin)
 """
 import json
 import time
 from pathlib import Path
 
-from . import engine
+from . import engine, state as state_store, transcript
 
 CODEX_ROOT = Path.home() / ".codex" / "sessions"
 AUGMENT_ROOT = Path.home() / ".augment" / "sessions"
+CLAUDE_ROOT = Path.home() / ".claude" / "projects"
 RECENT_WINDOW_DAYS = 14  # ignore files older than this
 
 
@@ -154,16 +157,44 @@ def collect_augment(anchors, award, totals):
         anchors[key] = {"last_ts": newest, "mtime": mtime}
 
 
+def collect_claude(state, totals):
+    """Read Claude activity without plugin setup or double-counting its hooks."""
+    anchors = state.setdefault("collectors", {})
+    bootstrap = not anchors.get("_claude_bootstrapped", False)
+    for path in sorted(CLAUDE_ROOT.glob("*/*.jsonl")):
+        key = f"claude:{path.resolve()}"
+        if _recent(path, anchors, key) is None:
+            continue
+        try:
+            usage = transcript.claim_usage(
+                state, path, path.stem, bootstrap=bootstrap
+            )
+        except (OSError, UnicodeError):
+            continue
+        if usage:
+            _add(totals, usage)
+    anchors["_claude_bootstrapped"] = True
+    state_store.prune_sessions(state)
+
+
 def prune_anchors(anchors):
-    """Drop anchors that can never be scanned again: deleted files, or files
-    aged past the recency window. Keeps state.json from growing forever."""
+    """Keep Claude cursors while their transcripts exist, including idle files.
+
+    A resumed Claude transcript needs its old UUID even after the smaller
+    plugin session cache expires. Other clients keep their existing age policy.
+    """
     cutoff = time.time() - RECENT_WINDOW_DAYS * 86400
     for key in [k for k in anchors if ":" in k]:
+        kind, filename = key.split(":", 1)
         try:
-            if Path(key.split(":", 1)[1]).stat().st_mtime >= cutoff:
+            mtime = Path(filename).stat().st_mtime
+            if kind == "claude" or mtime >= cutoff:
                 continue
-        except OSError:
+        except FileNotFoundError:
             pass
+        except OSError:
+            if kind == "claude":
+                continue  # A temporary access error does not prove deletion.
         del anchors[key]
 
 
@@ -174,6 +205,7 @@ def collect(state, rng):
     totals = _zero()
     collect_codex(anchors, bootstrapped, totals)
     collect_augment(anchors, bootstrapped, totals)
+    collect_claude(state, totals)
     prune_anchors(anchors)
     anchors["_bootstrapped"] = True
 

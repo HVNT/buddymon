@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import (  # noqa: E402
-    app_bridge, backups, battle as bt, collector_service, collectors, data, engine,
+    app_bridge, art_setup, backups, battle as bt, collector_service, collectors, data, engine,
     journal, menu_bar, menu_launcher, notify, packs, paths, pixels, render,
     safari as sf, showcase_share, sprites, state, swiftbar, token_usage, tui,
 )
@@ -69,8 +69,8 @@ def choose(args):
     grid, palette = sprites.sprite_for(buddy["name"], buddy["type"])
     art = "\n".join(pixels.render(grid, palette))
     return (
-        f"{art}\n\n{buddy['emoji']} {buddy['name']} chose YOU! Claude Code is "
-        "automatic; collect adds Codex CLI and Auggie activity."
+        f"{art}\n\n{buddy['emoji']} {buddy['name']} chose YOU! BuddyMon collects "
+        "Claude Code, Codex CLI, and Auggie activity while the app is open."
     )
 
 
@@ -457,6 +457,15 @@ def install_assets(args):
     return CommandResult("\n".join(lines), exit_code)
 
 
+def setup_artwork(args):
+    result = art_setup.install()
+    return CommandResult(json.dumps(result), 0 if result["ok"] else 1)
+
+
+def refresh_tokens(args):
+    return json.dumps(token_usage.refresh_native_views())
+
+
 def history(args):
     n = int(args[0]) if args and args[0].isdigit() else 20
     entries = journal.tail(n, newest_first=True)
@@ -496,6 +505,8 @@ def main():
         "app-view": app_view,
         "app-action": app_action,
         "install-assets": install_assets,
+        "setup-artwork": setup_artwork,
+        "refresh-tokens": refresh_tokens,
         "history": history,
         "safari": safari,
         "battle": battle,

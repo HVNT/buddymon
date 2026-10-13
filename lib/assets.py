@@ -82,6 +82,8 @@ def pack_ready(kind, root=None):
     """Return whether a present pack is valid enough for normal use."""
     if not pack_installed(kind, root):
         return False
+    if kind == "gen5" and (pack_path(kind, root) / ".downloading").is_file():
+        return False
     if kind == "trainer":
         return trainer_portrait_base64(root) is not None
     return True

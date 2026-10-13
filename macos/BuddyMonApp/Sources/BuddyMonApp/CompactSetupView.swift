@@ -21,8 +21,17 @@ final class BuddyMonCompactStarterSetupView: NSView {
     )
     private(set) weak var initialResponder: NSView?
     private(set) var focusableControls: [NSButton] = []
+    private let artworkButton: NSButton
 
-    init(target: AnyObject?, chooseAction: Selector?) {
+    init(
+        target: AnyObject?,
+        chooseAction: Selector?,
+        artwork: [String: Any] = [:],
+        artworkAction: Selector? = nil
+    ) {
+        artworkButton = BuddyMonBrand.Menu.makeArtworkStatus(
+            artwork, target: target, action: artworkAction
+        )
         let root = NSStackView()
         root.orientation = .vertical
         root.alignment = .leading
@@ -96,6 +105,13 @@ final class BuddyMonCompactStarterSetupView: NSView {
             color: BuddyMonBrand.Menu.ink,
             font: BuddyMonBrand.Font.strong(8)
         ))
+        root.addArrangedSubview(Self.text(
+            "CLAUDE CODE · CODEX · AUGGIE  /  WHILE BUDDYMON IS OPEN",
+            color: BuddyMonBrand.Menu.mutedInk,
+            font: BuddyMonBrand.Font.regular(7)
+        ))
+        artworkButton.widthAnchor.constraint(equalToConstant: Layout.contentWidth).isActive = true
+        root.addArrangedSubview(artworkButton)
         root.addArrangedSubview(Self.flexibleVerticalSpacer())
         root.addArrangedSubview(Self.text(
             "ARROWS MOVE  ·  RETURN CHOOSE  ·  ESC CLOSE",
@@ -108,7 +124,7 @@ final class BuddyMonCompactStarterSetupView: NSView {
         root.translatesAutoresizingMaskIntoConstraints = false
 
         super.init(frame: .zero)
-        focusableControls = buttons
+        focusableControls = buttons + [artworkButton]
         initialResponder = buttons.first
         wantsLayer = true
         layer?.backgroundColor = BuddyMonBrand.Menu.canvas.cgColor
@@ -135,6 +151,10 @@ final class BuddyMonCompactStarterSetupView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    func updateArtwork(_ status: [String: Any]) {
+        BuddyMonBrand.Menu.updateArtworkStatus(artworkButton, status: status)
     }
 
     private static func text(

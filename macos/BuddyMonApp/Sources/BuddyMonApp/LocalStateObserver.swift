@@ -20,9 +20,11 @@ final class LocalStateObserver {
 
     init(
         stateURL: URL? = nil,
+        fileName: String = "state.json",
         debounceInterval: TimeInterval = 0.12
     ) {
         self.stateURL = stateURL ?? LocalStateObserver.defaultStateURL
+            .deletingLastPathComponent().appendingPathComponent(fileName)
         self.debounceInterval = debounceInterval
     }
 

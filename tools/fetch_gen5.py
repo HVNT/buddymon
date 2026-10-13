@@ -111,6 +111,34 @@ def _slug(name):
     return species.slug(name)
 
 
+class IncompleteSpriteError(RuntimeError):
+    """A regular sprite is usable, but its shiny download still needs retry."""
+
+    def __init__(self, message, entry):
+        super().__init__(message)
+        self.entry = entry
+
+
+def species_entry(sid, name, *, existing=None):
+    """Fetch the same regular and shiny art for CLI and progressive Mac setup."""
+    entry = dict(existing or {})
+    try:
+        if not entry.get("frames"):
+            entry["frames"] = frames_pack(fetch(f"{SPRITES}/{sid}.gif"))
+    except Exception as exc:
+        raise RuntimeError(
+            f"missing regular sprite for #{sid} {name}: {exc}"
+        ) from exc
+    try:
+        if not entry.get("shiny_frames"):
+            entry["shiny_frames"] = frames_pack(fetch(f"{SPRITES}/shiny/{sid}.gif"))
+    except Exception as exc:
+        raise IncompleteSpriteError(
+            f"missing shiny sprite for #{sid} {name}: {exc}", entry
+        ) from exc
+    return entry
+
+
 def main(pack_root=None):
     names = dex_names()
     root = Path(pack_root) if pack_root is not None else assets.pack_root()
@@ -121,17 +149,7 @@ def main(pack_root=None):
         name = names.get(sid)
         if not name:
             continue
-        entry = {}
-        try:
-            entry["frames"] = frames_pack(fetch(f"{SPRITES}/{sid}.gif"))
-        except Exception as e:
-            raise RuntimeError(
-                f"missing regular sprite for #{sid} {name}: {e}"
-            ) from e
-        try:
-            entry["shiny_frames"] = frames_pack(fetch(f"{SPRITES}/shiny/{sid}.gif"))
-        except Exception:
-            pass
+        entry = species_entry(sid, name)
         # one file per species so the runtime loads only what it shows
         (out / f"{_slug(name)}.json").write_text(json.dumps(entry), encoding="utf-8")
         written += 1

@@ -163,6 +163,15 @@ final class BuddyMonCompactMenuView: NSView {
         if !utilityButtons.isEmpty {
             root.addArrangedSubview(Self.quickLinkGrid(utilityButtons))
         }
+        if let artwork = status["artwork"] as? [String: Any],
+           artwork["state"] as? String != "complete" {
+            let progress = BuddyMonBrand.Menu.makeArtworkStatus(
+                artwork, target: target, action: action
+            )
+            progress.widthAnchor.constraint(equalToConstant: Layout.contentWidth).isActive = true
+            root.addArrangedSubview(progress)
+            controls.append(progress)
+        }
         root.addArrangedSubview(Self.footer(
             menu: menu,
             target: target,

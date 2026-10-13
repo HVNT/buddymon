@@ -90,6 +90,10 @@ with each percentage kept inside its own card. The prior-week label names its
 cutoff until Sunday. The seven-day bars and leading local tools remain below. Its back
 chevron shares the title row, matching Trainer, Battle, and Battle Result. Back
 returns to the buddy dropdown; it never opens a standalone dashboard.
+The first report scans local activity in the background. Token Usage shows
+“Reading local token activity…” until it is ready and updates automatically;
+Back and closing the panel remain available. Later refreshes keep the last
+complete report visible while new totals are calculated.
 
 Trainer opens a 3:2 Field Guide card in the same panel. It shows NAME, TOKENS,
 POKÉDEX, and CAUGHT beside an explicitly installed local Trainer Red portrait,
@@ -130,12 +134,11 @@ first run automatically opens **First Signal** in the anchored panel:
 
 1. Choose a starter.
 2. BuddyMon is ready immediately with built-in fallback art.
-3. Do a little work and return for the next signal.
-4. Install optional art later with `/buddymon:official` or `install-assets` only
-   if you want it.
+3. Pokémon artwork downloads in the background and appears as it arrives.
+4. Use Claude Code, Codex CLI, or Auggie while BuddyMon is open, then check back.
 
-BuddyMon never downloads optional art automatically, and missing art never
-blocks setup. First Signal, its working state, and any setup error all use the
+Missing art never blocks setup. If the download pauses, choose **Retry** inside
+the app; completed sprites stay saved. First Signal, its working state, and any setup error all use the
 same 304-by-210 Field Guide panel as the everyday dropdown. There is no dark
 console-style setup window. A failed refresh keeps the last working copy.
 
@@ -150,8 +153,8 @@ native renderers or private native bridge routes.
 Settings presents all seven preferences directly in one
 304-by-210 panel. Every allowed value is visible; the active value is marked,
 and selecting another option applies that exact validated value immediately.
-Backup and optional-art setup remain explicit terminal or command flows rather
-than masquerading as native preferences.
+Backup remains an explicit command. Artwork setup and retry appear directly in
+First Signal and the root panel while downloads are incomplete.
 
 Click outside to close the panel and keep BuddyMon running. Click the menu-bar
 buddy again to toggle compact mode. No normal product destination opens a
@@ -193,9 +196,9 @@ The app calls the same Python boundaries as every other BuddyMon client:
 Python owns game rules, progression, state, and encounter logic. Swift owns the
 status item, anchored panel, native rendering, and safe routing. Collection, setup,
 sharing, and game commands run asynchronously so they do not freeze the panel.
-Claude Code progress comes from its plugin hooks. The app's collection path reads
-Codex CLI and Auggie activity; Gemini CLI stays in the read-only Token Usage
-report.
+The app collects Claude Code, Codex CLI, and Auggie activity directly from local
+logs. The Claude plugin is optional; its hooks share the app's transcript cursor
+so activity is counted once. Gemini CLI stays in the read-only Token Usage report.
 
 ## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Where Data Lives
 

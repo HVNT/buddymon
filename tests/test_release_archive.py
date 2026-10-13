@@ -81,3 +81,25 @@ def test_release_archive_verifier_checks_downloaded_bundle_integrity():
     ):
         assert token in source
     assert '"--require-dated-changelog"' in source
+
+
+@pytest.mark.parametrize("valid_shortcut", [True, False])
+def test_dmg_layout_is_checked_and_always_detached(tmp_path, monkeypatch, valid_shortcut):
+    calls = []
+    def run(command, **_):
+        calls.append(command)
+        if command[:2] == ["hdiutil", "attach"]:
+            mount = Path(command[-2])
+            runtime = mount / "BuddyMon.app/Contents/Resources/python/arm64/bin/python3"
+            runtime.parent.mkdir(parents=True)
+            runtime.touch()
+            (mount / "Applications").symlink_to("/Applications" if valid_shortcut else "/tmp")
+    monkeypatch.setattr(verifier, "run", run)
+    if valid_shortcut:
+        with verifier.mounted_disk_image(tmp_path / "test.dmg", tmp_path / "mount") as app:
+            assert app.name == "BuddyMon.app"
+    else:
+        with pytest.raises(verifier.ReleaseArchiveError, match="Applications shortcut"):
+            with verifier.mounted_disk_image(tmp_path / "test.dmg", tmp_path / "mount"):
+                pytest.fail("invalid shortcut accepted")
+    assert calls[-1][:2] == ["hdiutil", "detach"]

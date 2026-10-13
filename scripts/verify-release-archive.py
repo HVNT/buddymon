@@ -2,9 +2,11 @@
 """Verify the exact signed BuddyMon archive a user downloads."""
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -97,10 +99,27 @@ def extracted_app(archive, destination):
     return app
 
 
+@contextlib.contextmanager
+def mounted_disk_image(archive, destination):
+    destination.mkdir()
+    run(["hdiutil", "attach", "-readonly", "-nobrowse", "-mountpoint", destination, archive])
+    try:
+        app = destination / "BuddyMon.app"
+        applications = destination / "Applications"
+        if not app.is_dir() or not applications.is_symlink() or os.readlink(applications) != "/Applications":
+            raise ReleaseArchiveError("disk image must contain BuddyMon.app and an Applications shortcut")
+        if not (app / "Contents/Resources/python/arm64/bin/python3").is_file():
+            raise ReleaseArchiveError("disk image must contain the universal app")
+        yield app
+    finally:
+        run(["hdiutil", "detach", destination])
+
+
 def verify_bundle(app, temporary_root):
     info = app / "Contents" / "Info.plist"
     runtime = app / "Contents" / "Resources" / "python"
-    python = runtime / "bin" / "python3"
+    universal = (runtime / "arm64").is_dir()
+    python = runtime / platform.machine() / "bin/python3" if universal else runtime / "bin/python3"
     entrypoint = app / "Contents" / "Resources" / "buddymon" / "buddymon.py"
     for path, label in (
         (info, "Info.plist"),
@@ -120,12 +139,17 @@ def verify_bundle(app, temporary_root):
             app,
         ]
     )
-    run([sys.executable, ROOT / "scripts" / "verify-python-runtime.py", runtime])
+    if universal:
+        run(["lipo", app / "Contents/MacOS/BuddyMon", "-verify_arch", "arm64", "x86_64"])
+        for architecture in ("arm64", "x86_64"):
+            run([sys.executable, ROOT / "scripts/verify-python-runtime.py", runtime / architecture, "--arch", architecture])
+    else:
+        run([sys.executable, ROOT / "scripts" / "verify-python-runtime.py", runtime])
     run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app])
     run(["spctl", "--assess", "--type", "execute", "--verbose=2", app])
 
     state_home = temporary_root / "state"
-    env = {**os.environ, "XDG_STATE_HOME": str(state_home)}
+    env = {**os.environ, "XDG_STATE_HOME": str(state_home), "PYTHONDONTWRITEBYTECODE": "1"}
     result = run(
         [python, entrypoint, "app-status"],
         env=env,
@@ -146,8 +170,18 @@ def verify(archive, checksum):
     require_commands(("ditto", "plutil", "codesign", "spctl"))
     with tempfile.TemporaryDirectory(prefix="buddymon-release-verify-") as raw_root:
         root = Path(raw_root)
-        app = extracted_app(archive, root / "archive")
-        verify_bundle(app, root)
+        if archive.suffix.lower() == ".dmg":
+            require_commands(("hdiutil", "xcrun", "lipo"))
+            run(["codesign", "--verify", "--strict", archive])
+            run(["xcrun", "stapler", "validate", archive])
+            run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", archive])
+            with mounted_disk_image(archive, root / "volume") as mounted:
+                app = root / "BuddyMon.app"
+                run(["ditto", mounted, app])
+            verify_bundle(app, root)
+        else:
+            app = extracted_app(archive, root / "archive")
+            verify_bundle(app, root)
 
 
 def main(argv=None):

@@ -84,57 +84,18 @@ def _build_encounter_view(s):
 
 
 def _build_token_usage_view(_s):
-    try:
-        dashboard = token_usage.dashboard()
-        report = token_usage.report_lines()
-        error = None
-    except Exception as exc:
-        dashboard = {
-            "today": {"tokens": 0, "compact": "0"},
-            "headline": [
-                {
-                    "id": "day",
-                    "label": "Today",
-                    "tokens": 0,
-                    "compact": "0",
-                    "comparison_label": "Yesterday",
-                    "comparison_tokens": 0,
-                    "comparison_compact": "0",
-                    "change": "0%",
-                    "tone": "flat",
-                },
-                {
-                    "id": "week",
-                    "label": "This week",
-                    "tokens": 0,
-                    "compact": "0",
-                    "comparison_label": "Last week",
-                    "comparison_tokens": 0,
-                    "comparison_compact": "0",
-                    "change": "0%",
-                    "tone": "flat",
-                },
-            ],
-            "total": {"tokens": 0, "compact": "0"},
-            "daily": [],
-            "clients": [],
-            "comparison": [],
-            "trend": {
-                "direction": "flat",
-                "value": "0%",
-                "detail": "vs prior 7 days",
-            },
-            "insights": [],
-        }
-        report = []
-        error = str(exc)
+    saved = token_usage.cached_native_report()
+    if saved is None:
+        return _build_view_payload("tokens", "Token Usage", loading=True)
+    dashboard = saved["dashboard"]
     return _build_view_payload(
         "tokens",
         "Token Usage",
         summary=dashboard["headline"],
         dashboard=dashboard,
-        report_lines=report,
-        error=error,
+        report_lines=saved["report_lines"],
+        loading=False,
+        error=None,
         terminal_fallback_screen="tokens",
     )
 
