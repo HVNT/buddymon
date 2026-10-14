@@ -7,6 +7,7 @@ import json
 import os
 import random
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -301,6 +302,37 @@ def _capture_battle_frames() -> None:
     (directory / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 
+def _encode_battle_gif() -> Path:
+    directory = BUILD_DIR / "battle-frames"
+    manifest = json.loads((directory / "manifest.json").read_text())
+    first_png = (directory / manifest[0]["file"]).read_bytes()
+    width, height = struct.unpack(">II", first_png[16:24])
+    destination = OUT / "battle-sequence.gif"
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+    filters = []
+    for index, frame in enumerate(manifest):
+        command.extend([
+            "-loop", "1", "-t", str(frame["duration_ms"] / 1000),
+            "-i", str(directory / frame["file"]),
+        ])
+        filters.append(
+            f"[{index}:v]pad={width}:{height}:0:0:color=0xF4F1E7,"
+            f"setsar=1,fps=10[v{index}]"
+        )
+    inputs = "".join(f"[v{index}]" for index in range(len(manifest)))
+    filters.extend([
+        f"{inputs}concat=n={len(manifest)}:v=1:a=0,split[frames][palette_source]",
+        "[palette_source]palettegen=stats_mode=diff[palette]",
+        "[frames][palette]paletteuse=dither=none[out]",
+    ])
+    command.extend([
+        "-filter_complex", ";".join(filters), "-map", "[out]",
+        "-loop", "0", str(destination),
+    ])
+    subprocess.run(command, check=True)
+    return destination
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate README images or an isolated terminal demo state."
@@ -314,11 +346,17 @@ def main(argv=None) -> int:
         "--menu-bar", action="store_true",
         help="also capture a temporary real macOS status item and open panel",
     )
+    parser.add_argument(
+        "--battle-gif", action="store_true",
+        help="also encode the battle sequence as a looping GIF (requires ffmpeg)",
+    )
     args = parser.parse_args(argv)
     if args.terminal_state_only:
         _write_demo_state(TERMINAL_STATE)
         print(TERMINAL_STATE)
         return 0
+    if args.battle_gif and shutil.which("ffmpeg") is None:
+        parser.error("--battle-gif requires ffmpeg on PATH")
 
     OUT.mkdir(parents=True, exist_ok=True)
     _install_local_art_fixture()
@@ -331,6 +369,8 @@ def main(argv=None) -> int:
     _capture("trainer", _trainer_payload(menu), "trainer-card.png")
     _capture("tokens", _tokens_payload(), "token-usage.png")
     _capture_battle_frames()
+    if args.battle_gif:
+        print(_encode_battle_gif())
     if args.menu_bar:
         executable = _build_snapshot_tool(menu_bar_capture=True)
         status = _build_menu_panel_fixture_status(menu)

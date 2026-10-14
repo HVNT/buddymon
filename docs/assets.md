@@ -33,6 +33,10 @@ frames in `.build/readme-screenshots/battle-frames/` advance the real battle
 engine from encounter through attacks and a catch with fixed random seeds.
 Progress and notifications are isolated from the player's game.
 
+With `ffmpeg` installed, add `--battle-gif` to encode those frames into the
+looping `docs/screenshots/battle-sequence.gif`. The sequence shows an encounter,
+attacks, and a successful catch, with pauses for reading each state.
+
 ## <img src="assets/brand/icons/encounter.png" width="22" height="22" alt=""> Optional Game Art
 
 The Mac app downloads these packs automatically on first launch. You can choose

@@ -79,12 +79,14 @@ invokes `python3`, so Python 3 must be available on `PATH` before Claude starts.
 5. Choose favorites for your party and six-slot Showcase.
 
 <p align="center">
-  <img src="docs/screenshots/encounter.png" width="608" alt="BuddyMon's native battle view with Charizard facing a shiny Mewtwo">
+  <img src="docs/screenshots/battle-sequence.gif" width="608" alt="Charizard battles a shiny Mewtwo: encounter, attacks, and a successful catch in BuddyMon's native panel">
 </p>
 
 <p align="center">
-  <sub>Encounters and their results stay inside the compact native panel.</sub>
+  <sub>Charizard vs. shiny Mewtwo—from encounter to catch. Real battle logic and native views, captured with demo state.</sub>
 </p>
+
+[View a still battle screenshot](docs/screenshots/encounter.png).
 
 ## <img src="docs/assets/brand/icons/native-app.png" width="24" height="24" alt=""> Your Trainer Card
 

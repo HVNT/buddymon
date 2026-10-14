@@ -5,6 +5,8 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+- Added a looping Charizard-versus-shiny-Mewtwo battle GIF to the README, from
+  encounter through catch, captured from real battle logic and native views.
 - Made README setup easier to scan and added the real macOS menu-bar view and
   Trainer Card with shiny Mewtwo demo captures.
 - Clarified Mac app setup, supported clients, build requirements, and automatic

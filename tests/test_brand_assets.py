@@ -111,6 +111,7 @@ def test_readme_uses_current_shipping_screenshots():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for name in (
         "menu-bar-open.png",
+        "battle-sequence.gif",
         "encounter.png",
         "trainer-card.png",
         "terminal-box-ghostty.png",
@@ -126,7 +127,7 @@ def test_readme_presents_a_readable_game_first_screenshot_story():
     assert "The Loop" in readme
     assert "A Collection Worth Opening" in readme
     assert readme.index("menu-bar-open.png") < readme.index("Start Playing")
-    assert readme.index("encounter.png") < readme.index("terminal-box-ghostty.png")
+    assert readme.index("battle-sequence.gif") < readme.index("terminal-box-ghostty.png")
     assert readme.index("terminal-box-ghostty.png") < readme.index("showcase-export.png")
     assert 'width="49%"' not in readme
     assert "releases/latest" not in readme
