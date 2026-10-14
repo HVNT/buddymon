@@ -5,6 +5,8 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+- Fixed delayed Trainer and Settings responses reopening a closed panel or
+  replacing a newer screen, including preference-save successes and errors.
 - Fixed starter selection and CLI buddy switching overwriting concurrent
   collection updates by holding the shared state lock through load and save.
 - Reorganized the main guides with system and workflow diagrams, task-based

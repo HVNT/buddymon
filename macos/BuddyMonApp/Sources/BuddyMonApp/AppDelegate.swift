@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         static let artwork: TimeInterval = 3_600
     }
 
-    private let runner = BuddyMonRunner()
+    private let runner: BuddyMonRunner
     private let menuPanelController = MenuPanelController()
     private let singleInstanceGuard = SingleInstanceGuard()
     private let localStateObserver = LocalStateObserver()
@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPreviewSignalSource: DispatchSourceSignal?
     private var statusRefreshGeneration = 0
     private var tokenUsageGeneration = 0
+    private var detailPresentationGeneration = 0
     private var encounterPresentationGeneration = 0
     private var inFlightEncounterGeneration: Int?
     private var hasConfirmedStatus = false
@@ -38,6 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let openPanelNotification = Notification.Name(
         "com.hunt.buddymon.open-menu-panel"
     )
+
+    init(runner: BuddyMonRunner = BuddyMonRunner()) {
+        self.runner = runner
+        super.init()
+        menuPanelController.onClose = { [weak self] in
+            self?.advanceDetailPresentationGeneration()
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard claimSingleInstance() else {
@@ -247,6 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentRootPanel() {
+        advanceDetailPresentationGeneration()
         advanceEncounterPresentationGeneration()
         requestStatusRefresh()
         if presentStarterSetupIfNeeded() {
@@ -511,18 +521,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func loadTrainerCard() async {
+    @discardableResult
+    private func advanceDetailPresentationGeneration() -> Int {
+        detailPresentationGeneration += 1
+        return detailPresentationGeneration
+    }
+
+    private func isCurrentDetailRequest(_ generation: Int) -> Bool {
+        generation == detailPresentationGeneration && menuPanelController.isVisible
+    }
+
+    private func loadTrainerCard(generation: Int) async {
+        guard isCurrentDetailRequest(generation) else { return }
         do {
             let view = try await runner.appView(
                 "trainer",
                 timeout: CommandTimeout.view
             )
+            guard isCurrentDetailRequest(generation) else { return }
             menuPanelController.presentTrainerCard(
                 view: view,
                 target: self,
                 backAction: #selector(openRootPanel)
             )
         } catch {
+            guard isCurrentDetailRequest(generation) else { return }
             presentMessage(runner.diagnosticText(error: error))
         }
     }
@@ -536,14 +559,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func loadSettings() async {
+    private func loadSettings(generation: Int) async {
+        guard isCurrentDetailRequest(generation) else { return }
         do {
             let view = try await runner.appView(
                 "settings",
                 timeout: CommandTimeout.view
             )
+            guard isCurrentDetailRequest(generation) else { return }
             presentSettings(view)
         } catch {
+            guard isCurrentDetailRequest(generation) else { return }
             presentSettings(["error": runner.diagnosticText(error: error)])
         }
     }
@@ -559,40 +585,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard selection.count == 2 else { return }
         let key = String(selection[0])
         let value = String(selection[1])
+        let generation = advanceDetailPresentationGeneration()
         sender.isEnabled = false
         Task { [weak self, weak sender] in
             guard let self else { return }
             defer { sender?.isEnabled = true }
-            do {
-                let response = try await runner.appAction(
-                    "preference",
-                    [key, value],
-                    timeout: CommandTimeout.action
-                )
-                guard response["ok"] as? Bool == true else {
-                    let message = response["message"] as? String
-                        ?? "The setting could not be changed."
-                    presentSettings(["error": message])
-                    return
-                }
-                let view: [String: Any]
-                if let responseView = response["view"] as? [String: Any] {
-                    view = responseView
-                } else {
-                    view = try await runner.appView(
-                        "settings",
-                        timeout: CommandTimeout.view
-                    )
-                }
-                presentSettings(view)
-                await refreshStatus()
-            } catch {
-                presentSettings(["error": runner.diagnosticText(error: error)])
+            await updatePreference(key, value: value, generation: generation)
+        }
+    }
+
+    private func updatePreference(_ key: String, value: String, generation: Int) async {
+        do {
+            let response = try await runner.appAction(
+                "preference",
+                [key, value],
+                timeout: CommandTimeout.action
+            )
+            // The save still takes effect after navigation; only its presentation expires.
+            requestStatusRefresh()
+            guard isCurrentDetailRequest(generation) else { return }
+            guard response["ok"] as? Bool == true else {
+                let message = response["message"] as? String
+                    ?? "The setting could not be changed."
+                presentSettings(["error": message])
+                return
             }
+            let view: [String: Any]
+            if let responseView = response["view"] as? [String: Any] {
+                view = responseView
+            } else {
+                view = try await runner.appView(
+                    "settings",
+                    timeout: CommandTimeout.view
+                )
+            }
+            guard isCurrentDetailRequest(generation) else { return }
+            presentSettings(view)
+        } catch {
+            guard isCurrentDetailRequest(generation) else { return }
+            presentSettings(["error": runner.diagnosticText(error: error)])
         }
     }
 
     @objc private func openEncounter() {
+        advanceDetailPresentationGeneration()
         let generation = advanceEncounterPresentationGeneration()
         Task { [weak self] in
             await self?.loadEncounter(generation: generation)
@@ -600,6 +636,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openTokenUsage() {
+        advanceDetailPresentationGeneration()
         presentTokenUsage(["loading": true])
         Task { [weak self] in
             await self?.loadTokenUsage()
@@ -607,19 +644,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openTrainerCard() {
+        let generation = advanceDetailPresentationGeneration()
         Task { [weak self] in
-            await self?.loadTrainerCard()
+            await self?.loadTrainerCard(generation: generation)
         }
     }
 
     @objc private func openSettings() {
+        let generation = advanceDetailPresentationGeneration()
         presentSettings(["loading": true])
         Task { [weak self] in
-            await self?.loadSettings()
+            await self?.loadSettings(generation: generation)
         }
     }
 
     private func openTerminalExperience(screen: String? = nil) {
+        advanceDetailPresentationGeneration()
         let windowFrame = menuPanelController.prepareForTerminalHandoff()
         Task { [weak self] in
             guard let self else { return }

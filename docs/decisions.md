@@ -36,6 +36,7 @@ native app independent of human-readable terminal output.
 | --- | --- |
 | Menu policy | Python supplies labels, order, visibility, shortcuts, and stable action IDs. Swift routes known IDs. |
 | Child commands | Run asynchronously; drain stdout/stderr and enforce timeout/cancellation. Slow work must not freeze the panel. |
+| Detail navigation | Trainer and Settings responses expire on navigation, close, or a newer request. A late success or error must not undo the player's next action; requested preference saves still finish. |
 | One native app per user | A kernel-backed advisory lock covers development and self-contained copies. Later launches signal the existing panel and exit. |
 | Live state | Watch the directory for atomic saves, filter by state-file signature, debounce bursts, and combine passive refreshes. |
 | Recovery refresh | Opening the panel reads fresh state; a 30-second poll covers missed events. |

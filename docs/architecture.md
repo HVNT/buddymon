@@ -95,13 +95,12 @@ sequenceDiagram
   screens wait for input outside the lock, then resolve selections against fresh state.
 - **No frozen panel:** `ProcessExecutor` runs child commands asynchronously,
   drains stdout and stderr, and handles timeouts and cancellation.
-- **Guarded encounter and token results:** these routes discard results after
-  the player leaves. Encounter moves run one at a time.
-
-**Current gap:** Trainer and Settings requests in
-[`AppDelegate.swift`](../macos/BuddyMonApp/Sources/BuddyMonApp/AppDelegate.swift)
-do not yet have the encounter/token navigation guards; a late response can
-replace a newer screen or reopen the panel.
+- **Navigation wins over late results:** encounters and tokens guard their
+  responses. Trainer and Settings also track the current request: navigation,
+  any panel close, or a newer detail request expires the old response. This
+  covers success and error paths, including a close/reopen of the same screen.
+  Preference saves still finish after leaving Settings; only their UI response
+  expires. Encounter moves run one at a time.
 
 ## Keep slow work off the read path
 

@@ -37,6 +37,7 @@ final class MenuPanelController: NSObject {
     private var encounterActionPending = false
 
     private(set) var displayMode: DisplayMode = .menu
+    var onClose: (() -> Void)?
 
     override init() {
         panel = BuddyMonMenuPanel(
@@ -63,6 +64,7 @@ final class MenuPanelController: NSObject {
     }
 
     func close() {
+        onClose?()
         panel.orderOut(nil)
         openSessionAnchor = nil
         compactControls = []

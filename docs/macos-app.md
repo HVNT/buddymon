@@ -63,6 +63,9 @@ collect at the end of each turn.
 Visible letter shortcuts also work. **⌘R** refreshes; **⌘Q** quits.
 Drill-in screens have a back chevron in their title row.
 
+If you leave Trainer or Settings while it is loading, a late result will not
+bring it back. Preferences you already selected still save after you leave.
+
 The panel stays in place during refreshes and navigation. The menu-bar buddy
 shows work, progress, catches, and evolution; macOS **Reduce Motion** replaces
 animated sequences with representative frames.

@@ -24,6 +24,10 @@ open .build/macos/BuddyMon.app
 Normal game code stays stdlib-only where practical. Pillow supports artwork
 import/export and sprite tooling; the self-contained app bundles it.
 
+Navigation regression tests run the real app delegate and command runner with
+a nonvisual presenter. They must not create menu-bar icons, open windows, or
+take focus from the desktop.
+
 ## Choose a build
 
 | Goal | Command | Result |

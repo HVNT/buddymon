@@ -468,7 +468,7 @@ def test_native_settings_show_all_preferences_and_apply_immediately():
         "@objc private func openSettings()",
     )
     assert 'presentSettings(["loading": true])' in open_settings
-    assert "loadSettings()" in open_settings
+    assert "loadSettings(generation: generation)" in open_settings
     assert "loadNativeScreen" not in open_settings
 
     present = swift_function_body(app_source, "private func presentSettings(")
@@ -484,11 +484,12 @@ def test_native_settings_show_all_preferences_and_apply_immediately():
     assert "maxSplits: 1" in selection
     assert "guard selection.count == 2" in selection
     assert "let value = String(selection[1])" in selection
-    assert 'runner.appAction(\n                    "preference"' in selection
-    assert "[key, value]" in selection
-    assert 'response["view"] as? [String: Any]' in selection
-    assert "presentSettings(view)" in selection
-    assert "await refreshStatus()" in selection
+    assert "await updatePreference(key, value: value, generation: generation)" in selection
+    update = swift_function_body(app_source, "private func updatePreference(")
+    assert "[key, value]" in update
+    assert 'response["view"] as? [String: Any]' in update
+    assert "presentSettings(view)" in update
+    assert "requestStatusRefresh()" in update
 
     compact_settings = panel_source.split("// MARK: - Settings", 1)[1].split(
         "// MARK: - Encounter", 1
@@ -572,7 +573,7 @@ def test_native_trainer_action_uses_read_only_compact_card():
         app_source,
         "@objc private func openTrainerCard()",
     )
-    assert "loadTrainerCard()" in trainer_action
+    assert "loadTrainerCard(generation: generation)" in trainer_action
     assert 'runner.appView(\n                "trainer"' in app_source
     assert "menuPanelController.presentTrainerCard(" in app_source
     assert "backAction: #selector(openRootPanel)" in app_source

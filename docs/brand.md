@@ -121,6 +121,11 @@ controls use pointing-hand cursors; passive content keeps the normal arrow.
 The panel snapshots its screen-space anchor when it opens. Refresh, animation,
 and drill-ins reuse it until close; reopening captures the new position.
 
+Trainer and Settings results must belong to the current visit and request.
+Back, Escape, outside click, another destination, or a newer request makes old
+success and error responses ineligible to redraw or reopen the panel. Leaving
+Settings does not cancel a preference save already requested.
+
 ### Root panel
 
 | Part | Contract |
