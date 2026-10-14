@@ -57,15 +57,16 @@ class CommandResult:
 
 def choose(args):
     name = (args[0] if args else "").capitalize()
-    s = state.load()
-    if s["pokemon"]:
-        return f"You already have a buddy ({state.active_pokemon(s)['name']}). Use switch instead."
-    buddy = engine.create_starter(s, name)
-    if buddy is None:
-        return "Pick one of: " + ", ".join(data.STARTERS)
-    state.save(s)
-    journal.append("starter", f"{buddy['emoji']} {buddy['name']} chose you",
-                   {"name": buddy["name"]})
+    with state.lock():
+        s = state.load()
+        if s["pokemon"]:
+            return f"You already have a buddy ({state.active_pokemon(s)['name']}). Use switch instead."
+        buddy = engine.create_starter(s, name)
+        if buddy is None:
+            return "Pick one of: " + ", ".join(data.STARTERS)
+        state.save(s)
+        journal.append("starter", f"{buddy['emoji']} {buddy['name']} chose you",
+                       {"name": buddy["name"]})
     grid, palette = sprites.sprite_for(buddy["name"], buddy["type"])
     art = "\n".join(pixels.render(grid, palette))
     return (
@@ -78,13 +79,14 @@ def switch(args):
     target = " ".join(args).strip().lower()
     if not target:
         return "Usage: switch <name>"
-    s = state.load()
-    matches = [p for p in s["pokemon"] if p["name"].lower() == target]
-    if not matches:
-        return f"No '{target}' in your collection. See /buddymon:dex"
-    best = max(matches, key=lambda p: p["level"])
-    s["active"] = best["id"]
-    state.save(s)
+    with state.lock():
+        s = state.load()
+        matches = [p for p in s["pokemon"] if p["name"].lower() == target]
+        if not matches:
+            return f"No '{target}' in your collection. See /buddymon:dex"
+        best = max(matches, key=lambda p: p["level"])
+        s["active"] = best["id"]
+        state.save(s)
     return f"{best['emoji']} {best['name']} (Lv.{best['level']}) is now your buddy!"
 
 
@@ -92,12 +94,13 @@ def switch_id(args):
     target = (args[0] if args else "").strip()
     if not target:
         return "Usage: switch-id <id>"
-    s = state.load()
-    match = next((p for p in s["pokemon"] if str(p["id"]) == target), None)
-    if match is None:
-        return "That buddy is no longer in your collection. See /buddymon:dex"
-    s["active"] = match["id"]
-    state.save(s)
+    with state.lock():
+        s = state.load()
+        match = next((p for p in s["pokemon"] if str(p["id"]) == target), None)
+        if match is None:
+            return "That buddy is no longer in your collection. See /buddymon:dex"
+        s["active"] = match["id"]
+        state.save(s)
     return f"{match['emoji']} {match['name']} (Lv.{match['level']}) is now your buddy!"
 
 

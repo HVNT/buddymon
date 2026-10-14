@@ -1,109 +1,113 @@
 # <img src="assets/brand/icons/development.png" width="28" height="28" alt=""> Development
 
-BuddyMon keeps its normal runtime stdlib-only where practical. Tests add pytest
-and Pillow:
+**Build locally, test the shared Python core, then inspect the native surfaces
+you changed.** Run the commands below from the repository root on macOS.
+
+Need the code map first? Read [Architecture](architecture.md).
+For ordinary app use, start with the [Mac app guide](macos-app.md).
+
+## Start here
+
+You'll need Git, Python 3, and Xcode or Command Line Tools with Swift and the
+macOS SDK. Self-contained builds also need internet access to prepare the
+bundled runtime. `uv` is used in the test examples.
 
 ```bash
+# Run the Python tests with their development dependencies.
 uv run --with pytest --with pillow --no-project python3 -m pytest tests/ -q
-```
 
-Pillow covers image import, export, and sprite-pack tooling.
-
-## <img src="assets/brand/icons/development.png" width="22" height="22" alt=""> Useful Commands
-
-```bash
-python3 buddymon.py app-status --pretty
-python3 buddymon.py app-menu-bar-harness --pretty
-python3 buddymon.py app-menu-panel-harness --pretty
-python3 buddymon.py app-view encounter
-python3 buddymon.py app-view tokens
-python3 buddymon.py app-view trainer
-python3 buddymon.py app-view settings
-python3 buddymon.py app-action preference mode quick
-python3 buddymon.py install-assets --json
-python3 buddymon.py menu
-python3 buddymon.py tokens
-python3 buddymon.py collect
-python3 buddymon.py status
-python3 buddymon.py dex --list
-python3 buddymon.py preview
-python3 buddymon.py tiny --collect
-```
-
-`app-status`, the four listed `app-view` routes, and the `encounter` and
-`preference` `app-action` routes are the stable native JSON boundary. Python
-owns game rules and state mutations. Party, Box, Pokédex, Activity, and
-Showcase are terminal screens, not native bridge views.
-
-## <img src="assets/brand/icons/native-app.png" width="22" height="22" alt=""> macOS App
-
-For the user flow, see [BuddyMon.app, ELI5](macos-app.md).
-
-```bash
-# Developer build: uses this Mac's /usr/bin/python3
-scripts/build-macos-app.sh
-
-# Self-contained build
-scripts/build-macos-app.sh --friend
-
-# Replace /Applications/BuddyMon.app and open that installed copy
-scripts/build-macos-app.sh --friend --install --open
-```
-
-`--install` first asks any running BuddyMon process to quit, then replaces the
-bundle. This prevents `--open` from signaling an old in-memory build after its
-files have been updated.
-
-The self-contained build uses `BUDDYMON_PYTHON_RUNTIME` or `--runtime-dir` when
-provided. Otherwise it creates a managed standalone CPython runtime under
-`.build/python-runtime`, installs Pillow, validates the runtime, and copies it
-into the app. Default runtime inputs come only from
-`scripts/runtime-lock.json`: exact Python archives and architecture-specific
-Pillow wheels are verified by SHA-256 before extraction or installation. A
-managed runtime is reused only when its metadata and imported Python/Pillow
-versions still match that lock.
-Custom `--url` or `--tarball` inputs require an explicit `--sha256`.
-
-```bash
-scripts/build-macos-app.sh --friend --force-runtime
-scripts/build-macos-app.sh --friend --python-version 3.12.13
-BUDDYMON_PYTHON_RUNTIME=/path/to/runtime scripts/build-macos-app.sh --friend
-scripts/capture-brand-styles.sh
-scripts/menu-bar-state-harness.sh
-scripts/capture-menu-bar-states.sh
-scripts/capture-menu-panel.sh
-scripts/capture-menu-panel-states.sh
-python3 scripts/generate-readme-screenshots.py
-scripts/capture-readme-ghostty.sh
-```
-
-The README generator renders deterministic native views and the Showcase
-export. The Ghostty capture helper creates isolated demo state under `.build`,
-opens the roomy Box directly, captures only the titled BuddyMon window, and
-closes that BuddyMon-owned process. It never reads or changes trainer progress;
-if optional local art is already installed, it copies that pack into the
-temporary fixture without modifying the source.
-
-An external development runtime must be named explicitly and paired with
-`--allow-unlocked-runtime`. That escape hatch performs import checks but is not
-used by CI or the release packager:
-
-```bash
-scripts/build-macos-app.sh \
-  --friend \
-  --runtime-dir /path/to/development-runtime \
-  --allow-unlocked-runtime
-```
-
-### Watch menu-bar states and user stories
-
-Build and launch the current native app once, then drive its real menu-bar
-buddy from the Python demo runner:
-
-```bash
+# Build a native development app.
 scripts/build-macos-app.sh
 open .build/macos/BuddyMon.app
+```
 
+Normal game code stays stdlib-only where practical. Pillow supports artwork
+import/export and sprite tooling; the self-contained app bundles it.
+
+## Choose a build
+
+| Goal | Command | Result |
+| --- | --- | --- |
+| Quick local development | `scripts/build-macos-app.sh` | App using this Mac's `/usr/bin/python3` |
+| Self-contained app for this Mac | `scripts/build-macos-app.sh --friend` | App with a private Python/Pillow runtime |
+| Install and open that build | `scripts/build-macos-app.sh --friend --install --open` | Replaces `/Applications/BuddyMon.app` |
+| One build for Apple Silicon and Intel | `scripts/build-macos-app.sh --universal` | Both native slices and both locked runtimes; macOS 13+ |
+| Unsigned local DMG candidate | `bash scripts/create-macos-dmg.sh` | App plus an Applications shortcut |
+
+`--install` stops the running BuddyMon process before replacing its bundle.
+Otherwise a second launch may just signal an old in-memory copy.
+
+For a universal build, use Apple Silicon with Rosetta installed so the builder
+can verify the Intel runtime. Users run the matching native slice; they do not
+need Rosetta. A local build or unsigned DMG is not a public release.
+
+### Runtime options
+
+Default inputs are pinned by URL, version, architecture, and SHA-256 in
+[`runtime-lock.json`](../scripts/runtime-lock.json). Managed runtimes live under
+`.build/python-runtime` for single-architecture builds and `.build/python-runtimes`
+for universal builds. They are reused only when metadata and imported versions
+still match the lock. Replacements are validated in staging.
+
+| Need | Option |
+| --- | --- |
+| Rebuild the managed runtime | `--friend --force-runtime` |
+| Request the locked Python version explicitly | `--friend --python-version 3.12.13` |
+| Supply a runtime | `--friend --runtime-dir /path/to/runtime`, or `BUDDYMON_PYTHON_RUNTIME` |
+| Supply universal runtimes | `--universal --runtime-dir /path/to/runtimes` with `arm64/` and `x86_64/` children |
+| Use an intentional unlocked development runtime | Explicit path **and** `--allow-unlocked-runtime`; never used by CI or public packaging |
+
+Custom runtime archive URLs or tarballs passed to `scripts/build-python-runtime.sh`
+require `--sha256`. The builder does
+not rewrite unmarked external runtimes; managed ones have `buddymon-runtime.json`.
+
+## Inspect the Python boundary
+
+| Task | Command |
+| --- | --- |
+| Current native status | `python3 buddymon.py app-status --pretty` |
+| Native screen payload | `python3 buddymon.py app-view trainer` — also `encounter`, `tokens`, `settings` |
+| Set an exact preference | `python3 buddymon.py app-action preference mode quick` |
+| Menu-bar fixtures | `python3 buddymon.py app-menu-bar-harness --pretty` |
+| Compact-panel fixtures | `python3 buddymon.py app-menu-panel-harness --pretty` |
+| Terminal game | `python3 buddymon.py menu` |
+| Token report | `python3 buddymon.py tokens` |
+| Immediate collection | `python3 buddymon.py collect` |
+| Other local views | `python3 buddymon.py status`, `dex --list`, or `preview` |
+
+`app-status`, the four `app-view` routes, and `app-action encounter|preference`
+are the stable native JSON boundary. Party, Box, Pokédex, Activity, and Showcase
+are terminal screens. Async child-process handling lives in `ProcessExecutor`.
+
+## Change native UI
+
+Read [Brand Styles](brand.md) before editing. All native visuals use
+`BuddyMonBrand`; the preview must render the same factories as shipping views.
+
+```mermaid
+flowchart TD
+    Token["Change shared token or treatment"] --> View["Use it in the shipping view"]
+    View --> States["Cover relevant states in the preview or harness"]
+    States --> Capture["Capture and inspect PNGs"]
+    Capture --> Checks["Run focused native tests and update docs"]
+```
+
+| Capture | Command | Output |
+| --- | --- | --- |
+| Shared brand reference | `scripts/capture-brand-styles.sh` | `.build/brand-styles.png` |
+| Menu-bar state catalog | `scripts/capture-menu-bar-states.sh` | `.build/menu-bar-state-harness.png` |
+| Current compact panel | `scripts/capture-menu-panel.sh` | `.build/menu-panel.png` |
+| Compact product states | `scripts/capture-menu-panel-states.sh` | `.build/menu-panel-states.png` |
+
+Run `scripts/menu-bar-state-harness.sh` for interactive Play/Pause/Restart.
+`StyleArchivePreview.swift` is historical, not a source of new UI values.
+Developer previews and snapshot sources are excluded from self-contained builds.
+
+### Play states on the real menu-bar buddy
+
+Build and open the current app first, then run:
+
+```bash
 scripts/menu-bar-demo.py list
 scripts/menu-bar-demo.py play evolving
 scripts/menu-bar-demo.py story evolution
@@ -113,113 +117,24 @@ scripts/menu-bar-demo.py story all-states --speed 2
 scripts/menu-bar-demo.py reset
 ```
 
-The fixtures assume Charmander is the starter and Eevee is the wild Pokémon.
-`play` reserves the menu-bar icon just long enough to show one state. `story`
-runs its steps in order and prints the active user-story beat in the terminal.
-`all-stories` is the complete narrative QA pass; `all-states` is the shorter
-catalog pass with each visual shown exactly once.
-Both use the production frame renderer and installed local art, never mutate
-trainer state, never open the dropdown, and restore the newest live status when
-playback ends. Quit and relaunch BuddyMon after rebuilding so the running app
-has the current preview receiver.
+Fixtures use Charmander as the starter and Eevee as the wild. `all-stories`
+covers narrative sequences; `all-states` shows each catalog state once. Playback
+uses production frames and installed local art, does not change trainer state
+or open the dropdown, and returns to the latest live status. Relaunch after a rebuild.
 
-The builder never rewrites an unmarked external runtime. BuddyMon-managed
-runtimes carry `buddymon-runtime.json`; replacements are validated in staging
-before the previous runtime is changed.
+### Refresh README visuals
 
-`VERSION` is the canonical product version. The plugin manifest, marketplace
-metadata, generated app plist, and runtime lock are checked with:
+[Assets](assets.md#regenerate-documentation-visuals) lists native screenshots,
+menu-bar captures, the battle GIF, and the Ghostty Box capture. They use isolated
+demo state. Inspect the output before committing; do not commit fixture state
+or copied packs.
 
-```bash
-python3 scripts/validate-release-metadata.py
-python3 scripts/validate-release-metadata.py --app .build/macos/BuddyMon.app
-```
+## Collection service
 
-These development checks accept either a dated version heading or
-`## [VERSION] - unreleased`, so release-candidate work does not claim a false
-publication date. Public packaging and archive verification require a real
-date; the packager checks that before rebuilding the embedded runtime.
-
-### Universal Mac download
-
-`scripts/build-macos-app.sh --universal` builds both native slices and bundles
-locked Python/Pillow runtimes under `Resources/python/arm64` and `x86_64`.
-Each app slice selects its matching runtime. Build on Apple Silicon with Rosetta
-installed to verify the Intel runtime; this does not require Rosetta on users'
-Macs. Both native slices target macOS 13. Ordinary `--friend` builds still target
-the packaging Mac. `--runtime-dir` for universal builds takes a directory with
-both architecture subdirectories.
-
-`bash scripts/create-macos-dmg.sh` creates an unsigned local candidate with the
-app and an Applications shortcut. It does not claim public-release readiness.
-
-### Signed release archive
-
-The release packager rebuilds the embedded runtime from the lock, verifies it,
-enforces the production bundle id and canonical version/build before signing
-and again before archiving, signs every Mach-O payload and the app with Hardened
-Runtime, submits the archive for notarization, staples and assesses the app,
-and writes a SHA-256 file whose entry uses the archive basename, so the two
-downloaded files verify together in any directory. It never discovers
-credentials. Configure an existing Developer ID identity and `notarytool`
-keychain profile through Apple's supported tools, then run:
-
-```bash
-BUDDYMON_CODESIGN_IDENTITY="Developer ID Application: ..." \
-BUDDYMON_NOTARY_PROFILE="buddymon-notary" \
-scripts/package-macos-release.sh
-```
-
-The public output is `.build/release/BuddyMon-macOS.dmg` plus its checksum.
-It contains both architectures. The intermediate ZIP is only for notarizing
-the app; the final DMG is also signed, notarized, and stapled.
-
-The packager mounts and verifies the final DMG after signing and notarization. Complete
-the documented [Public Release QA](release-qa.md) in a clean macOS user before
-uploading either artifact.
-
-Before changing native UI, read [Brand Styles](brand.md) and use
-`BuddyMonBrand`. `BrandStylesPreview.swift` is the living reference for the
-shared system. `MenuPanelStateHarnessView.swift` renders the shipping compact
-components, including first-run setup, loading/error notices, and both Trainer
-Card badge counts. `StyleArchivePreview.swift` keeps three older directions as
-non-normative history. These developer/snapshot sources are excluded from the
-self-contained build.
-
-New colors, type, spacing, geometry, or control treatments start in
-`BrandStyle.swift`, then appear in the Brand Styles preview with all relevant
-states in the same change. Shipping views must not define local visual themes.
-The capture commands write the full scrollable reference to
-`.build/brand-styles.png`, the complete menu-bar state inventory to
-`.build/menu-bar-state-harness.png`, the shipping compact panel to
-`.build/menu-panel.png`, and all compact product states to
-`.build/menu-panel-states.png` for visual review. Run
-`scripts/menu-bar-state-harness.sh` without arguments to open the interactive,
-scrollable harness; use Play, Pause, and Restart to inspect the shipping frame
-scheduler.
-
-Native Python commands run asynchronously through `ProcessExecutor`. It drains
-stdout and stderr while the process runs and applies timeout and cancellation
-handling so large payloads or a slow child process cannot freeze the app.
-
-## <img src="assets/brand/icons/activity.png" width="22" height="22" alt=""> Collection Service
-
-The app timer and optional LaunchAgent both call:
-
-```bash
-python3 buddymon.py collect --scheduled
-```
-
-That path uses one locked five-minute gate, so overlapping clients do not award
-the same activity twice. `python3 buddymon.py collect` is an immediate manual
-run and bypasses the schedule gate.
-
-The collection path reads Claude Code, Codex CLI, and Auggie logs. Claude's
-optional plugin shares its per-file cursor with the collector; test both orders
-when changing token accounting. Gemini CLI is Token Usage only and never awards
-progress.
-
-Manage the per-user service with:
+The app and optional LaunchAgent run `collect --scheduled`. A shared locked
+five-minute gate limits scheduled work; plain `collect` runs immediately.
+Per-file saved positions prevent duplicate awards. When changing Claude token
+accounting, test both app-first and plugin-first collection.
 
 ```bash
 python3 buddymon.py collector install
@@ -227,46 +142,78 @@ python3 buddymon.py collector status
 python3 buddymon.py collector uninstall
 ```
 
-Install generates
-`~/Library/LaunchAgents/io.github.hvnt.buddymon.collector.plist` from the
-current script path and active Python runtime. It also preserves
-`XDG_STATE_HOME` when set. Do not install the real service in tests; use a
-temporary home and the injected command runner.
+Installation is explicit. It generates `io.github.hvnt.buddymon.collector.plist`
+in `~/Library/LaunchAgents/` from the current Python runtime, script path, and
+`XDG_STATE_HOME`. In tests, use a temporary home and injected runner; do not
+install the real service.
 
-## <img src="assets/brand/icons/collection.png" width="22" height="22" alt=""> Optional Assets
+## Artwork development
 
-The Mac app invokes `setup-artwork` during first launch. This internal command
-downloads Gen 5 sprites progressively, then the other packs. Its progress file
-is separate from gameplay state; retry skips completed species. Test with a
-disposable `XDG_STATE_HOME` and keep status-only tests network-free.
+The app runs `setup-artwork` in the background. Test downloads with a disposable
+`XDG_STATE_HOME`; status-only tests must stay network-free. Progress is separate
+from game state, and retry reuses completed species.
 
-Generated packs belong under `$XDG_STATE_HOME/buddymon/packs`, or
-`~/.local/state/buddymon/packs` by default. Do not commit them.
-
-```bash
-python3 buddymon.py install-assets
-python3 buddymon.py install-assets --refresh
-uv run --with pillow --no-project python3 tools/fetch_official.py
-uv run --with pillow --no-project python3 tools/fetch_box.py
-uv run --with pillow --no-project python3 tools/fetch_gen5.py
-python3 tools/fetch_trainer.py
-```
+| Tool | Purpose |
+| --- | --- |
+| `python3 buddymon.py install-assets` | Install missing packs |
+| `python3 buddymon.py install-assets --refresh` | Explicitly refresh packs |
+| `uv run --with pillow --no-project python3 tools/fetch_official.py` | Gen 2 menu icons |
+| `uv run --with pillow --no-project python3 tools/fetch_box.py` | Box sprites |
+| `uv run --with pillow --no-project python3 tools/fetch_gen5.py` | Gen 5 animation |
+| `python3 tools/fetch_trainer.py` | Trainer portrait |
 
 See [Assets](assets.md) for sources, validation, and fallback behavior.
+Generated packs belong in local state, never in the commit.
 
-## <img src="assets/brand/icons/setup.png" width="22" height="22" alt=""> Before Pushing
+## Package a public release
+
+```mermaid
+flowchart TD
+    Source["Versioned source and passing CI"] --> Build["Build both locked runtimes and native slices"]
+    Build --> Sign["Sign and notarize app and DMG"]
+    Sign --> Verify["Verify final DMG and checksum"]
+    Verify --> Fresh["Fresh-user acceptance on both Mac architectures"]
+    Fresh --> Publish["Publish that DMG and matching checksum"]
+```
+
+`VERSION` is canonical. During development, metadata validation accepts a dated
+version entry or an unreleased changelog. Public packaging requires the version's
+real publication date before rebuilding:
 
 ```bash
-python3 -m pip install --requirement requirements-test.txt
-python3 -m pytest tests/ -q
+python3 scripts/validate-release-metadata.py
+python3 scripts/validate-release-metadata.py --app .build/macos/BuddyMon.app
+```
+
+With an existing Developer ID Application identity and saved `notarytool`
+profile configured through Apple's tools:
+
+```bash
+BUDDYMON_CODESIGN_IDENTITY="Developer ID Application: ..." \
+BUDDYMON_NOTARY_PROFILE="buddymon-notary" \
+scripts/package-macos-release.sh
+```
+
+The packager rebuilds and verifies locked inputs, enforces production bundle
+metadata, signs Mach-O files with Hardened Runtime, and notarizes/staples both
+the app and final DMG. It then verifies the mounted artifact and checksum.
+It does not discover credentials or publish a GitHub release.
+
+**Public files:** `.build/release/BuddyMon-macOS.dmg` and its `.sha256` file.
+The intermediate ZIP is only for app notarization. Complete
+[Public Release QA](release-qa.md) before upload.
+
+## Before pushing
+
+```bash
+uv run --with pytest --with pillow --no-project python3 -m pytest tests/ -q
 python3 scripts/validate-release-metadata.py
 scripts/build-macos-app.sh
 git diff --check
 git status --short
 ```
 
-Keep generated packs, personal state, and unrelated worktree changes out of the
-commit.
-
-The same test/build/metadata gate runs on macOS for every pull request and
-`main` push through `.github/workflows/ci.yml`.
+CI runs tests, build, and metadata gates on macOS for PRs and `main` pushes,
+plus locked self-contained runtime verification. Add relevant visual captures
+for native UI changes. Keep personal state, generated packs, and unrelated
+worktree edits out of the commit.

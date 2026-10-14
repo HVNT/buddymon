@@ -1,485 +1,177 @@
 # <img src="assets/brand/icons/brand.png" width="28" height="28" alt=""> Decisions
 
-These are BuddyMon's current durable choices and the reasons behind them.
-Implementation history belongs in the changelog and Git history; current game
-numbers belong in code.
-
-## The Signal Buddy owns product identity
-
-**Decision:** Use BuddyMon's original mint Signal Buddy and the Signal Peek
-terminal composition for the app icon, primary lockup, documentation graphics,
-and semantic icon family. Pokémon art may appear inside real gameplay captures,
-but never substitutes for BuddyMon's own product identity.
-
-**Why:** The product should remain recognizable when optional art is absent and
-should not depend on a specific Pokémon species for its brand. One deterministic
-hand-pixel source keeps the lockup, icon, and documentation family coherent.
-
-## Plugin wiring stays plugin-owned
-
-**Decision:** Install through `.claude-plugin/plugin.json` and `hooks.json`.
-Never rewrite a user's global Claude settings.
-
-**Why:** Plugin installation should be reversible, reviewable, and isolated
-from unrelated tool configuration.
-
-## Personal data stays local and outside the repo
-
-**Decision:** Store state, journal history, and optional packs under
-`$XDG_STATE_HOME/buddymon`, defaulting to
-`~/.local/state/buddymon`.
-
-**Why:** Progress survives repository updates without leaking personal data or
-generated assets into commits. Normal play reads local inputs and does not
-upload game state.
-
-Manual backups copy the entire active state directory to
-`~/Documents/BuddyMon Backups` with a timestamped folder. Terminal Settings and
-`python3 buddymon.py backup` call the same Python operation. It respects
-`XDG_STATE_HOME` and does not modify live data.
-
-An existing state file is never equivalent to missing state. Corrupt,
-unreadable, structurally invalid, and future-version files block normal writes
-and remain untouched. Valid older state may migrate, but its original file is
-copied into the local `recovery/` directory before the migrated state is saved.
-Persisted fields added after a release require an explicit state-version
-boundary. State v5 formalizes preference and session fields that older v4
-builds added incrementally, so missing fields migrate with a recovery copy
-while invalid values that are present still block writes.
-
-## Python owns the game
-
-**Decision:** Keep rules and persistence in Python. Statusline, terminal,
-SwiftBar, tmux, and the macOS app are presentation shells over the same state.
-
-**Why:** One rules engine prevents clients from drifting. The native app uses
-stable JSON views and actions instead of parsing human-readable output.
-
-## Client support is explicit and intentionally uneven
-
-**Decision:** The Mac app collects Claude Code, Codex CLI, and Auggie directly
-from local logs. The Claude plugin is optional; it adds terminal integration
-and immediate turn-end updates. App and plugin collection share one durable
-Claude transcript cursor to prevent duplicate awards. The first app scan of
-Claude history uses its own bootstrap marker, so existing Codex/Auggie players
-do not receive old Claude history when upgrading. Token Usage recognizes those
-three sources plus Gemini CLI; Gemini is report-only and never earns progress.
-Unknown log shapes are ignored rather than grouped under a vague catch-all, and
-model names remain hidden until their local record format provides them reliably.
-
-**Why:** Opening the Mac app should be enough to collect supported activity.
-A separate plugin installation must not be a prerequisite for normal play,
-and keeping it installed must not inflate progress.
-
-## Python owns native-menu policy
-
-**Decision:** Return the menu's compact structure, labels, ordering,
-visibility, shortcuts, and stable action IDs from `app-status`. Swift renders
-the model with native brand styles and routes only known action IDs.
-
-**Why:** Menu product decisions stay beside the game state that determines
-them, while AppKit remains responsible for native presentation, accessibility,
-and safe local routing.
-
-State changes hold one cross-process lock across fresh load, mutation, and save.
-Interactive screens release it while waiting for input, then re-resolve the
-selection before saving.
-
-## The menu-bar buddy remains the primary native surface
-
-**Decision:** Treat the status item as BuddyMon's first product surface, not a
-launcher icon. Python owns its complete state catalog and timed pixel frames;
-the thin Swift player queues stable sequence ids, respects Reduce Motion, and
-renders them on the native status-bar button. Its contract and complete state
-harness remain a required gate for compact-dropdown changes.
-
-**Why:** BuddyMon began as a tiny companion that makes work a little brighter.
-Resting, working, XP, level-up, encounter, catch, result, and evolution moments
-must feel coherent at menu-bar scale before a larger interface can add value.
-The developer harness makes the whole state machine visible without mutating
-personal game state. The active buddy remains the status item's persistent
-identity: a catch may show the wild Pokémon during its action, but its result
-settles back on the buddy while the compact panel identifies the caught species.
-The status item uses the same species-specific Gen 5 source as that panel when
-available; shared legacy menu icons are fallback art, not buddy identity art.
-
-## Native commands are asynchronous
-
-**Decision:** Run Python app commands away from the main UI thread, drain both
-output streams, and bound them with timeout and cancellation handling.
-
-**Why:** Collection, image export, or a large JSON response must not freeze the
-app or deadlock on a full process pipe.
-
-## The app is menu-bar-only and self-contained
-
-**Decision:** Ship the self-contained build with a private Python runtime. The app is an
-accessory process with one visible home: the menu-bar buddy and its anchored
-panel. It does not create a Dock icon or standalone product window.
-
-**Why:** A nontechnical tester still gets one app to open without installing
-Python or using Terminal, while everyday use stays faithful to BuddyMon's tiny
-ambient-companion purpose. The tradeoff is a larger app bundle. Local builds
-remain development artifacts; public archives use the explicit signed and
-notarized release path.
-
-## Release inputs are immutable
-
-**Decision:** Keep one tracked `VERSION`, generate native metadata from it, and
-lock embedded Python archives and Pillow wheels by exact URL, version, platform,
-and SHA-256. Public app archives must be signed, notarized, stapled, assessed,
-and checksummed by the release packager.
-
-**Why:** A release tag should identify source and rebuildable inputs rather than
-whatever a mutable `latest` endpoint or package range returned that day.
-
-## Public releases prove the downloaded artifact
-
-**Decision:** The release packager verifies its final ZIP and checksum after
-signing and notarization. Publication also requires a recorded clean-user
-acceptance pass for first run and every permission-adjacent optional action.
-
-**Why:** Source checks and a signed bundle do not prove that the exact download
-opens cleanly on a new Mac or reveal the system dialogs users see. The final
-archive and a disposable account are the release boundary users actually meet.
-
-## The native app has one process per user
-
-**Decision:** Allow only one running BuddyMon native app across development,
-preview, and self-contained bundle copies.
-
-**Why:** Each native process owns a menu-bar item, timers, and child
-commands. A per-user advisory lock enforces the invariant even when a developer
-runs an app executable directly or launches a copy from another bundle path.
-The kernel remains the source of truth for ownership; the lock file does not
-store or trust a process id supplied by another process. A later app launch
-sends a local distributed notification so the running copy reopens its panel.
-
-## Native state synchronization is event driven
-
-**Decision:** Watch the local BuddyMon state directory for atomic `state.json`
-replacements, filter events by the state file's signature, debounce save
-bursts, and coalesce passive status reads. Opening the dropdown also requests a
-fresh read. Keep the 30-second poll only as a recovery fallback.
-
-**Why:** Terminal play, hooks, and the native app are separate local processes.
-Polling alone can leave a new battle invisible for most of a polling interval,
-while a one-second poll would repeatedly launch Python when nothing changed.
-Directory observation survives the atomic rename used by state saves, exact
-signature filtering ignores journal and lock writes, and menu-bar animation can
-remain an independent presentation concern.
-
-## Native brand styles have one source of truth
-
-**Decision:** `BuddyMonBrand` is the sole source of visual truth for shipping
-native UI. Field Guide is its compact-menu expression. `BrandStyle.swift` owns
-colors, type, spacing, geometry, motion values, and shared component treatments.
-Every native screen consumes those tokens; older Redline Mono explorations are
-developer-preview history only.
-
-**Why:** A living preview is useful only when it renders the same tokens as the
-product. Central ownership prevents one-off palettes, spacing drift, and
-component variations from quietly becoming competing systems. The older Style
-Archive stays available as historical context but is explicitly non-normative.
-
-Any new visual value starts in `BrandStyle.swift`, is demonstrated in
-`BrandStylesPreview.swift` or the product-specific
-`MenuPanelStateHarnessView.swift`, and is documented in `docs/brand.md` in the
-same change. Deterministic Brand Styles and compact-panel PNG renders provide
-visual-review evidence. The previews remain developer tooling and are not
-reachable from the production panel.
-
-Compact screens do not animate into place. Opening the panel, navigating, and
-refreshing local data all render the complete view immediately, with the panel's
-window animation disabled. Motion is reserved for Pokémon state playback and
-small direct-control feedback that honors Reduce Motion; it must not gate page
-content or make navigation cadence depend on row count.
-
-## Mac artwork setup is automatic and resumable
-
-First status must also be independent of historical token-report scans. A
-separate background command refreshes saved reports for both the masthead and
-Token Usage. Interactive reads never scan logs: a measured cold report took
-about 40 seconds, exceeding the native screen's 20-second deadline. Token Usage
-keeps Back available during the first scan, updates when it finishes, and keeps
-the last complete report during later refreshes. Async results only update the
-current Token Usage screen; they cannot undo navigation or reopen the panel.
-
-**Decision:** The Mac app downloads the existing Pokémon packs on first launch
-while users choose a starter and play. Gen 5 sprites appear progressively;
-interrupted downloads resume from completed species. Progress and retry stay
-inside the app. Plugin-only installs and refreshes remain explicit commands.
-
-**Why:** Pokémon art is part of the intended first-run experience and should not
-require a command. Setup uses the network; subsequent play uses local copies.
-Failed downloads preserve completed art and never replace gameplay state.
-Regular and shiny Gen 5 downloads are tracked separately: a transient shiny
-failure must not certify the pack as complete. Retry reuses regular frames,
-and older completion records receive a background check so they can be repaired
-without a command. Successful validation is recorded once, keeping status
-reads independent of the full sprite inventory.
-
-Claude's shared cursor remains while its transcript file exists, even when it
-falls outside the 14-day scan window or the plugin's 20-session cache. Removing
-both cursors made a resumed file look new and replayed historical tokens. The
-saved cursor therefore outlives inactivity and temporary permission errors;
-confirmed file deletion still permits cleanup.
-
-The Trainer Card always includes an original two-tone silhouette drawn in code
-with `BuddyMonBrand` colors. First-launch setup installs one
-pinned, checksum-verified Trainer Red portrait in local XDG state. No external
-trainer portrait is bundled. After setup, normal play remains network-free.
-
-## Scheduled collection has one gate
-
-**Decision:** The app timer and optional LaunchAgent both use
-`collect --scheduled`, with one locked five-minute due check. Manual
-`collect` remains immediate.
-
-**Why:** Multiple clients may be active at once. A single gate prevents
-double-counting without making explicit diagnostics wait.
-
-The LaunchAgent is generated from the current runtime, script path, and XDG
-environment. It is installed only through `collector install` and has explicit
-`status` and `uninstall` lifecycle commands.
-
-## Token totals are visible; progress math stays internal
-
-**Decision:** Show understandable token totals, while treating the weighted XP
-formula as an implementation detail.
-
-**Why:** People should be able to verify activity without optimizing their work
-around a game formula. Cached, input, output, and reasoning activity can all
-contribute, while thresholds keep ordinary sessions rewarding.
-
-## Progression stays long-lived
-
-**Decision:** Keep a high buddy level cap, a lower random-wild cap, stage-aware
-wild levels, fixed special-Pokémon levels, and visible evolution moments.
-
-**Why:** The active buddy should remain worth growing for months, while catches
-stay varied and readable instead of immediately matching endgame progress.
-Exact values live in the game data and engine.
-
-## Individual values are collectible-only
-
-**Decision:** Give every caught copy stable 0–15 Attack, Defense, and HP values
-derived from its immutable id. Show those appraisals in terminal Party and Box,
-but sort and search them only in Box; do not persist them or use them for catch
-odds, XP, leveling, evolution, or battle.
-
-**Why:** Per-copy variation makes duplicate catches worth inspecting without a
-state migration or a hidden balance change. Deriving the values from an id and
-a versioned hash namespace keeps old and new catches deterministic while
-leaving room for an explicitly designed stat system later.
-
-## Encounter styles are explicit
-
-**Decision:** Quick is the default. Safari and Battle are opt-in modes. Every
-shiny and legendary/mythical moment remains interactive even when common,
-uncommon, and non-shiny rare Quick encounters can resolve automatically.
-
-**Why:** The default should not interrupt work, while players who want more game
-decisions can choose them without changing the underlying collection. A shiny
-or legendary/mythical is too exceptional to risk on an automatic catch or flee
-roll; the broader rare tier is not exceptional enough to interrupt work.
-
-## Rich encounter art is native and on demand
-
-**Decision:** Render one local pixel battle scene for each native encounter
-view or resolved result. The status item may play short, bounded local frame
-sequences for catches, battles, results, and evolution; it does not continuously
-regenerate art while idle and SwiftBar keeps its bounded transient stream.
-
-**Why:** Encounters retain their game-like visual identity without reviving the
-memory and CPU costs of continuously replacing menu-bar images. The same local
-sprite-pack fallback path keeps the feature available without network assets.
-
-## Preferences are local and bounded
-
-**Decision:** Store only validated values for encounter mode, notifications,
-menu launcher, terminal menu replacement, terminal graphics, share reveal, and
-share banner behavior. External banners use `terminal-notifier` when it is
-available in the shell or a standard Homebrew location. They are skipped
-otherwise; BuddyMon never falls back to AppleScript notifications.
-
-**Why:** Settings should accept an explicit validated value from every client
-and recover cleanly from old or invalid state. AppleScript banners are owned by
-Script Editor and can launch it when clicked, which is never an acceptable
-BuddyMon side effect.
-
-## Showcase is curated and local
-
-**Decision:** Start with empty podium slots, store only selected Pokémon ids,
-and export a PNG to the user's machine on demand.
-
-**Why:** A showcase should reflect deliberate choices, not duplicate Party or
-favorites automatically. Local export makes sharing useful without adding
-accounts, uploads, or persistent export history.
-
-## Onboarding invites without interrupting work
-
-**Decision:** After the first confirmed, internally consistent no-buddy status,
-native first run automatically opens First Signal as a 304-by-210 Field Guide
-card in the anchored panel: five compact starter choices and one simple first
-mission. Existing trainers still launch quietly. Choosing, loading, and failure
-stay in that same compact panel. There is no hidden titled setup window,
-standalone window or recurring prompt. Pokémon artwork downloads in the
-background; choosing a starter and playing never wait for it.
-
-**Why:** BuddyMon should feel like a little game from the first click while
-remaining a calm local companion. A new trainer should not have to discover a
-tiny menu-bar egg before onboarding, while returning trainers should not be
-interrupted. Delight belongs to the player's own work and collection, not
-attention-harvesting loops.
-
-## The current native experience is the compact dropdown
-
-**Decision:** Clicking the buddy always opens the compact everyday dropdown. A
-waiting wild becomes its first emphasized action instead of bypassing the
-dropdown. The native shell retains only the compact root, encounter and result,
-Token Usage, Trainer, Settings, and compact setup/loading/message components.
-Party, Box, Pokédex, Activity, and Showcase remain terminal-game
-destinations; the deleted expanded native graph and its private JSON routes are
-not dormant product surfaces. The root presents a square two-row grid of six
-compact links: native Trainer and Settings destinations plus terminal handoffs
-for Party, Box, Pokédex, and Activity. The old renderer remains recoverable from
-Git history and the `archive/native-window-prototype-2026-07-16` tag rather than
-being compiled into the current app.
-
-The panel captures the status item's screen-space anchor once when it opens and
-keeps that anchor through refreshes and drill-ins. Closing clears the snapshot,
-so the next open follows the buddy's then-current position without allowing
-variable-width animation frames to move an already-open panel.
-
-**Why:** The product began as a tiny companion, not a desktop dashboard.
-Finalizing one dependable dropdown keeps the current quality gate honest and
-prevents historical experimental breadth from dictating the everyday product.
-
-Opening or reopening the app resolves to the compact dropdown. Development
-builds stay under `.build`; `--install` explicitly replaces the copy in
-`/Applications` so Finder cannot keep launching a stale experience.
-
-Optional terminal handoffs are roomy adjuncts to that surface when the display
-allows it. The native panel chooses among `1040-by-680`, `920-by-600`, and
-`760-by-520` footprints, preferring the largest size that fits beside the open
-panel and otherwise the largest size that fits the display. It does not dismiss
-the panel or its state. iTerm2 and Terminal.app use the selected exact bounds.
-Ghostty maps those profiles to `112-by-38`, `100-by-34`, and `88-by-30` grids,
-then starts one isolated process with its position, fixed BuddyMon title,
-disabled saved state, and non-fullscreen state supplied before launch. It starts
-a clean `zsh -df` and sends the safely quoted menu command as startup input.
-That skips user shell-startup prompts while keeping the app-bundled Python
-runtime out of Ghostty's file-open confirmation path. It does not activate or resize an
-existing Ghostty window, create a provisional window, or close a live terminal
-during fallback. The launcher tries another terminal only when Ghostty rejects
-the launch request before accepting a window.
-
-**Why:** The collection and appraisal surfaces need enough room for recognizable
-art and complete details, but a fixed large window would be disruptive on
-smaller displays. Adaptive profiles preserve the one-window handoff and give
-replacement logic a precise BuddyMon-owned target without touching unrelated
-Ghostty sessions.
-
-## Developer previews never become trainer state
-
-**Decision:** Menu-bar visual QA plays canonical Python-rendered sequences on
-the real native status item through a temporary local payload and process
-signal. Preview state is never written to `state.json` or the journey journal,
-never opens the dropdown, and automatically returns to the newest live status.
-
-**Why:** A fake preview window cannot prove the tiny real menu-bar surface, but
-polluting a trainer's collection or event history would make visual review
-unsafe. A bounded local-only playback channel tests the shipping renderer while
-preserving the core's state and privacy boundaries.
-
-The shipping native graph stops at the menu-bar state harness, compact
-dropdown, and its compact setup, notice, and drill-in components. Terminal
-screens do not require duplicate native renderers.
-
-## The compact dropdown uses the Field Guide skin
-
-**Decision:** The everyday dropdown uses a warm off-white, almost entirely
-monochrome field-guide layout: one tonal buddy group, one borderless
-game-dialogue signal, and a short action list. Dark terminal chrome, blue
-structural chrome, repeated card borders, stat boxes, and ASCII-box decoration
-are not the default native surface. Shared tokens and controls live under
-`BuddyMonBrand.Menu`; Pokémon identity, rarity, and urgent alerts remain the
-few semantic color accents.
-
-Token Usage is the first compact drill-in. Its two equal headline cards compare
-Today with Yesterday and This Week with Last Week; each card owns its percentage
-instead of separating comparison context into a third card. A proportional
-seven-day daily pulse, daily average, peak day, active streak, and leading tools
-remain inside the same anchored panel. These are the highest-value glanceable
-parts of the structured dashboard payload; there is no separate wide native
-dashboard.
-Its loading, success, and failure states all use the standard 304-by-210-point
-Field Guide panel. The async view request never routes through a standalone
-loading window, preventing a dark oversized frame during navigation.
-The compact report is read-only, so it does not spend its bottom row explaining
-arrow or Return selection that does not exist. Supported-tool share becomes the
-bottom anchor; Back and Escape remain available through shared navigation.
-
-Settings is the next compact drill-in. It presents every current preference
-directly in one 304-by-210 Field Guide view with the shared back-chevron/title row.
-Each row exposes every allowed value. Selecting an option sends that exact
-validated Python preference immediately, then refreshes the list in place.
-Preference options are compact text controls
-rather than persistent filled buttons. Their resting state is transparent,
-every option uses a pointing-hand cursor, hover is transient, and keyboard focus
-retains a visible square outline. The active option is darker, bold, underlined,
-and marked with a leading chevron so state is visible without relying on color.
-Backup remains an explicit command. Artwork setup is automatic on Mac, with
-progress and retry in First Signal and the root panel rather than Settings.
-
-The root panel exposes Tokens, Today, and Yesterday as one clickable,
-backgroundless, right-aligned masthead line, with no separate token row or
-visible Open copy. The buddy group ends after XP rather than using another line
-for trainer totals. Refresh and Quit are
-footer commands, not action cards, and follow macOS conventions as `⌘R` and
-`⌘Q`. The masthead begins with the FireRed/LeafGreen-inspired bitmap wordmark;
-it has no decorative leading icon. A steady semantic dot immediately after the
-wordmark reports active, starting, or unavailable local status without reusing a
-blinking cursor as decoration. Active describes app health, not whether a
-starter has been chosen. That local bitmap face is used for major compact
-labels and actions; SF Mono remains the supporting data face.
-The root frame keeps a six-point content gutter, while the active-buddy group
-breaks out to the full 288-point inner frame width. That row is square and uses
-only subtle top and bottom rules; its single six-point inner padding layer keeps
-the 54-point buddy sprite aligned with the three identity rows beside it.
-
-Trainer opens a non-mutating 3:2 card inside the same compact panel. It reports
-NAME, TOKENS, POKÉDEX, and CAUGHT; it never invents a trainer level or relabels
-the active Pokémon's level. Badge eligibility is derived by Python from local
-collection, Showcase, and journey evidence. The regular rail contains Bond,
-Safari, Battle, Curator, Type, Shiny, Legend, National, and Shiny Legend.
-Shiny National is omitted entirely until National is earned, then appears as a
-locked or earned tenth badge. The four-star rank awards one star for every two
-earned core badges and sits in the badge header, where its meaning is explicit;
-it is not a level. Selecting a badge replaces the left-side badge heading with
-its name. The medallion styling already communicates earned or locked state, so
-the heading does not repeat it. Tooltips retain the requirement. Selection does
-not mutate progress or open another surface.
-
-Waiting encounters use the same compact drill-in contract. The shell renders
-the Python-supplied buddy, wild, HP, message, and action policy as two sprite
-identities, one dialogue line, and one move row. Arrow/Return navigation is
-shared across the compact root, Tokens, Trainer, encounter, and result panels.
-Pokémon names and result titles remain neutral ink; a single adjacent rarity
-code is their only rarity color, matching Last Catch.
-Trainer, Tokens, encounter, and result also share one leading back-chevron and
-display-title row; trailing context may follow, but a second Back or Return Home
-action may not duplicate it.
-The masthead or navigation row, Field Guide border, striped background,
-surrounding canvas, and content rows all render immediately. The panel shell
-disables window-level animation, and compact screens own no entrance timing or
-transition exceptions.
-On the root panel, Python supplies a complete waiting label and the shell folds
-that label, the wild sprite, and the encounter shortcut into one dark action;
-there is no duplicate field-message row.
-
-**Why:** Terminal density is useful, but terminal imitation made a tiny native
-menu feel like a developer console. A handheld field-guide structure keeps the
-same compact information density while making the Pokémon and current moment
-the obvious product center.
+**What we chose, and why.** These are current product and engineering choices.
+Implementation maps live in [Architecture](architecture.md), exact visual rules
+in [Brand Styles](brand.md), and change history in [CHANGELOG](../CHANGELOG.md).
+
+## Product: a small companion
+
+| Decision | Why |
+| --- | --- |
+| The menu-bar buddy is the primary native surface. | Work, progress, encounters, and evolution should be recognizable at a glance. |
+| One anchored compact panel contains setup, root, Tokens, Trainer, Settings, encounters, and results. | A dependable small companion fits the product better than a desktop dashboard. |
+| Clicking the buddy always opens the root; a waiting wild becomes its first action. | Navigation stays predictable without hiding an encounter. |
+| Party, Box, Pokédex, Activity, and Showcase remain terminal experiences. | Collection-heavy screens get room without maintaining duplicate native renderers. |
+| New trainers see First Signal after a confirmed no-buddy status; returning trainers launch quietly. | Onboarding should be discoverable once, then stay out of the way. |
+| Self-contained builds include Python and Pillow. | Players should not need a developer toolchain to run the app. |
+
+The former expanded native graph and private routes are removed, not dormant
+features. Historical work remains in Git, including
+`archive/native-window-prototype-2026-07-16`.
+
+The open panel captures its position once and keeps it through refreshes and
+drill-ins. Closing releases that anchor. Menu-bar animation must not move an
+already-open interface.
+
+## Ownership: one Python game, several interfaces
+
+**Decision:** Python owns rules, persistence, native-menu policy, and timed
+menu-bar frames. Swift owns process execution, rendering, accessibility, and
+native lifecycle. Terminal, statusline, SwiftBar, and tmux use the same core.
+
+**Why:** Shared rules prevent clients from drifting. Structured JSON keeps the
+native app independent of human-readable terminal output.
+
+| Boundary | Contract |
+| --- | --- |
+| Menu policy | Python supplies labels, order, visibility, shortcuts, and stable action IDs. Swift routes known IDs. |
+| Child commands | Run asynchronously; drain stdout/stderr and enforce timeout/cancellation. Slow work must not freeze the panel. |
+| One native app per user | A kernel-backed advisory lock covers development and self-contained copies. Later launches signal the existing panel and exit. |
+| Live state | Watch the directory for atomic saves, filter by state-file signature, debounce bursts, and combine passive refreshes. |
+| Recovery refresh | Opening the panel reads fresh state; a 30-second poll covers missed events. |
+| Menu-bar playback | Stable sequence IDs prevent refreshes from replaying moments. Attention persists; Reduce Motion uses a representative frame. |
+
+A catch may show the wild during the action, then returns the status item to the
+active buddy. The compact panel identifies the caught Pokémon. Installed Gen 5
+art keeps the status item and panel species-specific; legacy category icons are fallback.
+
+## Data: local, shared, and protected
+
+**Decision:** Personal data lives under `$XDG_STATE_HOME/buddymon`, defaulting to
+`~/.local/state/buddymon`. Normal play does not upload it or rewrite AI-tool settings.
+Plugin wiring belongs in `.claude-plugin/plugin.json` and `hooks.json`.
+
+**Why:** Repository updates should not lose progress, leak personal files into
+commits, or quietly change another tool's configuration.
+
+- Game mutations lock across **fresh load → change → atomic save**.
+  This includes starter selection and CLI buddy switching, so these commands
+  cannot overwrite progress from concurrent collection.
+  Interactive screens wait outside the lock, then re-resolve their selection.
+- Missing state is different from damaged state. Corrupt, unreadable, invalid,
+  or future-version saves block normal writes and remain untouched.
+- Valid older state keeps a recovery copy before its first migrated save.
+  State v5 makes historical v4 preference/session additions explicit: absent
+  fields can migrate; malformed present values still fail validation.
+- Manual backup copies the active state directory to a timestamped folder in
+  `~/Documents/BuddyMon Backups`. It respects XDG paths and leaves live data alone.
+
+## Activity: count new work once
+
+| Decision | Why |
+| --- | --- |
+| Claude Code, Codex CLI, and Auggie earn progress directly from local logs. | Opening the Mac app should be enough for supported activity collection. |
+| Claude's plugin is optional, with immediate turn-end updates and a statusline. | Terminal integration is useful without becoming a native-app prerequisite. |
+| Plugin and app share a durable Claude transcript cursor. | Using both must not double-award work. |
+| Initial scans anchor existing history; Claude has a separate bootstrap marker. | New installs and existing Codex/Auggie players should not receive surprise historical progress. |
+| Claude cursors survive idle scan cutoffs, session-cache pruning, and temporary access failures. | A resumed transcript must not look new and replay old tokens. Confirmed file deletion permits cleanup. |
+| Gemini CLI is token-report-only. Unknown log shapes are ignored. | Support and model attribution must be backed by recognizable local records. |
+| App and LaunchAgent share one locked five-minute schedule gate. Manual collection is immediate. | Overlapping schedules should not duplicate work or delay an explicit diagnostic run. |
+
+The LaunchAgent is installed only by `collector install`, with explicit
+`status` and `uninstall` commands. Its runtime, script path, and XDG environment
+come from the current installation.
+
+**Token reports use saved snapshots.** Historical scanning runs in the background;
+native reads never scan logs. Missing or previous-day reports show loading;
+same-day refreshes retain the saved report. Late token results cannot undo navigation.
+This keeps a slow history scan from blocking startup or exceeding a screen deadline.
+
+Visible token totals make activity understandable. Weighted XP remains an
+implementation detail so players do not need to optimize work around a formula.
+
+## Artwork: automatic on Mac, resumable, local afterward
+
+**Decision:** Native first launch downloads Pokémon packs while starter choice
+and play remain available. Plugin-only setup and explicit refreshes use commands.
+
+**Why:** Artwork is part of the intended Mac experience and should not require
+a command. Download failure should never reset progress or remove working art.
+
+- Gen 5 species appear progressively; retry reuses completed downloads.
+- Regular **and** shiny frames are required for completion. Older receipts
+  receive a background repair check, then successful validation is recorded once.
+- Normal play and status reads use local copies. Setup owns network access.
+- Trainer Card always has an original silhouette fallback. The downloaded
+  Trainer Red portrait is pinned and checksum-verified; it is never bundled.
+- Rich encounter art is rendered on demand. Idle UI does not continuously
+  regenerate images; menu-bar and SwiftBar motion stays bounded.
+
+Sources, commands, and fallback order are documented in [Assets](assets.md).
+
+## Gameplay: calm by default, depth by choice
+
+| Decision | Why |
+| --- | --- |
+| Quick is default; Safari and Battle are opt-in. | Players choose how much interaction they want. |
+| Every shiny and legendary/mythical waits, including in Quick. Non-shiny rare Quick encounters may resolve automatically. | Exceptional finds deserve a deliberate choice without turning every rare encounter into an interruption. |
+| Buddy progression has a high cap; random wilds have a lower cap, stage-aware levels, and fixed special-species levels. | The buddy remains worth growing for months while catches stay varied. Exact values belong in code. |
+| IVs derive stable 0–15 Attack, Defense, and HP from each caught copy's immutable ID and a versioned hash namespace. | Duplicate catches gain collectible variation without a migration or hidden balance change. |
+| Party and Box display IVs; only Box sorts/searches them. IVs never affect catch odds, XP, leveling, evolution, or battle. | Appraisal and gameplay balance stay separate. |
+| Showcase starts with empty slots, stores chosen IDs, and exports a local PNG. | A trophy room should reflect deliberate choices, without accounts, uploads, or export history. |
+
+## Interface: one visual system
+
+**Decision:** `BuddyMonBrand` is the only native visual source. Field Guide is
+the compact expression: warm off-white, neutral chrome, Pokémon identity, and
+a clear current signal. Original Signal Buddy art owns the product identity.
+
+**Why:** Shared tokens and shipping-component previews prevent competing local
+palettes and spacing systems. A handheld guide makes the Pokémon prominent
+without making the app look like a developer console.
+
+- New tokens and treatments start in `BrandStyle.swift`, appear in the shared
+  preview or shipping-component harness, and are documented in the same change.
+- Compact screens and window chrome render immediately. No entrance fades,
+  row staggers, or layout transitions delay content. Sprite, badge, and direct
+  control feedback honor Reduce Motion.
+- The Trainer Card derives facts and badge eligibility without mutating state.
+  Rank is one star per two core badges, not a trainer level. Shiny National is
+  hidden until National is earned; badge selection is temporary view state.
+- Native Settings shows all seven validated preferences and sends exact values.
+  Backup stays an explicit command; artwork progress/retry belongs in setup and root.
+- Notification banners use `terminal-notifier` when available, otherwise they
+  are skipped. AppleScript notification fallback is excluded because it can
+  open Script Editor when clicked.
+
+Exact geometry, color meanings, states, badge rules, and accessibility
+requirements live in [Brand Styles](brand.md), rather than being repeated here.
+
+### Terminal handoffs and visual previews
+
+Terminal windows use the largest shared profile that fits the display, preferably
+beside the open panel. Ghostty gets one isolated process with a fixed BuddyMon
+title, saved-state/fullscreen behavior disabled, and a clean `zsh -df` startup.
+The launcher never resizes unrelated windows or closes them during fallback;
+it tries another terminal only if Ghostty rejects the launch before acceptance.
+
+**Why:** Collection views need space, but handoffs must not disturb existing work.
+
+Menu-bar demos use temporary local payloads and the existing native status item.
+They never change trainer state or journal history, never open the dropdown,
+and return to the latest live status. Previews stay out of the product's navigation.
+
+**Why:** Visual QA should prove the real renderer without becoming gameplay.
+
+## Releases: prove what people download
+
+**Decision:** `VERSION` is canonical; Python archives and Pillow wheels are
+locked by exact URL, version, platform, and SHA-256. The public packager enforces
+metadata, signing, notarization, stapling, assessment, and checksums.
+
+**Why:** A tag must identify rebuildable inputs, and a successful source build
+must not be mistaken for a working download.
+
+Publication requires verification of the **final artifact**, recorded fresh-user
+acceptance, and passing CI. Local builds remain development artifacts until
+those gates pass. The complete checklist is [Public Release QA](release-qa.md).

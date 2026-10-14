@@ -103,10 +103,12 @@ Select a badge to see what you've unlocked.
 
 ## <img src="docs/assets/brand/icons/collection.png" width="24" height="24" alt=""> A Collection Worth Opening
 
-Party, Box, Pokédex, Activity, and Showcase open directly in the terminal. On a
-roomy display, BuddyMon uses a larger window and larger sprite budget; smaller
-displays fall back automatically. Box keeps every caught copy distinct and
-supports IV sorting and searches such as `iv:82`, `stars:3`, or `perfect`.
+Party, Box, Pokédex, Activity, and Showcase live in the terminal game.
+
+- **Keep every catch.** Box treats each caught copy as its own Pokémon.
+- **Find your best.** Sort by IVs or search `iv:82`, `stars:3`, or `perfect`.
+- **Use the room you have.** Larger displays get a roomier window and sprites;
+  smaller displays use a compact layout.
 
 <p align="center">
   <img src="docs/screenshots/terminal-box-ghostty.png" width="824" alt="BuddyMon's Box in a real Ghostty window showing a Dragonite sprite and perfect IV appraisal">
@@ -129,12 +131,15 @@ Box. Sharing creates a labeled PNG on your Desktop; BuddyMon never uploads it.
 
 ## <img src="docs/assets/brand/icons/native-app.png" width="24" height="24" alt=""> Works With
 
-| Client | Game progress | Token Usage | Collection path |
-| --- | --- | --- | --- |
-| Claude Code | Local collection; optional plugin hooks | Yes | App, service, or `collect` |
-| Codex CLI | Local collection | Yes | App, service, or `collect` |
-| Auggie | Local collection | Yes | App, service, or `collect` |
-| Gemini CLI | No | Yes | Read-only reporting |
+| Client | Game progress | Token Usage |
+| --- | --- | --- |
+| Claude Code | Yes | Yes |
+| Codex CLI | Yes | Yes |
+| Auggie | Yes | Yes |
+| Gemini CLI | No | Yes |
+
+The open app collects supported activity. An optional background service or
+manual `collect` command can do the same; Claude also has optional turn-end hooks.
 
 The first collection anchors existing client logs instead of turning old history
 into a surprise level-up. Claude's app collector and optional plugin share a
@@ -169,15 +174,17 @@ run from a source checkout; normal Mac app play does not require them.
 
 ## <img src="docs/assets/brand/icons/brand.png" width="24" height="24" alt=""> Documentation
 
-- [macOS app](docs/macos-app.md)
-- [Assets](docs/assets.md)
-- [Architecture](docs/architecture.md)
-- [Development](docs/development.md)
-- [Public release QA](docs/release-qa.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Brand styles](docs/brand.md)
-- [Decisions](docs/decisions.md)
-- [Changelog](CHANGELOG.md)
+| I want to… | Read |
+| --- | --- |
+| Learn the app and controls | [Mac app guide](docs/macos-app.md) |
+| Fix something | [Troubleshooting](docs/troubleshooting.md) |
+| Understand artwork and downloads | [Assets](docs/assets.md) |
+| See how the system fits together | [Architecture](docs/architecture.md) |
+| Build, test, or contribute | [Development](docs/development.md) |
+| Prepare a public download | [Public Release QA](docs/release-qa.md) |
+| Change native UI consistently | [Brand Styles](docs/brand.md) |
+| Understand the choices behind it | [Decisions](docs/decisions.md) |
+| See what changed | [Changelog](CHANGELOG.md) |
 
 ## License
 

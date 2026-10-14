@@ -1,197 +1,170 @@
 # <img src="assets/brand/icons/setup.png" width="28" height="28" alt=""> Troubleshooting
 
-## The statusline shows an egg
+**Start with the symptom. Most Mac app fixes are available from its menu-bar panel.**
+Commands below are for a source checkout unless they open an installed app.
 
-Choose a starter:
+| Problem | Go to |
+| --- | --- |
+| Can't find the app | [App visibility](#app-visibility) |
+| Old setup screen or missing Python | [Installed build](#installed-build) |
+| Save cannot be loaded | [State Needs Care](#state-needs-care) |
+| Missing Pokémon artwork | [Artwork](#artwork) |
+| Progress or token totals look stuck | [Activity and reports](#activity-and-reports) |
+| Party or Box will not open | [Terminal handoffs](#terminal-handoffs) |
+| Broken terminal images | [Terminal sprites](#terminal-sprites) |
+| Egg or missing Python in Claude | [Claude plugin](#claude-plugin) |
+| SwiftBar-specific problems | [SwiftBar](#swiftbar) |
 
-```text
-/buddymon:choose pikachu
-```
+## App visibility
 
-If a starter already exists, restart Claude Code or SwiftBar so it reloads the
-plugin.
-
-## BuddyMon.app is missing
-
-Open the installed app again:
+BuddyMon has **no Dock icon**. Look in the macOS menu bar. Open
+**Applications → BuddyMon**, or run:
 
 ```bash
 open /Applications/BuddyMon.app
 ```
 
-The app is intentionally visible only in the menu bar. Opening it again asks
-the already-running copy to show its panel. Add BuddyMon in **System Settings >
-General > Login Items** if you want it to reopen after login.
+Opening it again asks the running copy to show its panel. To start at login,
+add BuddyMon in **System Settings → General → Login Items**.
 
-BuddyMon never uses Script Editor for notifications. Optional external banners
-use `terminal-notifier` when it is already installed; without it, rare moments
-remain visible in BuddyMon instead of falling back to an AppleScript banner.
+If it is not installed, follow [Build from source](../README.md#build-from-source).
+`.build/macos/BuddyMon.app` is a development output, not the installed copy.
 
-If the installed app is missing, rebuild, install, and open a self-contained build:
+## Installed build
 
-```bash
-scripts/build-macos-app.sh --friend --install --open
-```
-
-`.build/macos/BuddyMon.app` is the development build output; it is not the
-installed copy.
-
-## First Signal appears even though a buddy exists
-
-The installed process is older than the state format it is reading. Trainer
-state is not erased; quit the stale process and replace the installed app:
+An old running build can show **First Signal even though a buddy exists** or
+report **Python is missing**. Replace it with a current self-contained build:
 
 ```bash
 scripts/build-macos-app.sh --friend --install --open
 ```
 
-The install command now stops the running BuddyMon process before replacing and
-opening `/Applications/BuddyMon.app`, so the new binary—not an old in-memory
-copy—handles the state.
+The installer stops the running app before replacing `/Applications/BuddyMon.app`.
+A self-contained app includes Python and Pillow. If you are deliberately using
+a prepared runtime, see [runtime options](development.md#runtime-options).
 
-## BuddyMon.app says Python is missing
+If First Signal still appears, check whether this launch uses a different
+`XDG_STATE_HOME`; do not delete the existing save to fix a path mismatch.
 
-Rebuild and replace the installed self-contained version:
+## State Needs Care
 
-```bash
-scripts/build-macos-app.sh --friend --install --open
-```
+**Keep the original save.** This message means BuddyMon cannot safely read
+existing state; normal writes are blocked rather than replacing it with a new game.
 
-If you supply a prepared runtime, point the build at it:
+1. Make a copy of `~/.local/state/buddymon/state.json`, or
+   `$XDG_STATE_HOME/buddymon/state.json` if configured.
+2. Follow the error: update BuddyMon for a newer-version save, check access for
+   an unreadable file, or restore a known-good backup for damaged state.
+3. Move the file aside only if you deliberately want to start a new game.
 
-```bash
-BUDDYMON_PYTHON_RUNTIME=/path/to/runtime scripts/build-macos-app.sh --friend --install --open
-```
+Valid older saves preserve their original under `recovery/` before migration.
+Manual backups live in `~/Documents/BuddyMon Backups`.
 
-A user should not need a separate Python or Pillow install.
+## Artwork
 
-## BuddyMon says State Needs Care
+The Mac app downloads art automatically. If **Art download paused · Retry**
+appears, reconnect and click **Retry**, or reopen BuddyMon. Completed sprites
+and progress stay saved; fallback art keeps the game usable.
 
-BuddyMon found an existing `state.json` that it cannot safely use. Corrupt,
-unreadable, structurally invalid, and newer-version files block every normal
-write; BuddyMon does not replace them with a new game.
-
-First make a copy of
-`$XDG_STATE_HOME/buddymon/state.json`, or
-`~/.local/state/buddymon/state.json` by default. Restore a known-good backup or
-update BuddyMon if the message says the state came from a newer release. Move
-the file aside only when you deliberately want to start over. Valid older
-states preserve a pre-migration copy under the local `recovery/` directory.
-
-## Optional art is missing or failed
-
-The Mac app downloads Pokémon art during first launch. Fallback art keeps play
-available meanwhile. If **Art download paused · Retry** appears, reconnect and
-click it. Reopening BuddyMon also resumes missing artwork. Completed sprites
-and game progress stay saved.
-
-For plugin-only setup, run `/buddymon:official` and confirm the download.
-From the CLI:
+For plugin-only play, run `/buddymon:official`. CLI equivalents:
 
 ```bash
 python3 buddymon.py install-assets
 python3 buddymon.py install-assets --refresh
 ```
 
-The result identifies each pack that succeeded, was skipped, or failed. A
-failed refresh keeps the last working pack. See [Assets](assets.md) for details.
+The second command explicitly refreshes packs. A failed refresh preserves the
+last working copy. See [Assets](assets.md) for pack-specific options and fallbacks.
 
-## XP is not moving
+## Activity and reports
 
-Run one immediate collection:
+### Progress is not moving
+
+1. Choose a starter and keep BuddyMon open.
+2. Create **new** Claude Code, Codex CLI, or Auggie activity after the first scan.
+   The first scan anchors old logs; Gemini CLI only contributes to token reports.
+3. Allow the five-minute collection interval, or run an immediate collection:
 
 ```bash
 python3 buddymon.py collect
 ```
 
-Then check that a starter exists and the BuddyMon state directory is writable.
-Keep BuddyMon open for automatic Claude Code, Codex CLI, and Auggie collection.
-The Claude plugin is optional. The first scan anchors existing logs; create new
-activity, then collect again. Gemini CLI contributes to Token Usage only, not XP. State lives under
-`$XDG_STATE_HOME/buddymon`, defaulting to
-`~/.local/state/buddymon`.
+If it fails, check the reported error and that the state directory is writable.
+The Claude plugin is optional. For collection after quitting the app, explicitly
+install the [collection service](development.md#collection-service).
 
-For collection while the app is closed:
+### Token Usage is loading
 
-```bash
-python3 buddymon.py collector status
-python3 buddymon.py collector install
-```
+The first history scan runs in the background. Keep using Back or close the
+panel; totals appear automatically when ready. Same-day refreshes keep the saved
+report; a new day shows loading again. Use **Refresh** to retry a failed scan.
 
-Install is explicit and safe to run again when runtime or repo paths changed.
-Use `collector uninstall` to remove the generated LaunchAgent.
+### The app shows old terminal state
 
-## BuddyMon.app shows old terminal state
+Reopen the panel or use **⌘R / Refresh**. Saved terminal changes normally appear
+automatically; a 30-second recovery refresh handles missed file events.
 
-Opening the dropdown requests fresh local status, and saved terminal changes
-normally propagate automatically without waiting for a menu-bar animation. Use
-the dropdown's **Refresh** command if a filesystem notification was missed. The
-app also performs a recovery refresh every 30 seconds.
+### A wild is waiting
 
-## SwiftBar shows stale output
+Open the encounter and finish it. **Quick** pauses for every shiny and
+legendary/mythical, but resolves non-shiny rare encounters automatically.
+**Safari** and **Battle** wait for every wild.
 
-Restart SwiftBar:
+## Terminal handoffs
 
-```bash
-osascript -e 'quit app "SwiftBar"'
-open -a SwiftBar
-```
-
-Its menu stream is long-lived and may still have old code loaded.
-
-## Claude Code reports `python3` not found
-
-The source plugin invokes `python3` for its status line and hooks. Confirm that
-Python 3 is on the same `PATH` Claude Code receives:
-
-```bash
-python3 --version
-```
-
-If that command fails, install Python 3 and restart Claude Code before
-reinstalling the plugin.
-
-## A terminal shortcut does nothing
-
-The native Party, Box, Pokédex, and Activity links hand off to the terminal UI.
-Settings stays inside the compact native panel. SwiftBar actions use the same
-launcher path.
-
-Run the menu directly:
+Party, Box, Pokédex, and Activity open the terminal game. Trainer and Settings
+stay native. First check the terminal game directly:
 
 ```bash
 python3 buddymon.py menu
 ```
 
-If Ghostty is the problem, try another launcher:
+If one terminal fails, choose another installed **Menu launcher** in native
+Settings, or try:
 
 ```bash
 python3 buddymon.py open-menu settings --launcher iterm
 python3 buddymon.py open-menu settings --launcher terminal
 ```
 
-Then choose a permanent **Menu launcher** in native Settings.
+Record any Automation dialog and whether you allowed or denied it. A cancelled
+handoff should leave the native app usable.
 
-Terminal handoffs choose among `1040-by-680`, `920-by-600`, and `760-by-520`
-footprints based on the current display. Ghostty maps them to `112-by-38`,
-`100-by-34`, and `88-by-30` grids and receives one direct isolated-window
-request with a fixed BuddyMon title and saved-state/fullscreen behavior
-disabled. That window starts clean `zsh -df` and safely injects BuddyMon as its
-startup command, so user shell prompts cannot consume it and Ghostty does not
-treat the bundled Python runtime as a file that needs confirmation. It does not need Accessibility access, create a
-provisional window, or close a live window before falling back. iTerm2 and
-Terminal.app apply the selected exact bounds through their own scripting APIs.
+Ghostty uses one isolated BuddyMon window and a clean shell to avoid startup
+prompts. It does not need Accessibility access or resize your existing windows.
+If an older build creates extra windows, update BuddyMon and restart SwiftBar
+if used. Close old extras manually; iTerm2 and Terminal.app open a new window
+per click.
 
-## SwiftBar opens extra terminal windows
+## Terminal sprites
 
-Update BuddyMon and restart SwiftBar. Current Ghostty handoffs launch exactly
-one isolated BuddyMon window and replace only an earlier isolated BuddyMon
-process. iTerm2 and Terminal.app open one new window per click. Close any
-legacy extra once, or use `python3 buddymon.py menu` in an existing terminal.
+Ghostty and iTerm2 support inline PNGs. Other terminals use text-safe art.
+To disable inline images:
 
-## SwiftBar's own icon is visible
+```bash
+BUDDYMON_NO_GRAPHICS=1 python3 buddymon.py menu
+```
 
-Enable SwiftBar Stealth Mode:
+## Claude plugin
+
+| Symptom | Fix |
+| --- | --- |
+| Statusline shows an egg | Run `/buddymon:choose pikachu`. If a buddy already exists, restart Claude Code so it reloads the plugin. |
+| `python3` not found | Run `python3 --version` in the environment Claude starts from. Install Python 3 if absent, then restart Claude Code. |
+
+The source plugin needs Python on `PATH`; the self-contained Mac app carries
+its own runtime. Plugin wiring must not rewrite `~/.claude/settings.json`.
+
+## SwiftBar
+
+**Stale output:** restart its long-lived menu stream:
+
+```bash
+osascript -e 'quit app "SwiftBar"'
+open -a SwiftBar
+```
+
+**SwiftBar's own icon is visible:** enable Stealth Mode, then restart:
 
 ```bash
 defaults write com.ameba.SwiftBar StealthMode -bool YES
@@ -199,17 +172,9 @@ osascript -e 'quit app "SwiftBar"'
 open -a SwiftBar
 ```
 
-## Terminal sprites look wrong
+**Unexpected Script Editor banners:** current BuddyMon never uses AppleScript
+notifications. It uses `terminal-notifier` when installed and otherwise keeps
+rare moments inside BuddyMon. Update old code if that behavior persists.
 
-Ghostty and iTerm2 can show inline PNGs. Other terminals use text-safe pixel
-art. Disable inline images when needed:
-
-```bash
-BUDDYMON_NO_GRAPHICS=1 python3 buddymon.py menu
-```
-
-## A wild is waiting
-
-Open the app, SwiftBar menu, or terminal menu and finish the encounter. Quick
-mode pauses for every shiny and legendary/mythical encounter; Safari and Battle
-pause for every wild. Non-shiny rare encounters resolve automatically in Quick.
+**Next:** [Mac app guide](macos-app.md) for normal use or
+[Development](development.md) for build diagnostics.

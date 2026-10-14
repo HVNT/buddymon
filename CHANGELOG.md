@@ -5,6 +5,10 @@ git tags and matching plugin metadata versions.
 
 ## Unreleased
 
+- Fixed starter selection and CLI buddy switching overwriting concurrent
+  collection updates by holding the shared state lock through load and save.
+- Reorganized the main guides with system and workflow diagrams, task-based
+  navigation, shorter explanations, and a component-based native UI reference.
 - Added a looping Charizard-versus-shiny-Mewtwo battle GIF to the README, from
   encounter through catch, captured from real battle logic and native views.
 - Made README setup easier to scan and added the real macOS menu-bar view and
