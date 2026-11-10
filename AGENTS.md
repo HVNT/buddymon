@@ -44,10 +44,13 @@ Claude Code plugin is an optional statusline and turn-end integration.
 - Tests use pytest and Pillow:
   `uv run --with pytest --with pillow --no-project python3 -m pytest tests/ -q`
 - Prefer focused tests near changed behavior.
-- Keep docs short, plain, and non-redundant.
 
 ## Documentation Upkeep
 
+- Write concise, plain English with clear Markdown. Prefer prose; use lists,
+  tables, or simple diagrams when they help. Link to detail instead of repeating it.
+- Never make false claims. Separate facts from plans and unknowns. Claim checks
+  passed only with evidence.
 - When code changes behavior, update the matching markdown in the same change.
 - Update `docs/decisions.md` when the "why" changes: architecture, state, assets,
   game balance, install shape, privacy, or runtime boundaries.
@@ -64,6 +67,18 @@ Claude Code plugin is an optional statusline and turn-end integration.
   notes that should be kept out of the public tree until explicitly promoted.
 - Do not edit the gameplay journal at `~/.local/state/buddymon/journal.jsonl`
   as documentation.
+
+## Linear
+
+Use the [BuddyMon Linear project](https://linear.app/g0d/project/buddymon-ce0ba926c9ee)
+(`P-X-7`) for all repository work.
+
+- Read the project and relevant issues first. Reuse or create an issue before work.
+- Keep status, scope, blockers, and project milestones current.
+- Record changes, checks, remaining work, and commit or PR links. Mark Done only
+  when complete; say whether changes are local, pushed, merged, or released.
+- Follow the writing rules above in Linear too. If unavailable, report it and
+  leave a short local note to sync later.
 
 ## Git Hygiene
 

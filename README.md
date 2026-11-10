@@ -186,6 +186,12 @@ run from a source checkout; normal Mac app play does not require them.
 | Understand the choices behind it | [Decisions](docs/decisions.md) |
 | See what changed | [Changelog](CHANGELOG.md) |
 
+## Contributing
+
+Track repository work in the [BuddyMon Linear project](https://linear.app/g0d/project/buddymon-ce0ba926c9ee).
+Read [AGENTS.md](AGENTS.md) for required tracking and writing rules, and the
+[development guide](docs/development.md) for builds and checks.
+
 ## License
 
 MIT. BuddyMon is a fan-made project and is not affiliated with or endorsed by
